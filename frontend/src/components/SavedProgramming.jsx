@@ -165,7 +165,7 @@ export default function SavedProgramming(){
 
     <div className="close-analysis-note">
      <b>Resultado preliminar.</b>
-     <span>Cuando confirmemos el cierre definitivo, las FINALIZADAS quedarán como ejecutadas y las PENDIENTES requerirán motivo de no ejecución antes de pasar a backlog.</span>
+     <span>Última sincronización del maestro: {closeAnalysis.master_synced_at?new Date(closeAnalysis.master_synced_at).toLocaleString('es-CO'):'sin registro'}. Cuando confirmemos el cierre definitivo, las FINALIZADAS quedarán como ejecutadas y las PENDIENTES requerirán motivo de no ejecución antes de pasar a backlog.</span>
     </div>
 
     <div className="table-wrap close-analysis-table">
