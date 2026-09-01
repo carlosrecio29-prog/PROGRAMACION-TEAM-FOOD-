@@ -1,7 +1,7 @@
 import {useEffect,useMemo,useState} from 'react'
-import {downloadProgrammingExport,getCandidates,getMonthReconciliation,learnPlan,saveProgramming} from '../api'
+import {downloadProgrammingExport,getCandidates,getMonthReconciliation,saveProgramming} from '../api'
 
-const CONDITIONS=['OPERANDO','EQUIPO DETENIDO','LINEA DETENIDA','AREA/PLANTA DETENIDA']
+const STOPPED_CONDITIONS=['EQUIPO DETENIDO','LINEA DETENIDA','AREA/PLANTA DETENIDA']
 
 function hh(v){
  return v===null||v===undefined?'—':Number(v).toFixed(1)+' H-H'
@@ -13,15 +13,6 @@ function pct(v,max){
 function uniqueOptions(rows,key){
  const values=[...new Set(rows.map(x=>x[key]).filter(Boolean))]
  return values.sort((a,b)=>String(a).localeCompare(String(b),'es')).map(v=>({value:v,label:v}))
-}
-function exportCsv(rows,specialty){
- if(!rows.length)return
- const headers=['Orden','Área','Activo','Descripción','Plan','Actividad','Criticidad','Condición','Personas','Tiempo min','H-H','Origen']
- const data=rows.map(x=>[x.numero_orden||'',x.area_nombre||'',x.activo_codigo,x.activo_descripcion,x.plan_trabajo,x.actividad||'',x.criticidad||'',x.condicion,x.personas_usar,x.tiempo_planeado_min,x.hh_pmp,x.origen])
- const csv=[headers,...data].map(r=>r.map(v=>`"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\n')
- const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'})
- const url=URL.createObjectURL(blob),a=document.createElement('a')
- a.href=url;a.download=`programacion_${specialty}.csv`;a.click();URL.revokeObjectURL(url)
 }
 
 function SearchableSelect({label,value,options,onChange,placeholder,disabled=false,emptyText='Sin resultados'}){
@@ -37,7 +28,7 @@ function SearchableSelect({label,value,options,onChange,placeholder,disabled=fal
  useEffect(()=>{
   if(value&&selectedLabel){setQuery(selectedLabel);setTyped(false)}
   else if(!typed){setQuery('')}
- },[value,selectedLabel])
+ },[value,selectedLabel,typed])
 
  const visible=useMemo(()=>{
   if(!typed)return options.slice(0,120)
@@ -46,26 +37,11 @@ function SearchableSelect({label,value,options,onChange,placeholder,disabled=fal
   return options.filter(o=>(o.search||o.label).toLowerCase().includes(q)).slice(0,120)
  },[options,query,typed])
 
- function handleFocus(){
-  if(disabled)return
-  setOpen(true)
-  setTyped(false)
- }
  function handleChange(e){
-  const next=e.target.value
-  setQuery(next)
+  setQuery(e.target.value)
   setTyped(true)
   setOpen(true)
   if(value)onChange('')
- }
- function choose(option){
-  onChange(option.value)
-  setQuery(option.label)
-  setTyped(false)
-  setOpen(false)
- }
- function blur(){
-  window.setTimeout(()=>setOpen(false),120)
  }
 
  return <div className={'search-select '+(disabled?'disabled':'')}>
@@ -75,16 +51,20 @@ function SearchableSelect({label,value,options,onChange,placeholder,disabled=fal
      value={query}
      disabled={disabled}
      placeholder={placeholder}
-     onFocus={handleFocus}
+     onFocus={()=>{if(!disabled){setOpen(true);setTyped(false)}}}
      onChange={handleChange}
-     onBlur={blur}
+     onBlur={()=>window.setTimeout(()=>setOpen(false),120)}
      autoComplete="off"
     />
-    <button type="button" tabIndex="-1" disabled={disabled} onMouseDown={e=>e.preventDefault()} onClick={()=>{setOpen(v=>!v);setTyped(false)}}>⌄</button>
+    <button type="button" tabIndex="-1" disabled={disabled}
+     onMouseDown={e=>e.preventDefault()}
+     onClick={()=>{setOpen(v=>!v);setTyped(false)}}>⌄</button>
    </div>
   </label>
   {open&&!disabled&&<div className="search-options">
-   {visible.map(o=><button type="button" key={String(o.value)} onMouseDown={e=>e.preventDefault()} onClick={()=>choose(o)}>{o.label}</button>)}
+   {visible.map(o=><button type="button" key={String(o.value)}
+    onMouseDown={e=>e.preventDefault()}
+    onClick={()=>{onChange(o.value);setQuery(o.label);setTyped(false);setOpen(false)}}>{o.label}</button>)}
    {!visible.length&&<div className="no-result">{emptyText}</div>}
    {options.length>120&&!typed&&<div className="more-results">Escribe para filtrar entre {options.length} opciones.</div>}
   </div>}
@@ -92,22 +72,31 @@ function SearchableSelect({label,value,options,onChange,placeholder,disabled=fal
 }
 
 export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,year,month}){
- const [candidates,setCandidates]=useState([])
- const [stoppedCandidates,setStoppedCandidates]=useState([])
- const [stoppedSearch,setStoppedSearch]=useState('')
- const [stoppedLoading,setStoppedLoading]=useState(false)
+ const [operatingRows,setOperatingRows]=useState([])
+ const [stoppedRows,setStoppedRows]=useState([])
  const [selected,setSelected]=useState([])
- const [area,setArea]=useState(''),[criticality,setCriticality]=useState(''),[condition,setCondition]=useState('')
+ const [area,setArea]=useState('')
+ const [criticality,setCriticality]=useState('')
  const [origin,setOrigin]=useState('MES')
- const [chosenPlan,setChosenPlan]=useState(''),[chosenActivity,setChosenActivity]=useState(''),[currentId,setCurrentId]=useState('')
- const [message,setMessage]=useState(''),[refresh,setRefresh]=useState(0),[loading,setLoading]=useState(false)
+ const [chosenPlan,setChosenPlan]=useState('')
+ const [chosenActivity,setChosenActivity]=useState('')
+ const [currentId,setCurrentId]=useState('')
+ const [stoppedSearch,setStoppedSearch]=useState('')
+ const [message,setMessage]=useState('')
+ const [refresh,setRefresh]=useState(0)
+ const [loading,setLoading]=useState(false)
  const [reconciliation,setReconciliation]=useState({})
  const [lastSaved,setLastSaved]=useState(null)
  const [exporting,setExporting]=useState('')
- const [learnCondition,setLearnCondition]=useState(''),[learnPeople,setLearnPeople]=useState(''),[learning,setLearning]=useState(false)
 
  useEffect(()=>{
-  setSelected([]);resetFlow();setMessage('');setLastSaved(null)
+  setSelected([])
+  setChosenPlan('')
+  setChosenActivity('')
+  setCurrentId('')
+  setStoppedSearch('')
+  setMessage('')
+  setLastSaved(null)
  },[specialty,week?.from,week?.to])
 
  useEffect(()=>{
@@ -115,33 +104,27 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
   const timer=setTimeout(async()=>{
    try{
     setLoading(true)
-    const rows=await getCandidates({
-      specialty,year,month,area:area||undefined,criticality:criticality||undefined,
-      condition:condition||undefined,origin,limit:2000
-    })
-    if(active)setCandidates(rows)
-   }catch(e){if(active)setMessage(e.message)}
-   finally{if(active)setLoading(false)}
-  },120)
-  return()=>{active=false;clearTimeout(timer)}
- },[specialty,year,month,area,criticality,condition,origin,refresh])
-
- useEffect(()=>{
-  let active=true
-  const timer=setTimeout(async()=>{
-   try{
-    setStoppedLoading(true)
-    const rows=await getCandidates({
-      specialty,year,month,
-      area:area||undefined,
-      criticality:criticality||undefined,
-      condition:'EQUIPO DETENIDO',
-      origin,
-      limit:2000
-    })
-    if(active)setStoppedCandidates(rows)
-   }catch(e){if(active)setMessage(e.message)}
-   finally{if(active)setStoppedLoading(false)}
+    const common={
+     specialty,year,month,
+     area:area||undefined,
+     criticality:criticality||undefined,
+     origin,
+     limit:2000
+    }
+    const [operating,...stoppedSets]=await Promise.all([
+     getCandidates({...common,condition:'OPERANDO'}),
+     ...STOPPED_CONDITIONS.map(condition=>getCandidates({...common,condition}))
+    ])
+    if(!active)return
+    setOperatingRows(operating)
+    const map=new Map()
+    stoppedSets.flat().forEach(x=>map.set(x.pmp_id,x))
+    setStoppedRows([...map.values()])
+   }catch(e){
+    if(active)setMessage(e.message)
+   }finally{
+    if(active)setLoading(false)
+   }
   },120)
   return()=>{active=false;clearTimeout(timer)}
  },[specialty,year,month,area,criticality,origin,refresh])
@@ -152,33 +135,52 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
    .then(r=>{if(active)setReconciliation(r||{})})
    .catch(()=>{if(active)setReconciliation({})})
   return()=>{active=false}
- },[year,month,refresh,selected.length])
+ },[year,month,refresh])
 
- const available=useMemo(()=>candidates.filter(x=>!selected.some(s=>s.pmp_id===x.pmp_id)),[candidates,selected])
- const areaOptions=useMemo(()=>[...new Set(candidates.map(x=>x.area_nombre).filter(Boolean))].sort(),[candidates])
+ const operatingReady=useMemo(
+  ()=>operatingRows.filter(x=>x.datos_completos&&!selected.some(s=>s.pmp_id===x.pmp_id)),
+  [operatingRows,selected]
+ )
+ const stoppedReady=useMemo(
+  ()=>stoppedRows.filter(x=>x.datos_completos&&!selected.some(s=>s.pmp_id===x.pmp_id)),
+  [stoppedRows,selected]
+ )
 
- const planOptions=useMemo(()=>uniqueOptions(available,'plan_trabajo'),[available])
- const planRows=useMemo(()=>chosenPlan?available.filter(x=>x.plan_trabajo===chosenPlan):[],[available,chosenPlan])
+ const allVisible=useMemo(()=>[...operatingRows,...stoppedRows],[operatingRows,stoppedRows])
+ const areaOptions=useMemo(
+  ()=>[...new Set(allVisible.map(x=>x.area_nombre).filter(Boolean))].sort(),
+  [allVisible]
+ )
+
+ const planOptions=useMemo(()=>uniqueOptions(operatingReady,'plan_trabajo'),[operatingReady])
+ const planRows=useMemo(
+  ()=>chosenPlan?operatingReady.filter(x=>x.plan_trabajo===chosenPlan):[],
+  [operatingReady,chosenPlan]
+ )
  const activityOptions=useMemo(()=>uniqueOptions(planRows,'actividad'),[planRows])
- const activityRows=useMemo(()=>chosenActivity?planRows.filter(x=>x.actividad===chosenActivity):[],[planRows,chosenActivity])
+ const activityRows=useMemo(
+  ()=>chosenActivity?planRows.filter(x=>x.actividad===chosenActivity):[],
+  [planRows,chosenActivity]
+ )
  const equipmentOptions=useMemo(()=>activityRows.map(x=>({
    value:String(x.pmp_id),
    label:`${x.activo_codigo} — ${x.activo_descripcion} — ${x.numero_orden||'SIN OT'}`,
    search:`${x.activo_codigo} ${x.activo_descripcion} ${x.numero_orden||''} ${x.area_nombre||''}`
  })),[activityRows])
- const stoppedAvailable=useMemo(()=>{
-  const base=stoppedCandidates.filter(x=>!selected.some(s=>s.pmp_id===x.pmp_id))
-  const q=stoppedSearch.trim().toLowerCase()
-  if(!q)return base
-  return base.filter(x=>[
-    x.numero_orden,x.area_nombre,x.activo_codigo,x.activo_descripcion,
-    x.actividad,x.plan_trabajo,x.criticidad
-  ].some(v=>String(v||'').toLowerCase().includes(q)))
- },[stoppedCandidates,selected,stoppedSearch])
+
  const current=useMemo(
-  ()=>[...candidates,...stoppedCandidates].find(x=>String(x.pmp_id)===String(currentId)),
-  [candidates,stoppedCandidates,currentId]
+  ()=>operatingReady.find(x=>String(x.pmp_id)===String(currentId)),
+  [operatingReady,currentId]
  )
+
+ const stoppedFiltered=useMemo(()=>{
+  const q=stoppedSearch.trim().toLowerCase()
+  if(!q)return stoppedReady
+  return stoppedReady.filter(x=>[
+   x.numero_orden,x.area_nombre,x.activo_codigo,x.activo_descripcion,
+   x.actividad,x.plan_trabajo,x.criticidad,x.condicion
+  ].some(v=>String(v||'').toLowerCase().includes(q)))
+ },[stoppedReady,stoppedSearch])
 
  const stats=reconciliation[specialty]||{}
  const target=Number(capacity?.target||0)
@@ -186,63 +188,45 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
  const standby=Number(capacity?.standby||0)
  const used=selected.reduce((sum,x)=>sum+Number(x.hh_pmp||0),0)
  const remaining=Math.max(0,target-used)
- const ready=available.filter(x=>x.datos_completos).length
- const incomplete=available.length-ready
 
- function resetFlow(){
-  setChosenPlan('');setChosenActivity('');setCurrentId('')
+ function resetSelectors(){
+  setChosenPlan('')
+  setChosenActivity('')
+  setCurrentId('')
  }
- function selectPlan(value){
-  setChosenPlan(value);setChosenActivity('');setCurrentId('');setMessage('')
- }
- function selectActivity(value){
-  setChosenActivity(value);setCurrentId('');setMessage('')
- }
- function chooseCurrent(value){
-  setCurrentId(value)
-  const item=[...candidates,...stoppedCandidates].find(x=>String(x.pmp_id)===String(value))
-  if(item){
-   setLearnCondition(item.condicion==='SIN CLASIFICAR'?'':item.condicion)
-   setLearnPeople(item.personas_usar??'')
-  }
-  setMessage('')
- }
- async function completePlan(){
-  if(!current)return
-  if((current.datos_faltantes||[]).includes('CONDICION')&&!learnCondition)return setMessage('Define la condición del equipo antes de continuar.')
-  if((current.datos_faltantes||[]).includes('PERSONAS')&&!learnPeople)return setMessage('Indica cuántas personas requiere este plan.')
-  try{
-   setLearning(true)
-   await learnPlan(current.plan_trabajo_id,{
-    condition:learnCondition||current.condicion,
-    people:learnPeople?Number(learnPeople):null,
-    updated_by:'PRUEBA_WEB'
-   })
-   setMessage('Dato aprendido. Se reutilizará cuando este plan vuelva a aparecer.')
-   setRefresh(x=>x+1)
-  }catch(e){setMessage(e.message)}finally{setLearning(false)}
- }
- function addItem(item=current){
-  if(!item)return setMessage('Selecciona un equipo.')
-  if(!item.datos_completos)return setMessage('Completa los datos faltantes antes de agregar la actividad.')
+
+ function addItem(item){
+  if(!item)return setMessage('Selecciona un PMP.')
+  if(!item.datos_completos)return setMessage('Este PMP todavía está en Pendientes por definir.')
+  if(selected.some(x=>x.pmp_id===item.pmp_id))return
   const next=used+Number(item.hh_pmp||0)
   if(target<=0)return setMessage('Primero selecciona una semana con capacidad disponible.')
-  if(next>target+.0001)return setMessage(`No se puede agregar: quedarías en ${next.toFixed(1)} H-H y la meta es ${target.toFixed(1)} H-H.`)
+  if(next>target+.0001)return setMessage(
+   `No se puede agregar: quedarías en ${next.toFixed(1)} H-H y la meta es ${target.toFixed(1)} H-H.`
+  )
   setSelected(prev=>[...prev,item])
   setCurrentId('')
-  setMessage(`${item.numero_orden||'Actividad'} agregada a la programación.`)
+  setMessage(`${item.numero_orden||'PMP'} agregado a la programación.`)
  }
+
  async function save(){
   if(!week?.from||!week?.to)return setMessage('Selecciona la semana.')
   if(!selected.length)return setMessage('Agrega al menos una actividad.')
   try{
    const r=await saveProgramming({
-    date_from:week.from,date_to:week.to,specialty,pmp_ids:selected.map(x=>x.pmp_id),
+    date_from:week.from,
+    date_to:week.to,
+    specialty,
+    pmp_ids:selected.map(x=>x.pmp_id),
     created_by:'PRUEBA_WEB'
    })
    setLastSaved(r)
-   setMessage(`Programación guardada · ${Number(r.hh_programmed).toFixed(1)} H-H · versión ${r.version}. Ya puedes exportarla en Excel o PDF.`)
-   setSelected([]);resetFlow();setRefresh(x=>x+1)
+   setMessage(
+    `Programación guardada · ${Number(r.hh_programmed).toFixed(1)} H-H · versión ${r.version}. Puedes verla en Programaciones guardadas.`
+   )
+   setSelected([])
+   resetSelectors()
+   setRefresh(x=>x+1)
   }catch(e){setMessage(e.message)}
  }
 
@@ -251,17 +235,16 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
   try{
    setExporting(format)
    await downloadProgrammingExport(lastSaved.version_id,format)
-   setMessage(`Archivo ${format==='xlsx'?'Excel':'PDF'} generado desde la versión ${lastSaved.version}.`)
-  }catch(e){setMessage(e.message)}finally{setExporting('')}
+  }catch(e){setMessage(e.message)}
+  finally{setExporting('')}
  }
-
 
  return <div className="planner">
   <div className="capacity-strip">
    <div><span>Técnicos</span><b>{Number(capacity?.technicians||0)}</b><small>en {specialtyName}</small></div>
    <div><span>Capacidad real</span><b>{total.toFixed(1)}</b><small>H-H disponibles</small></div>
    <div className="target-card"><span>Meta programable</span><b>{target.toFixed(1)}</b><small>80% de capacidad</small></div>
-   <div><span>Programadas</span><b>{used.toFixed(1)}</b><small>{remaining.toFixed(1)} H-H por usar</small></div>
+   <div><span>Seleccionadas</span><b>{used.toFixed(1)}</b><small>{remaining.toFixed(1)} H-H por usar</small></div>
    <div><span>Reserva</span><b>{standby.toFixed(1)}</b><small>20% standby</small></div>
   </div>
 
@@ -272,167 +255,172 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
 
   <div className="reconciliation-card">
    <div className="reconciliation-head">
-    <div><span className="section-kicker">CONCILIACIÓN CON MAESTRO</span><h3>De Excel a programación</h3><p>Las OT repetidas se consolidan; las OT distintas se conservan como PMP independientes.</p></div>
-    <span className="reconciliation-period">09 / 2026</span>
+    <div>
+     <span className="section-kicker">CONCILIACIÓN CON MAESTRO</span>
+     <h3>De Excel a programación</h3>
+     <p>Las OT repetidas se consolidan; las OT distintas se conservan como PMP independientes.</p>
+    </div>
+    <span className="reconciliation-period">{String(month).padStart(2,'0')} / {year}</span>
    </div>
    <div className="reconciliation-grid">
     <div><span>PMP en maestro</span><b>{Number(stats.master_rows||0)}</b><small>Filas de {specialtyName}</small></div>
     <div><span>OT únicas</span><b>{Number(stats.unique_ot||0)}</b><small>{Number(stats.repeated_extra_rows||0)} repetidas consolidadas</small></div>
     <div><span>Pendientes</span><b>{Number(stats.pending_unique_ot||0)}</b><small>OT pendientes únicas</small></div>
     <div><span>Finalizadas</span><b>{Number(stats.finalized_unique_ot||0)}</b><small>No entran a programación</small></div>
-    <div className="reconciliation-warn"><span>Inconsistencias</span><b>{Number(stats.pending_exceptions||0)}</b><small>Requieren corregir relación</small></div>
-    <div className="reconciliation-ok"><span>Disponibles ahora</span><b>{Number(stats.available_now??available.length)}</b><small>Para seguir programando</small></div>
-   </div>
-   <div className="reconciliation-equation">
-    <span>{Number(stats.master_rows||0)} maestro</span><i>→</i>
-    <span>{Number(stats.unique_ot||0)} OT únicas</span><i>→</i>
-    <span>{Number(stats.pending_unique_ot||0)} pendientes</span><i>→</i>
-    <span>{Number(stats.pending_exceptions||0)} inconsistencias</span><i>→</i>
-    <strong>{Number(stats.available_now??available.length)} disponibles</strong>
+    <div className="reconciliation-warn"><span>Inconsistencias</span><b>{Number(stats.pending_exceptions||0)}</b><small>Relación con maestro</small></div>
+    <div className="reconciliation-ok"><span>Disponibles ahora</span><b>{Number(stats.available_now||0)}</b><small>Antes de definir/filtrar</small></div>
    </div>
   </div>
 
-  <div className="candidate-summary">
-   <div><b>{available.length}</b><span>PMP pendientes disponibles</span></div>
-   <div className="ok"><b>{ready}</b><span>Listos para programar</span></div>
-   <div className="warn"><b>{incomplete}</b><span>Necesitan completar datos</span></div>
+  <div className="programming-groups">
+   <div className="programming-group-card operating">
+    <span>ATENDIBLES OPERANDO</span>
+    <b>{operatingReady.length}</b>
+    <small>PMP completos que no requieren detener el equipo</small>
+   </div>
+   <div className="programming-group-card stopped">
+    <span>REQUIEREN DETENCIÓN</span>
+    <b>{stoppedReady.length}</b>
+    <small>Equipo, línea o planta detenida</small>
+   </div>
+   <div className="programming-group-card selected">
+    <span>EN ESTA PROGRAMACIÓN</span>
+    <b>{selected.length}</b>
+    <small>{used.toFixed(1)} H-H seleccionadas</small>
+   </div>
   </div>
 
   <div className="subsection-title">
-   <div><span className="step-number">3</span><div><h3>Filtra los PMP del mes</h3><p>Los filtros definen qué planes, actividades y equipos estarán disponibles abajo.</p></div></div>
-   <button className="ghost" onClick={()=>{setArea('');setCriticality('');setCondition('');setOrigin('MES');resetFlow()}}>Limpiar filtros</button>
+   <div><span className="step-number">3</span><div>
+    <h3>Filtros de programación</h3>
+    <p>Los datos incompletos ya no aparecen aquí: se gestionan en “Pendientes por definir”.</p>
+   </div></div>
+   <button className="ghost" onClick={()=>{setArea('');setCriticality('');setOrigin('MES');resetSelectors()}}>Limpiar filtros</button>
   </div>
 
-  <div className="filters">
-   <label>Área<select value={area} onChange={e=>{setArea(e.target.value);resetFlow()}}><option value="">Todas las áreas</option>{areaOptions.map(x=><option key={x}>{x}</option>)}</select></label>
-   <label>Criticidad<select value={criticality} onChange={e=>{setCriticality(e.target.value);resetFlow()}}><option value="">A, B y C</option><option>A</option><option>B</option><option>C</option></select></label>
-   <label>Condición<select value={condition} onChange={e=>{setCondition(e.target.value);resetFlow()}}><option value="">Todas</option><option>OPERANDO</option><option>EQUIPO DETENIDO</option><option>LINEA DETENIDA</option><option>AREA/PLANTA DETENIDA</option><option>SIN CLASIFICAR</option></select></label>
-   <label>Origen<select value={origin} onChange={e=>{setOrigin(e.target.value);resetFlow()}}><option value="MES">PMP del mes</option><option value="BACKLOG">Backlog</option><option value="ALL">Mes + backlog</option></select></label>
+  <div className="filters programming-filters">
+   <label>Área<select value={area} onChange={e=>{setArea(e.target.value);resetSelectors()}}>
+    <option value="">Todas las áreas</option>{areaOptions.map(x=><option key={x}>{x}</option>)}
+   </select></label>
+   <label>Criticidad<select value={criticality} onChange={e=>{setCriticality(e.target.value);resetSelectors()}}>
+    <option value="">A, B y C</option><option>A</option><option>B</option><option>C</option>
+   </select></label>
+   <label>Origen<select value={origin} onChange={e=>{setOrigin(e.target.value);resetSelectors()}}>
+    <option value="MES">PMP del mes</option><option value="BACKLOG">Backlog</option><option value="ALL">Mes + backlog</option>
+   </select></label>
+   <div className="definitions-hint">
+    <span>¿Falta tiempo, personas o condición?</span>
+    <b>Usa “Pendientes por definir” en el menú izquierdo.</b>
+   </div>
   </div>
 
-  <div className="subsection-title selection-title">
-   <div><span className="step-number">4</span><div><h3>Selecciona Plan → Actividad → Equipo</h3><p>Haz clic para ver toda la lista o escribe para encontrar más rápido.</p></div></div>
-   {loading&&<span className="loading-chip">Actualizando PMP...</span>}
-  </div>
+  <section className="operating-section">
+   <div className="subsection-title selection-title">
+    <div><span className="step-number">4A</span><div>
+     <h3>PMP que se pueden atender OPERANDO</h3>
+     <p>Selecciona Plan → Actividad → Equipo. Solo aparecen PMP con todos sus datos completos.</p>
+    </div></div>
+    {loading&&<span className="loading-chip">Actualizando...</span>}
+   </div>
 
-  <div className="cascade-selectors">
-   <SearchableSelect
-    label="1. Plan del PMP"
-    value={chosenPlan}
-    options={planOptions}
-    onChange={selectPlan}
-    placeholder="Haz clic o escribe un plan..."
-    emptyText="No hay planes con los filtros seleccionados."
-   />
-   <SearchableSelect
-    label="2. Actividad del plan"
-    value={chosenActivity}
-    options={activityOptions}
-    onChange={selectActivity}
-    disabled={!chosenPlan}
-    placeholder={chosenPlan?'Haz clic o escribe una actividad...':'Primero selecciona un plan'}
-    emptyText="Este plan no tiene actividades disponibles."
-   />
-   <SearchableSelect
-    label="3. Equipo con esa actividad"
-    value={currentId}
-    options={equipmentOptions}
-    onChange={chooseCurrent}
-    disabled={!chosenActivity}
-    placeholder={chosenActivity?'Haz clic o escribe equipo, código u OT...':'Primero selecciona una actividad'}
-    emptyText="No hay equipos para esa actividad."
-   />
-  </div>
+   <div className="cascade-selectors">
+    <SearchableSelect
+     label="1. Plan del PMP"
+     value={chosenPlan}
+     options={planOptions}
+     onChange={v=>{setChosenPlan(v);setChosenActivity('');setCurrentId('')}}
+     placeholder="Haz clic o escribe un plan..."
+     emptyText="No hay planes operando con estos filtros."
+    />
+    <SearchableSelect
+     label="2. Actividad del plan"
+     value={chosenActivity}
+     options={activityOptions}
+     onChange={v=>{setChosenActivity(v);setCurrentId('')}}
+     disabled={!chosenPlan}
+     placeholder={chosenPlan?'Haz clic o escribe una actividad...':'Primero selecciona un plan'}
+    />
+    <SearchableSelect
+     label="3. Equipo con esa actividad"
+     value={currentId}
+     options={equipmentOptions}
+     onChange={setCurrentId}
+     disabled={!chosenActivity}
+     placeholder={chosenActivity?'Haz clic o escribe equipo, código u OT...':'Primero selecciona una actividad'}
+    />
+   </div>
 
-  <div className="cascade-counts">
-   <span><b>{planOptions.length}</b> planes</span>
-   <span><b>{activityOptions.length}</b> actividades del plan</span>
-   <span><b>{equipmentOptions.length}</b> equipos / OT</span>
-  </div>
+   <div className="cascade-counts">
+    <span><b>{planOptions.length}</b> planes</span>
+    <span><b>{activityOptions.length}</b> actividades</span>
+    <span><b>{equipmentOptions.length}</b> equipos / OT</span>
+   </div>
 
-  <div className="stopped-section">
+   {current&&<div className="selected-equipment-card">
+    <div className="selected-equipment-main">
+     <span className="selection-label">PMP OPERANDO</span>
+     <h3>{current.activo_codigo} — {current.activo_descripcion}</h3>
+     <p><b>{current.actividad}</b></p>
+     <div className="selection-meta">
+      <span>OT <b>{current.numero_orden||'—'}</b></span>
+      <span>Área <b>{current.area_nombre||'—'}</b></span>
+      <span>Criticidad <b>{current.criticidad||'—'}</b></span>
+      <span>Personas <b>{current.personas_usar}</b></span>
+      <span>H-H <b>{hh(current.hh_pmp)}</b></span>
+     </div>
+    </div>
+    <div className="selection-action">
+     <span className="data-ready">OPERANDO</span>
+     <button className="primary" onClick={()=>addItem(current)}>Agregar a semana</button>
+    </div>
+   </div>}
+  </section>
+
+  <section className="stopped-section">
    <div className="stopped-head">
     <div>
-     <span className="stopped-kicker">ACCESO RÁPIDO</span>
-     <h3>PMP con equipo detenido</h3>
-     <p>Visualiza directamente los equipos detenidos de {specialtyName} y agrégalos a la semana.</p>
+     <span className="stopped-kicker">4B · DETENCIÓN REQUERIDA</span>
+     <h3>PMP que necesitan equipo, línea o planta detenida</h3>
+     <p>Selecciona directamente desde la tabla los trabajos que aprovecharás en la ventana de detención.</p>
     </div>
     <div className="stopped-tools">
-     <input
-      value={stoppedSearch}
-      onChange={e=>setStoppedSearch(e.target.value)}
-      placeholder="Buscar OT, equipo, actividad o plan..."
-     />
-     <span>{stoppedAvailable.length} PMP</span>
+     <input value={stoppedSearch} onChange={e=>setStoppedSearch(e.target.value)}
+      placeholder="Buscar OT, equipo, actividad o plan..."/>
+     <span>{stoppedFiltered.length} PMP</span>
     </div>
    </div>
 
    <div className="table-wrap stopped-table">
     <table>
-     <thead><tr><th>OT</th><th>Área</th><th>Equipo</th><th>Actividad</th><th>Plan</th><th>Crit.</th><th>Personas</th><th>H-H</th><th>Datos</th><th></th></tr></thead>
+     <thead><tr><th>OT</th><th>Área</th><th>Equipo</th><th>Actividad</th><th>Plan</th><th>Condición</th><th>Crit.</th><th>Personas</th><th>H-H</th><th></th></tr></thead>
      <tbody>
-      {stoppedLoading&&<tr><td colSpan="10" className="empty">Cargando equipos detenidos...</td></tr>}
-      {!stoppedLoading&&!stoppedAvailable.length&&<tr><td colSpan="10" className="empty">No hay PMP con equipo detenido para estos filtros.</td></tr>}
-      {!stoppedLoading&&stoppedAvailable.slice(0,300).map(x=><tr key={x.pmp_id}>
+      {loading&&<tr><td colSpan="10" className="empty">Cargando PMP...</td></tr>}
+      {!loading&&!stoppedFiltered.length&&<tr><td colSpan="10" className="empty">No hay PMP completos que requieran detención con estos filtros.</td></tr>}
+      {!loading&&stoppedFiltered.slice(0,300).map(x=><tr key={x.pmp_id}>
        <td><b>{x.numero_orden||'—'}</b></td>
        <td>{x.area_nombre||'—'}</td>
        <td><span className="asset-code">{x.activo_codigo}</span><small className="asset-name">{x.activo_descripcion}</small></td>
        <td>{x.actividad||'—'}</td>
        <td>{x.plan_trabajo}</td>
+       <td><span className="shutdown-type">{x.condicion}</span></td>
        <td><span className={'criticality crit-'+(x.criticidad||'x')}>{x.criticidad||'—'}</span></td>
-       <td>{x.personas_usar??'—'}</td>
+       <td>{x.personas_usar}</td>
        <td><b>{hh(x.hh_pmp)}</b></td>
-       <td>{x.datos_completos?<span className="data-ready">Listo</span>:<span className="data-missing">Falta {(x.datos_faltantes||[]).join(' + ')}</span>}</td>
-       <td><button
-        className={x.datos_completos?'add-btn':'complete-btn'}
-        onClick={()=>{
-         if(x.datos_completos)addItem(x)
-         else{
-          chooseCurrent(String(x.pmp_id))
-          setMessage('Este PMP está detenido pero necesita completar datos antes de programarlo.')
-         }
-        }}>
-        {x.datos_completos?'Agregar':'Completar'}
-       </button></td>
+       <td><button className="add-btn" onClick={()=>addItem(x)}>Agregar</button></td>
       </tr>)}
      </tbody>
     </table>
    </div>
-   {stoppedAvailable.length>300&&<small className="stopped-limit">Mostrando 300 de {stoppedAvailable.length}. Usa el buscador para reducir la lista.</small>}
-  </div>
+   {stoppedFiltered.length>300&&<small className="stopped-limit">Mostrando 300 de {stoppedFiltered.length}. Usa el buscador para reducir la lista.</small>}
+  </section>
 
-  {current&&<div className="selected-equipment-card">
-   <div className="selected-equipment-main">
-    <span className="selection-label">SELECCIÓN ACTUAL</span>
-    <h3>{current.activo_codigo} — {current.activo_descripcion}</h3>
-    <p><b>{current.actividad}</b></p>
-    <div className="selection-meta">
-     <span>OT <b>{current.numero_orden||'—'}</b></span>
-     <span>Área <b>{current.area_nombre||'—'}</b></span>
-     <span>Criticidad <b>{current.criticidad||'—'}</b></span>
-     <span>Condición <b>{current.condicion==='SIN CLASIFICAR'?'Sin definir':current.condicion}</b></span>
-     <span>Personas <b>{current.personas_usar??'—'}</b></span>
-     <span>H-H <b>{hh(current.hh_pmp)}</b></span>
-    </div>
-   </div>
-   <div className="selection-action">
-    {current.datos_completos
-      ?<><span className="data-ready">Datos completos</span><button className="primary" onClick={()=>addItem(current)}>Agregar a semana</button></>
-      :<><span className="data-missing">Falta {(current.datos_faltantes||[]).join(' + ')}</span><small>Completa la información debajo.</small></>}
-   </div>
-  </div>}
-
-  {current&&!current.datos_completos&&<div className="learning-box">
-   <div className="learning-copy"><span className="learning-tag">APRENDIZAJE</span><strong>{current.plan_trabajo}</strong><p>Falta: {(current.datos_faltantes||[]).join(', ')}. Se guardará como dato del plan para próximas programaciones.</p></div>
-   <label>Condición<select value={learnCondition} onChange={e=>setLearnCondition(e.target.value)}><option value="">Definir</option>{CONDITIONS.map(x=><option key={x}>{x}</option>)}</select></label>
-   <label>Número de personas<input type="number" min="1" step="1" value={learnPeople} onChange={e=>setLearnPeople(e.target.value)} placeholder="Ej. 2"/></label>
-   <button onClick={completePlan} disabled={learning}>{learning?'Guardando...':'Guardar dato'}</button>
-  </div>}
-
-  <div className={'message '+(message.includes('agregada')||message.includes('guardada')||message.includes('aprendido')?'success':'')}>{message}</div>
+  <div className={'message '+(message.includes('agregado')||message.includes('guardada')?'success':'')}>{message}</div>
 
   <div className="programmed-head">
-   <div><span className="step-number">5</span><div><h3>Programación de {specialtyName}</h3><p>{selected.length} actividades seleccionadas · {used.toFixed(1)} de {target.toFixed(1)} H-H.</p></div></div>
+   <div><span className="step-number">5</span><div>
+    <h3>Programación de {specialtyName}</h3>
+    <p>{selected.length} actividades seleccionadas · {used.toFixed(1)} de {target.toFixed(1)} H-H.</p>
+   </div></div>
    <div className="table-actions">
     {lastSaved&&<>
      <button className="export-excel" onClick={()=>exportSaved('xlsx')} disabled={!!exporting}>{exporting==='xlsx'?'Generando...':'Exportar Excel'}</button>
@@ -444,14 +432,21 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
 
   <div className="table-wrap selected-table">
    <table>
-    <thead><tr><th></th><th>OT</th><th>Área</th><th>Activo</th><th>Plan</th><th>Actividad</th><th>Crit.</th><th>Personas</th><th>H-H</th><th>Origen</th></tr></thead>
+    <thead><tr><th></th><th>OT</th><th>Área</th><th>Activo</th><th>Actividad</th><th>Plan</th><th>Condición</th><th>Crit.</th><th>Personas</th><th>H-H</th><th>Origen</th></tr></thead>
     <tbody>
-     {!selected.length&&<tr><td colSpan="10" className="empty">La programación está vacía. Selecciona Plan → Actividad → Equipo y agrega actividades.</td></tr>}
+     {!selected.length&&<tr><td colSpan="11" className="empty">La programación está vacía. Agrega PMP desde OPERANDO o desde DETENCIÓN.</td></tr>}
      {selected.map(x=><tr key={x.pmp_id}>
       <td><button className="remove-btn" onClick={()=>setSelected(p=>p.filter(i=>i.pmp_id!==x.pmp_id))}>×</button></td>
-      <td><b>{x.numero_orden||'—'}</b></td><td>{x.area_nombre}</td>
+      <td><b>{x.numero_orden||'—'}</b></td>
+      <td>{x.area_nombre}</td>
       <td><span className="asset-code">{x.activo_codigo}</span><small className="asset-name">{x.activo_descripcion}</small></td>
-      <td>{x.plan_trabajo}</td><td>{x.actividad}</td><td>{x.criticidad}</td><td>{x.personas_usar}</td><td><b>{hh(x.hh_pmp)}</b></td><td>{x.origen}</td>
+      <td>{x.actividad}</td>
+      <td>{x.plan_trabajo}</td>
+      <td>{x.condicion}</td>
+      <td>{x.criticidad}</td>
+      <td>{x.personas_usar}</td>
+      <td><b>{hh(x.hh_pmp)}</b></td>
+      <td>{x.origen}</td>
      </tr>)}
     </tbody>
    </table>
