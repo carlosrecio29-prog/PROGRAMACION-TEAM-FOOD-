@@ -46,6 +46,45 @@ def get_candidates(*,specialty:str,year:int|None=None,month:int|None=None,area:s
       v.area_nombre,v.grupo_plan,v.plan_trabajo,v.activo_codigo LIMIT :limit"""
     with get_engine().connect() as conn:return [dict(r) for r in conn.execute(text(sql),params).mappings().all()]
 
+
+def get_month_reconciliation(*,year:int,month:int)->dict[str,Any]:
+    with get_engine().connect() as conn:
+        stored=conn.execute(text("""SELECT resumen_especialidad
+          FROM mantenimiento.sincronizacion_fuente_maestra
+          WHERE anio=:y AND mes=:m
+          ORDER BY iniciado_en DESC LIMIT 1"""),{"y":year,"m":month}).scalar_one_or_none() or {}
+
+        current_rows=conn.execute(text("""SELECT v.especialidad,COUNT(*)::int AS disponibles
+          FROM mantenimiento.vw_pmp_calculado v
+          LEFT JOIN mantenimiento.vw_backlog b ON b.pmp_id=v.pmp_id
+          WHERE v.anio=:y AND v.mes=:m
+            AND v.estado_orden<>'FINALIZADA'
+            AND b.pmp_id IS NULL
+            AND NOT EXISTS(
+              SELECT 1 FROM mantenimiento.programacion_item ux
+              JOIN mantenimiento.programacion_version uv
+                ON uv.id=ux.programacion_version_id AND uv.es_actual=true
+              WHERE ux.pmp_id=v.pmp_id
+            )
+          GROUP BY v.especialidad"""),{"y":year,"m":month}).mappings().all()
+
+    available_now={r["especialidad"]:int(r["disponibles"] or 0) for r in current_rows}
+    result={}
+    for code in ("MEC","ELE","SER","MET"):
+        base=dict(stored.get(code) or {})
+        result[code]={
+            "master_rows":int(base.get("master_rows",0)),
+            "unique_ot":int(base.get("unique_ot",0)),
+            "repeated_extra_rows":int(base.get("repeated_extra_rows",0)),
+            "pending_unique_ot":int(base.get("pending_unique_ot",0)),
+            "finalized_unique_ot":int(base.get("finalized_unique_ot",0)),
+            "exceptions":int(base.get("exceptions",0)),
+            "pending_exceptions":int(base.get("pending_exceptions",0)),
+            "available_after_import":int(base.get("available_after_import",0)),
+            "available_now":int(available_now.get(code,0)),
+        }
+    return result
+
 def get_import_history(limit:int=30):
     with get_engine().connect() as conn:
         return [dict(r) for r in conn.execute(text("""SELECT id,tipo,nombre_archivo,fecha_importacion,estado,
