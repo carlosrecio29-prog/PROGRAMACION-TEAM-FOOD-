@@ -287,7 +287,7 @@ def learn_plan(*,plan_id:int,condition:str|None,people:float|None,updated_by:str
           personas_usar=COALESCE(:n,mantenimiento.clasificacion_plan.personas_usar),
           observacion='Aprendido durante la programación',actualizado_por=:u,fuente='USUARIO',actualizado_en=now()"""),
           {"p":plan_id,"c":condition,"n":people,"u":updated_by})
-        if people is not None:
+        if people is not None and updated_by!="PRUEBA_WEB":
             conn.execute(text("UPDATE mantenimiento.plan_trabajo SET personas_defecto=:n,actualizado_por=:u WHERE id=:p"),
               {"n":people,"u":updated_by,"p":plan_id})
         row=conn.execute(text("""SELECT p.id plan_id,p.nombre,cp.condicion,
