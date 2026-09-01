@@ -63,6 +63,14 @@ def main() -> int:
         for row in existing_rows
         if isinstance(row, dict) and "version" in row
     }
+    native_rows = api_query(
+        "SELECT version FROM supabase_migrations.schema_migrations ORDER BY version;"
+    ) or []
+    native = {
+        str(row["version"])
+        for row in native_rows
+        if isinstance(row, dict) and "version" in row
+    }
 
     files = sorted(MIGRATIONS_DIR.glob("*.sql"))
     if not files:
@@ -76,13 +84,17 @@ def main() -> int:
         sql = path.read_text(encoding="utf-8")
         checksum = hashlib.sha256(sql.encode("utf-8")).hexdigest()
 
+        if version in native:
+            print(f"SKIP {path.name} (ya registrada por Supabase)")
+            continue
+
         if version in existing:
             if existing[version] != checksum:
                 raise RuntimeError(
                     f"La migración {version} ya fue aplicada pero su checksum cambió. "
                     "No edites migraciones históricas; crea una nueva."
                 )
-            print(f"SKIP {path.name} (ya aplicada)")
+            print(f"SKIP {path.name} (ya aplicada por el pipeline)")
             continue
 
         print(f"APPLY {path.name}")
