@@ -83,6 +83,7 @@ export default function SpecialtyPlanner({specialty,capacity,week}){
 
  return <section className="planner">
   <div className="metrics">
+   <div><span>Técnicos</span><b>{Number(capacity?.technicians||0)}</b></div>
    <div><span>Disponibles</span><b>{Number(capacity?.available||0).toFixed(1)} HH</b></div>
    <div><span>Meta 80%</span><b>{target.toFixed(1)} HH</b></div>
    <div><span>Asignadas</span><b>{used.toFixed(1)} HH</b></div>
