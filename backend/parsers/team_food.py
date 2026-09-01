@@ -128,10 +128,48 @@ def parse_team_food(content:bytes)->dict[str,ParsedWorkbook]:
             })
         program_year=max(years) if years else datetime.now(ZoneInfo("America/Bogota")).year
         out["orders"].metadata["program_year"]=program_year
+
+        # Conciliación contra el maestro: las filas del Excel se cuentan completas,
+        # pero para programación una OT repetida representa un solo PMP.
+        monthly_summary={}
+        for r in raw:
+            if r["state"]=="ANULADA":continue
+            month_key=str(r["month"])
+            spec_key=r["specialty"]
+            bucket=monthly_summary.setdefault(month_key,{}).setdefault(spec_key,{
+                "master_rows":0,"unique_ot":0,"pending_unique_ot":0,"finalized_unique_ot":0,
+                "repeated_extra_rows":0
+            })
+            bucket["master_rows"]+=1
+
+        seen_ot_by_month_spec={}
+        pending_seen={}
+        finalized_seen={}
+        for r in raw:
+            if r["state"]=="ANULADA":continue
+            month_spec=(r["month"],r["specialty"])
+            ot=(r["order_number"] or "").strip()
+            identity=ot or f"__ROW__{r['excel_row']}"
+            seen_ot_by_month_spec.setdefault(month_spec,set()).add(identity)
+            if r["state"]=="PENDIENTE":pending_seen.setdefault(month_spec,set()).add(identity)
+            elif r["state"]=="FINALIZADA":finalized_seen.setdefault(month_spec,set()).add(identity)
+
+        for (month_value,specialty_value),items in seen_ot_by_month_spec.items():
+            bucket=monthly_summary[str(month_value)][specialty_value]
+            bucket["unique_ot"]=len(items)
+            bucket["pending_unique_ot"]=len(pending_seen.get((month_value,specialty_value),set()))
+            bucket["finalized_unique_ot"]=len(finalized_seen.get((month_value,specialty_value),set()))
+            bucket["repeated_extra_rows"]=bucket["master_rows"]-bucket["unique_ot"]
+
+        out["orders"].metadata["monthly_summary"]=monthly_summary
+
         seen=set()
         for r in raw:
             if r["state"]=="ANULADA":continue
-            sk=stable_sha256([program_year,r["month"],r["order_number"],r["asset_code"],r["observation"]])
+            # Regla operativa: si el número de OT se repite en el mes, se consolida.
+            # Si no hay OT, cada fila se conserva como PMP independiente.
+            identity=(r["order_number"] or "").strip() or f"__ROW__{r['excel_row']}"
+            sk=stable_sha256([program_year,r["month"],identity])
             if sk in seen:continue
             seen.add(sk); r["source_key"]=sk; r["program_year"]=program_year; out["orders"].rows.append(r)
     else: out["orders"].warnings.append("No se encontró ORDENES MENSUALES")
