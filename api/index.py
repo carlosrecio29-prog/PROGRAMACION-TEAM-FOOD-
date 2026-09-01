@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from pydantic import BaseModel, Field
 
-from backend.config import MAX_UPLOAD_BYTES
+from backend.config import MAX_UPLOAD_BYTES, database_url_diagnostics
 from backend.database import get_engine
 from backend.services.import_service import (
     import_master_assets, import_master_classification, import_master_personnel_turns,
@@ -40,16 +40,29 @@ def health():
     try:
         with get_engine().connect() as conn:
             conn.execute(text("SELECT 1"))
-        return {"ok":True,"service":"programador-mantenimiento","version":"1.2.0","database":"connected"}
+        return {
+            "ok":True,
+            "service":"programador-mantenimiento",
+            "version":"1.3.0",
+            "database":"connected",
+            "connection":database_url_diagnostics(),
+        }
     except Exception as exc:
+        message=str(exc)
+        # Evitar que una excepción llegue a exponer credenciales.
+        if "@" in message:
+            parts=message.split("@")
+            message="[credenciales ocultas]@" + parts[-1]
         return JSONResponse(
             status_code=503,
             content={
                 "ok":False,
                 "service":"programador-mantenimiento",
-                "version":"1.2.0",
+                "version":"1.3.0",
                 "database":"disconnected",
+                "connection":database_url_diagnostics(),
                 "error_type":type(exc).__name__,
+                "error":message[:500],
             },
         )
 
