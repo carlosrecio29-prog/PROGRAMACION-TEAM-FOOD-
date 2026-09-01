@@ -32,9 +32,15 @@ def test_team_food_preserves_unknown_plan_data():
     orders=wb.create_sheet("ORDENES MENSUALES")
     orders.append(["MES","ÁREA","# DE ORDEN","ESPECIALIDAD","CÓDIGO","DESCRIPCIÓN","OBSERVACIÓN","ESTADO","FECHA PROG","CRITICIDAD","AÑO","TIEMPO"])
     orders.append(["SEPTIEMBRE","JABONERÍA","OT-1-26","MEC","A1","BOMBA 1","RUTINA MENSUAL","PENDIENTE","2026-09-01","A",2026,60])
+    technicians=wb.create_sheet("ESPECIALIDAD DE CADA TECNICO ")
+    technicians.append(["NOMBRE","Especialiidad "])
+    technicians.append(["MARIO ACOSTA","MECANICO "])
+    technicians.append(["MIGUEL OSORIO","REFRI GERACION "])
     b=BytesIO();wb.save(b)
     p=parse_team_food(b.getvalue())
     assert p["plans"].rows[0]["persons"] is None
     assert p["plans"].rows[0]["condition"]=="SIN CLASIFICAR"
     assert p["plans"].rows[0]["plan_key"]=="10-RUTINA MENSUAL"
     assert p["orders"].metadata["program_year"]==2026
+    assert [r["specialty"] for r in p["technicians"].rows]==["MEC","SER"]
+    assert p["technicians"].rows[1]["name_normalized"]=="MIGUEL OSORIO"
