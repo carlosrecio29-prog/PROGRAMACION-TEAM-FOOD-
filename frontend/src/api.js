@@ -8,3 +8,5 @@ export async function saveProgramming(payload){return check(await fetch('/api/pr
 export async function getProgrammingHistory(limit=50){return check(await fetch(`/api/programming/history?limit=${limit}`))}
 export async function getProgrammingVersion(versionId){return check(await fetch(`/api/programming/version/${versionId}`))}
 export async function closeProgramming(payload){return check(await fetch('/api/programming/close',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}))}
+
+export async function getHealth(){return check(await fetch('/api/health'))}
