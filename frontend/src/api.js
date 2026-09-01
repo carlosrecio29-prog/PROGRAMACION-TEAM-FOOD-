@@ -12,3 +12,22 @@ export async function closeProgramming(payload){return check(await fetch('/api/p
 export async function getHealth(){return check(await fetch('/api/health'))}
 
 export async function getMonthReconciliation(year,month){return check(await fetch(`/api/month-reconciliation?${new URLSearchParams({year,month})}`))}
+
+
+export async function downloadProgrammingExport(versionId,format){
+ const res=await fetch(`/api/programming/version/${versionId}/export.${format}`)
+ if(!res.ok){
+  let detail=`HTTP ${res.status}`
+  try{const b=await res.json();detail=b.detail||JSON.stringify(b)}catch{}
+  throw new Error(detail)
+ }
+ const blob=await res.blob()
+ const disposition=res.headers.get('content-disposition')||''
+ const match=disposition.match(/filename="?([^";]+)"?/i)
+ const filename=match?.[1]||`programacion.${format}`
+ const url=URL.createObjectURL(blob)
+ const a=document.createElement('a')
+ a.href=url;a.download=filename
+ document.body.appendChild(a);a.click();a.remove()
+ URL.revokeObjectURL(url)
+}
