@@ -3,6 +3,8 @@ name: CI + Supabase migrations
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -37,6 +39,7 @@ jobs:
         run: npm run build
 
       - name: Validate Supabase secrets
+        if: github.event_name != 'pull_request'
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
@@ -45,6 +48,7 @@ jobs:
           test -n "$SUPABASE_PROJECT_ID" || (echo "Falta SUPABASE_PROJECT_ID" && exit 1)
 
       - name: Apply pending migrations
+        if: github.event_name != 'pull_request'
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
