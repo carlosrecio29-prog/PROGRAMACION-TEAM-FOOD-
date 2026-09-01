@@ -25,7 +25,11 @@ def save_programming(*,date_from:date,date_to:date,specialty:str,pmp_ids:list[in
         {"p":period,"s":sid,"a":cap["available"],"o":cap["target"],"st":cap["standby"],"u":created_by}).scalar_one()
         rows=conn.execute(text("""SELECT * FROM mantenimiento.vw_pmp_calculado WHERE pmp_id=ANY(:ids) AND especialidad=:s AND estado_orden<>'FINALIZADA'"""),{"ids":pmp_ids,"s":specialty.upper()}).mappings().all()
         if len(rows)!=len(set(pmp_ids)): raise ProgrammingError("Uno o más PMP no existen o ya están FINALIZADOS")
-        total=sum(float(r["hh_pmp"] or 0) for r in rows)
+        incomplete=[r for r in rows if not r["datos_completos"]]
+        if incomplete:
+            faltantes=", ".join(sorted({x for r in incomplete for x in (r["datos_faltantes"] or [])}))
+            raise ProgrammingError(f"Hay {len(incomplete)} PMP con datos incompletos ({faltantes}). Complétalos antes de programar.")
+        total=sum(float(r["hh_pmp"]) for r in rows)
         if total>float(cap["target"] or 0)+.0001: raise ProgrammingError(f"La programación ({total:.1f} HH) supera la meta ({float(cap['target']):.1f} HH)")
         mx=conn.execute(text("SELECT COALESCE(MAX(numero_version),0) FROM mantenimiento.programacion_version WHERE programacion_semanal_id=:p"),{"p":pid}).scalar_one()
         ver=int(mx)+1
