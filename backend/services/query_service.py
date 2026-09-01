@@ -35,8 +35,11 @@ def get_candidates(*,specialty:str,year:int|None=None,month:int|None=None,area:s
     if origin=="MES":filters.extend(["b.pmp_id is null",used])
     elif origin=="BACKLOG":filters.append("b.pmp_id is not null")
     else:filters.append(f"(b.pmp_id is not null or {used})")
-    sql=f"""SELECT v.*,CASE WHEN b.pmp_id IS NOT NULL THEN 'BACKLOG' ELSE 'MES' END AS origen
-    FROM mantenimiento.vw_pmp_calculado v LEFT JOIN mantenimiento.vw_backlog b ON b.pmp_id=v.pmp_id
+    sql=f"""SELECT v.*,p.titulo AS actividad,
+      CASE WHEN b.pmp_id IS NOT NULL THEN 'BACKLOG' ELSE 'MES' END AS origen
+    FROM mantenimiento.vw_pmp_calculado v
+    JOIN mantenimiento.pmp p ON p.id=v.pmp_id
+    LEFT JOIN mantenimiento.vw_backlog b ON b.pmp_id=v.pmp_id
     WHERE {' AND '.join(filters)}
     ORDER BY CASE WHEN b.pmp_id IS NOT NULL THEN 0 ELSE 1 END,
       CASE v.criticidad WHEN 'A' THEN 1 WHEN 'B' THEN 2 WHEN 'C' THEN 3 ELSE 4 END,
