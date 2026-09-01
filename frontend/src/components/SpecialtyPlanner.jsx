@@ -1,5 +1,5 @@
 import {useEffect,useMemo,useState} from 'react'
-import {getCandidates,getMonthReconciliation,learnPlan,saveProgramming} from '../api'
+import {downloadProgrammingExport,getCandidates,getMonthReconciliation,learnPlan,saveProgramming} from '../api'
 
 const CONDITIONS=['OPERANDO','EQUIPO DETENIDO','LINEA DETENIDA','AREA/PLANTA DETENIDA']
 
@@ -99,11 +99,13 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
  const [chosenPlan,setChosenPlan]=useState(''),[chosenActivity,setChosenActivity]=useState(''),[currentId,setCurrentId]=useState('')
  const [message,setMessage]=useState(''),[refresh,setRefresh]=useState(0),[loading,setLoading]=useState(false)
  const [reconciliation,setReconciliation]=useState({})
+ const [lastSaved,setLastSaved]=useState(null)
+ const [exporting,setExporting]=useState('')
  const [learnCondition,setLearnCondition]=useState(''),[learnPeople,setLearnPeople]=useState(''),[learning,setLearning]=useState(false)
 
  useEffect(()=>{
-  setSelected([]);resetFlow();setMessage('')
- },[specialty])
+  setSelected([]);resetFlow();setMessage('');setLastSaved(null)
+ },[specialty,week?.from,week?.to])
 
  useEffect(()=>{
   let active=true
@@ -201,10 +203,21 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
    const r=await saveProgramming({
     date_from:week.from,date_to:week.to,specialty,pmp_ids:selected.map(x=>x.pmp_id)
    })
-   setMessage(`Programación guardada · ${Number(r.hh_programmed).toFixed(1)} H-H · versión ${r.version}`)
+   setLastSaved(r)
+   setMessage(`Programación guardada · ${Number(r.hh_programmed).toFixed(1)} H-H · versión ${r.version}. Ya puedes exportarla en Excel o PDF.`)
    setSelected([]);resetFlow();setRefresh(x=>x+1)
   }catch(e){setMessage(e.message)}
  }
+
+ async function exportSaved(format){
+  if(!lastSaved?.version_id)return setMessage('Primero guarda la programación semanal.')
+  try{
+   setExporting(format)
+   await downloadProgrammingExport(lastSaved.version_id,format)
+   setMessage(`Archivo ${format==='xlsx'?'Excel':'PDF'} generado desde la versión ${lastSaved.version}.`)
+  }catch(e){setMessage(e.message)}finally{setExporting('')}
+ }
+
 
  return <div className="planner">
   <div className="capacity-strip">
@@ -332,7 +345,13 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
 
   <div className="programmed-head">
    <div><span className="step-number">5</span><div><h3>Programación de {specialtyName}</h3><p>{selected.length} actividades seleccionadas · {used.toFixed(1)} de {target.toFixed(1)} H-H.</p></div></div>
-   <div className="table-actions"><button onClick={()=>exportCsv(selected,specialty)}>Exportar CSV</button><button className="primary" onClick={save}>Guardar semana</button></div>
+   <div className="table-actions">
+    {lastSaved&&<>
+     <button className="export-excel" onClick={()=>exportSaved('xlsx')} disabled={!!exporting}>{exporting==='xlsx'?'Generando...':'Exportar Excel'}</button>
+     <button className="export-pdf" onClick={()=>exportSaved('pdf')} disabled={!!exporting}>{exporting==='pdf'?'Generando...':'Exportar PDF'}</button>
+    </>}
+    <button className="primary" onClick={save}>Guardar semana</button>
+   </div>
   </div>
 
   <div className="table-wrap selected-table">
