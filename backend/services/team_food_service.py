@@ -141,11 +141,23 @@ def import_team_food(filename:str,content:bytes,*,year:int|None=None,month:int|N
             rec=plan_map.get((r["specialty"],r["plan_key"]))
             if rec:classifications.append({"pid":int(rec["id"]),"condition":r["condition"],"people":r["persons"]})
         _execute_many(conn,"""INSERT INTO mantenimiento.clasificacion_plan(plan_trabajo_id,condicion,personas_usar,fuente,observacion)
-          VALUES(:pid,:condition,:people,'MAESTRO','Sincronizado desde TEAM FOOD')
+          VALUES(:pid,'SIN CLASIFICAR',:people,'MAESTRO','Sincronizado desde TEAM FOOD')
           ON CONFLICT(plan_trabajo_id) DO UPDATE SET
-          condicion=CASE WHEN excluded.condicion='SIN CLASIFICAR' THEN mantenimiento.clasificacion_plan.condicion ELSE excluded.condicion END,
-          personas_usar=COALESCE(excluded.personas_usar,mantenimiento.clasificacion_plan.personas_usar),
-          fuente=CASE WHEN excluded.condicion<>'SIN CLASIFICAR' OR excluded.personas_usar IS NOT NULL THEN 'MAESTRO' ELSE mantenimiento.clasificacion_plan.fuente END,
+          condicion=CASE
+            WHEN mantenimiento.clasificacion_plan.fuente='USUARIO'
+              THEN mantenimiento.clasificacion_plan.condicion
+            ELSE 'SIN CLASIFICAR'
+          END,
+          personas_usar=CASE
+            WHEN mantenimiento.clasificacion_plan.fuente='USUARIO'
+                 AND mantenimiento.clasificacion_plan.personas_usar IS NOT NULL
+              THEN mantenimiento.clasificacion_plan.personas_usar
+            ELSE COALESCE(excluded.personas_usar,mantenimiento.clasificacion_plan.personas_usar)
+          END,
+          fuente=CASE
+            WHEN mantenimiento.clasificacion_plan.fuente='USUARIO' THEN 'USUARIO'
+            ELSE 'MAESTRO'
+          END,
           actualizado_en=now()""",classifications)
 
         plan_source={r["plan_key"]:r for r in parsed["plans"].rows}
