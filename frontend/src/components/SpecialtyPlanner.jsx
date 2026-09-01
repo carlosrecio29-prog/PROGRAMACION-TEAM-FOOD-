@@ -72,8 +72,7 @@ function SearchableSelect({label,value,options,onChange,placeholder,disabled=fal
 }
 
 export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,year,month,onOpenDefinitions}){
- const [operatingRows,setOperatingRows]=useState([])
- const [stoppedRows,setStoppedRows]=useState([])
+ const [candidateRows,setCandidateRows]=useState([])
  const [selected,setSelected]=useState([])
  const [area,setArea]=useState('')
  const [criticality,setCriticality]=useState('')
@@ -104,22 +103,14 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
   const timer=setTimeout(async()=>{
    try{
     setLoading(true)
-    const common={
+    const rows=await getCandidates({
      specialty,year,month,
      area:area||undefined,
      criticality:criticality||undefined,
      origin,
      limit:2000
-    }
-    const [operating,...stoppedSets]=await Promise.all([
-     getCandidates({...common,condition:'OPERANDO'}),
-     ...STOPPED_CONDITIONS.map(condition=>getCandidates({...common,condition}))
-    ])
-    if(!active)return
-    setOperatingRows(operating)
-    const map=new Map()
-    stoppedSets.flat().forEach(x=>map.set(x.pmp_id,x))
-    setStoppedRows([...map.values()])
+    })
+    if(active)setCandidateRows(rows)
    }catch(e){
     if(active)setMessage(e.message)
    }finally{
@@ -137,25 +128,25 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
   return()=>{active=false}
  },[year,month,refresh])
 
- const operatingReady=useMemo(
-  ()=>operatingRows.filter(x=>x.datos_completos&&!selected.some(s=>s.pmp_id===x.pmp_id)),
-  [operatingRows,selected]
+ const readyRows=useMemo(
+  ()=>candidateRows.filter(x=>x.datos_completos&&!selected.some(s=>s.pmp_id===x.pmp_id)),
+  [candidateRows,selected]
  )
  const stoppedReady=useMemo(
-  ()=>stoppedRows.filter(x=>x.datos_completos&&!selected.some(s=>s.pmp_id===x.pmp_id)),
-  [stoppedRows,selected]
+  ()=>readyRows.filter(x=>STOPPED_CONDITIONS.includes(x.condicion)),
+  [readyRows]
  )
 
- const allVisible=useMemo(()=>[...operatingRows,...stoppedRows],[operatingRows,stoppedRows])
+ const allVisible=useMemo(()=>candidateRows,[candidateRows])
  const areaOptions=useMemo(
   ()=>[...new Set(allVisible.map(x=>x.area_nombre).filter(Boolean))].sort(),
   [allVisible]
  )
 
- const planOptions=useMemo(()=>uniqueOptions(operatingReady,'plan_trabajo'),[operatingReady])
+ const planOptions=useMemo(()=>uniqueOptions(readyRows,'plan_trabajo'),[readyRows])
  const planRows=useMemo(
-  ()=>chosenPlan?operatingReady.filter(x=>x.plan_trabajo===chosenPlan):[],
-  [operatingReady,chosenPlan]
+  ()=>chosenPlan?readyRows.filter(x=>x.plan_trabajo===chosenPlan):[],
+  [readyRows,chosenPlan]
  )
  const activityOptions=useMemo(()=>uniqueOptions(planRows,'actividad'),[planRows])
  const activityRows=useMemo(
@@ -169,8 +160,8 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
  })),[activityRows])
 
  const current=useMemo(
-  ()=>operatingReady.find(x=>String(x.pmp_id)===String(currentId)),
-  [operatingReady,currentId]
+  ()=>readyRows.find(x=>String(x.pmp_id)===String(currentId)),
+  [readyRows,currentId]
  )
 
  const stoppedFiltered=useMemo(()=>{
@@ -274,9 +265,9 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
 
   <div className="programming-groups">
    <div className="programming-group-card operating">
-    <span>ATENDIBLES OPERANDO</span>
-    <b>{operatingReady.length}</b>
-    <small>PMP completos que no requieren detener el equipo</small>
+    <span>PMP DISPONIBLES</span>
+    <b>{readyRows.length}</b>
+    <small>Todos los PMP completos, operando o con detención</small>
    </div>
    <div className="programming-group-card stopped">
     <span>REQUIEREN DETENCIÓN</span>
@@ -293,7 +284,7 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
   <div className="subsection-title">
    <div><span className="step-number">3</span><div>
     <h3>Filtros de programación</h3>
-    <p>Los datos incompletos ya no aparecen aquí: se gestionan en “Pendientes por definir”.</p>
+    <p>Los datos incompletos se gestionan en “Pendientes por definir”. Los completos aparecen aquí sin importar su condición.</p>
    </div></div>
    <button className="ghost" onClick={()=>{setArea('');setCriticality('');setOrigin('MES');resetSelectors()}}>Limpiar filtros</button>
   </div>
@@ -317,20 +308,11 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
   <section className="operating-section">
    <div className="subsection-title selection-title">
     <div><span className="step-number">4A</span><div>
-     <h3>PMP que se pueden atender OPERANDO</h3>
-     <p>Selecciona Plan → Actividad → Equipo. Solo aparecen PMP con todos sus datos completos.</p>
+     <h3>PMP disponibles para programar</h3>
+     <p>Selecciona Plan → Actividad → Equipo. Aquí aparecen todos los PMP completos, sin importar su condición.</p>
     </div></div>
     {loading&&<span className="loading-chip">Actualizando...</span>}
    </div>
-
-   {!loading&&operatingReady.length===0&&<div className="operating-empty">
-    <div>
-     <span>0 PMP OPERANDO DISPONIBLES</span>
-     <h4>No hay planes completos clasificados como OPERANDO.</h4>
-     <p>Esto no es un error del buscador. Primero debes definir la condición de los planes pendientes. Cuando un plan quede como OPERANDO, aparecerá aquí automáticamente.</p>
-    </div>
-    <button className="primary" onClick={()=>onOpenDefinitions?.()}>Ir a Pendientes por definir</button>
-   </div>}
 
    <div className="cascade-selectors">
     <SearchableSelect
@@ -339,7 +321,7 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
      options={planOptions}
      onChange={v=>{setChosenPlan(v);setChosenActivity('');setCurrentId('')}}
      placeholder="Haz clic o escribe un plan..."
-     emptyText={operatingReady.length===0?'Todavía no hay PMP clasificados como OPERANDO.':'No hay planes OPERANDO con estos filtros.'}
+     emptyText={readyRows.length===0?'No hay PMP completos disponibles. Revisa Pendientes por definir.':'No hay planes con estos filtros.'}
     />
     <SearchableSelect
      label="2. Actividad del plan"
@@ -367,7 +349,7 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
 
    {current&&<div className="selected-equipment-card">
     <div className="selected-equipment-main">
-     <span className="selection-label">PMP OPERANDO</span>
+     <span className="selection-label">PMP DISPONIBLE</span>
      <h3>{current.activo_codigo} — {current.activo_descripcion}</h3>
      <p><b>{current.actividad}</b></p>
      <div className="selection-meta">
@@ -379,7 +361,7 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
      </div>
     </div>
     <div className="selection-action">
-     <span className="data-ready">OPERANDO</span>
+     <span className="data-ready">{current.condicion}</span>
      <button className="primary" onClick={()=>addItem(current)}>Agregar a semana</button>
     </div>
    </div>}
