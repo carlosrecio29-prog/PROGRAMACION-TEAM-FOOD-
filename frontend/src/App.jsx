@@ -15,10 +15,11 @@ export default function App(){
   const [week,setWeek]=useState({from:'2026-09-01',to:'2026-09-07'})
   const [master,setMaster]=useState(null)
   const [health,setHealth]=useState('checking')
+  const [healthError,setHealthError]=useState('')
 
   useEffect(()=>{
     getMasterStatus().then(setMaster).catch(()=>{})
-    getHealth().then(()=>setHealth('ok')).catch(()=>setHealth('error'))
+    getHealth().then(()=>{setHealth('ok');setHealthError('')}).catch(e=>{setHealth('error');setHealthError(e.message)})
   },[])
   const latest=master?.latest_period
   const period=latest?String(latest.mes).padStart(2,'0')+'/'+latest.anio:'09/2026'
@@ -51,6 +52,10 @@ export default function App(){
           <i/> {health==='ok'?'Base conectada':health==='error'?'Error de conexión':'Verificando base...'}
         </div>
       </header>
+      {health==='error'&&<div className="backend-error">
+        <b>El backend no logra conectarse a Supabase.</b>
+        <span>{healthError}</span>
+      </div>}
 
       <ImportPanel onCapacity={(c,w)=>{setCapacity(c);setWeek(w)}} initialWeek={week}/>
 
