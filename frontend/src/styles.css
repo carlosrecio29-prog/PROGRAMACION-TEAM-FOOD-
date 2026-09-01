@@ -290,3 +290,9 @@ tbody tr:hover{background:#f9fbfd}
 .reconciliation-equation strong{color:var(--ok);border-color:#cfe6da;background:#f3fbf7}
 @media(max-width:1200px){.reconciliation-grid{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:650px){.reconciliation-grid{grid-template-columns:1fr 1fr}.reconciliation-head{flex-direction:column}}
+
+.export-excel{background:#eef8f3;border-color:#c8e4d5;color:#1f6d4b;font-weight:800}
+.export-excel:hover{background:#e2f3e9;border-color:#9fceb4}
+.export-pdf{background:#fff2f2;border-color:#edcccc;color:#a63f3f;font-weight:800}
+.export-pdf:hover{background:#fde7e7;border-color:#dda8a8}
+.table-actions button:disabled{opacity:.6;cursor:not-allowed}
