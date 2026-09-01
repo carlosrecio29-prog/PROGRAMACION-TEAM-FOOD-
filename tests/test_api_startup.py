@@ -9,3 +9,4 @@ def test_fastapi_app_imports():
     assert "/api/definitions/pending" in paths
     assert "/api/definitions/plans/{plan_id}" in paths
     assert "/api/programming/version/{version_id}/analyze-close" in paths
+    assert "/api/programming/version/{version_id}/analyze-close-live" in paths
