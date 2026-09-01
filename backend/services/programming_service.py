@@ -184,6 +184,11 @@ def analyze_programming_closure_from_db(*,version_id:int)->dict:
         last_status_sync=conn.execute(text(
           "SELECT MAX(actualizado_en) FROM mantenimiento.orden_mantenimiento"
         )).scalar_one_or_none()
+        last_master=conn.execute(text("""SELECT referencia,anio,mes,estado,finalizado_en
+          FROM mantenimiento.sincronizacion_fuente_maestra
+          WHERE fuente='TEAM_FOOD'
+          ORDER BY finalizado_en DESC NULLS LAST,iniciado_en DESC
+          LIMIT 1""")).mappings().one_or_none()
 
     if not rows:
         raise ProgrammingError("La programación no tiene actividades")
@@ -220,8 +225,11 @@ def analyze_programming_closure_from_db(*,version_id:int)->dict:
       "date_from":header["fecha_desde"],
       "date_to":header["fecha_hasta"],
       "programming_status":header["estado"],
-      "source":"TEAM FOOD sincronizado",
+      "source":"Excel maestro TEAM FOOD almacenado en Supabase",
       "last_status_sync":last_status_sync,
+      "last_master_upload":last_master["finalizado_en"] if last_master else None,
+      "master_file":last_master["referencia"] if last_master else None,
+      "master_period":{"year":int(last_master["anio"]),"month":int(last_master["mes"])} if last_master and last_master["anio"] and last_master["mes"] else None,
       "total_programmed":total,
       "finalized":finalized,
       "pending":pending,
