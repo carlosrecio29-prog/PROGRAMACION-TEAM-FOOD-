@@ -79,3 +79,42 @@ def require_database_url() -> str:
     if not url:
         raise RuntimeError("DATABASE_URL no está configurada")
     return url
+
+
+def database_url_diagnostics() -> dict:
+    raw = (DATABASE_URL or "").strip()
+    if not raw:
+        return {
+            "configured": False,
+            "driver": None,
+            "host": None,
+            "port": None,
+            "pooler": None,
+        }
+
+    normalized = normalize_database_url(raw)
+    try:
+        _, rest = normalized.split("://", 1)
+        authority = rest.split("/", 1)[0]
+        hostpart = authority.rsplit("@", 1)[-1]
+        if ":" in hostpart:
+            host, port = hostpart.rsplit(":", 1)
+        else:
+            host, port = hostpart, None
+    except Exception:
+        host, port = None, None
+
+    pooler = None
+    if host:
+        if "pooler.supabase.com" in host:
+            pooler = "transaction" if str(port) == "6543" else "session"
+        elif host.startswith("db.") and host.endswith(".supabase.co"):
+            pooler = "direct"
+
+    return {
+        "configured": True,
+        "driver": normalized.split("://", 1)[0] if "://" in normalized else None,
+        "host": host,
+        "port": port,
+        "pooler": pooler,
+    }
