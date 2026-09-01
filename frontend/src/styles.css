@@ -432,3 +432,10 @@ tbody tr:hover{background:#f9fbfd}
   .definition-summary{grid-template-columns:1fr 1fr}
   .programming-filters{grid-template-columns:1fr}
 }
+
+.operating-empty{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:8px 0 13px;padding:13px;border:1px solid #d8e5ef;background:#f7fbfe;border-radius:10px}
+.operating-empty span{display:block;font-size:8px;font-weight:900;letter-spacing:.6px;color:var(--blue)}
+.operating-empty h4{margin:4px 0;font-size:12px}
+.operating-empty p{margin:0;color:var(--muted);font-size:9px;line-height:1.4;max-width:720px}
+.operating-empty button{white-space:nowrap;font-size:10px;font-weight:800}
+@media(max-width:700px){.operating-empty{flex-direction:column;align-items:flex-start}.operating-empty button{width:100%}}
