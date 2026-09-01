@@ -7,12 +7,14 @@ from backend.database import get_engine
 def get_capacity(date_from: date, date_to: date) -> dict[str, Any]:
     if date_to < date_from or (date_to-date_from).days > 6: raise ValueError("El rango debe ser de 1 a 7 días")
     with get_engine().connect() as conn:
-        rows=conn.execute(text("""SELECT e.codigo AS especialidad,COALESCE(SUM(tu.horas_disponibles),0)::float AS hh_disponibles
+        rows=conn.execute(text("""SELECT e.codigo AS especialidad,
+        COUNT(DISTINCT t.id)::int AS tecnicos,
+        COALESCE(SUM(tu.horas_disponibles),0)::float AS hh_disponibles
         FROM mantenimiento.especialidad e LEFT JOIN mantenimiento.tecnico t ON t.especialidad_id=e.id AND t.activo=TRUE
         LEFT JOIN mantenimiento.programacion_tecnico pt ON pt.tecnico_id=t.id AND pt.fecha BETWEEN :desde AND :hasta
         LEFT JOIN mantenimiento.turno tu ON tu.id=pt.turno_id WHERE e.codigo IN ('MEC','ELE','MET','SER')
         GROUP BY e.codigo ORDER BY e.codigo"""),{"desde":date_from,"hasta":date_to}).mappings().all()
-    return {r["especialidad"]:{"available":float(r["hh_disponibles"] or 0),"target":float(r["hh_disponibles"] or 0)*.8,"standby":float(r["hh_disponibles"] or 0)*.2} for r in rows}
+    return {r["especialidad"]:{"technicians":int(r["tecnicos"] or 0),"available":float(r["hh_disponibles"] or 0),"target":float(r["hh_disponibles"] or 0)*.8,"standby":float(r["hh_disponibles"] or 0)*.2} for r in rows}
 
 def get_candidates(*,specialty:str,year:int|None=None,month:int|None=None,area:str|None=None,criticality:str|None=None,
                    condition:str|None=None,plan_search:str|None=None,origin:str|None=None,limit:int=500):
