@@ -269,3 +269,24 @@ tbody tr:hover{background:#f9fbfd}
 .selection-action button{font-size:10px;font-weight:800}
 @media(max-width:1050px){.cascade-selectors{grid-template-columns:1fr 1fr}.search-select:last-child{grid-column:1/-1}}
 @media(max-width:650px){.cascade-selectors{grid-template-columns:1fr}.search-select:last-child{grid-column:auto}.selected-equipment-card{grid-template-columns:1fr}.selection-action{min-width:0}}
+
+.reconciliation-card{margin:14px 0 18px;border:1px solid #cfddea;background:#fbfdff;border-radius:12px;padding:14px}
+.reconciliation-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
+.reconciliation-head h3{margin:4px 0 3px;font-size:14px}
+.reconciliation-head p{margin:0;color:var(--muted);font-size:10px}
+.reconciliation-period{background:#edf5fc;color:var(--blue-dark);border:1px solid #d5e5f5;border-radius:999px;padding:6px 9px;font-size:9px;font-weight:900;white-space:nowrap}
+.reconciliation-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-top:12px}
+.reconciliation-grid>div{border:1px solid var(--border);background:#fff;border-radius:9px;padding:10px}
+.reconciliation-grid span{display:block;color:var(--muted);font-size:8px;text-transform:uppercase;font-weight:900;letter-spacing:.35px}
+.reconciliation-grid b{display:block;font-size:18px;margin:4px 0 1px;color:var(--ink)}
+.reconciliation-grid small{display:block;color:var(--muted);font-size:8px;line-height:1.25}
+.reconciliation-grid .reconciliation-warn{background:#fff9ed;border-color:#ecd8aa}
+.reconciliation-grid .reconciliation-warn b{color:#9a6a16}
+.reconciliation-grid .reconciliation-ok{background:#eef8f3;border-color:#cfe6da}
+.reconciliation-grid .reconciliation-ok b{color:var(--ok)}
+.reconciliation-equation{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:10px;padding:8px 10px;background:#f3f7fb;border-radius:8px;font-size:9px;color:#5f6e80}
+.reconciliation-equation span,.reconciliation-equation strong{background:#fff;border:1px solid #dce5ee;border-radius:999px;padding:4px 7px}
+.reconciliation-equation i{font-style:normal;color:#8da0b3}
+.reconciliation-equation strong{color:var(--ok);border-color:#cfe6da;background:#f3fbf7}
+@media(max-width:1200px){.reconciliation-grid{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:650px){.reconciliation-grid{grid-template-columns:1fr 1fr}.reconciliation-head{flex-direction:column}}
