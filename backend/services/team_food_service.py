@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+import json
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -26,15 +27,16 @@ def _begin_import(conn,filename:str,year:int,month:int,total:int):
       VALUES('TEAM_FOOD',:f,:y,:m,'PROCESANDO',:n) RETURNING id"""),{"f":filename,"y":year,"m":month,"n":total}).scalar_one()
     return int(iid),int(sid)
 
-def _finish(conn,iid:int,sid:int,processed:int,rejected:int,warnings:list[str]):
+def _finish(conn,iid:int,sid:int,processed:int,rejected:int,warnings:list[str],summary:dict[str,Any]|None=None):
     state="COMPLETADA" if rejected==0 and not warnings else "CON_ADVERTENCIAS"
     msg=" | ".join(warnings[:12]) or None
     conn.execute(text("""UPDATE mantenimiento.importacion
       SET estado=:s,filas_insertadas=:p,filas_rechazadas=:r,mensaje=:m WHERE id=:i"""),
       {"s":state,"p":processed,"r":rejected,"m":msg,"i":iid})
     conn.execute(text("""UPDATE mantenimiento.sincronizacion_fuente_maestra
-      SET estado=:s,filas_procesadas=:p,mensaje=:m,finalizado_en=now() WHERE id=:i"""),
-      {"s":state,"p":processed,"m":msg,"i":sid})
+      SET estado=:s,filas_procesadas=:p,mensaje=:m,
+      resumen_especialidad=CAST(:summary AS jsonb),finalizado_en=now() WHERE id=:i"""),
+      {"s":state,"p":processed,"m":msg,"summary":json.dumps(summary or {}),"i":sid})
     return state
 
 def import_team_food(filename:str,content:bytes,*,year:int|None=None,month:int|None=None)->dict[str,Any]:
@@ -169,16 +171,23 @@ def import_team_food(filename:str,content:bytes,*,year:int|None=None,month:int|N
         for r in parsed["planning"].rows:
             if r["state"]=="HABILITADO":planning_lookup[(r["asset_code"],r["description_key"])]=r
         selected=[r for r in orders if int(r["month"])==target_month and r["state"] in {"PENDIENTE","FINALIZADA"}]
+        order_exceptions={}; pending_order_exceptions={}
         pmp_rows=[];order_context=[];asset_updates=[]
         for r in selected:
             link=planning_lookup.get((r["asset_code"],r["observation_key"]));asset=asset_map.get(r["asset_code"])
             if not link or not asset:
                 rejected+=1
+                order_exceptions[r["specialty"]]=order_exceptions.get(r["specialty"],0)+1
+                if r["state"]=="PENDIENTE":
+                    pending_order_exceptions[r["specialty"]]=pending_order_exceptions.get(r["specialty"],0)+1
                 if len(warnings)<30:warnings.append(f"Fila {r['excel_row']}: no se relacionó activo/planeación")
                 continue
             plan=plan_map.get((r["specialty"],link["plan_key"]))
             if not plan:
                 rejected+=1
+                order_exceptions[r["specialty"]]=order_exceptions.get(r["specialty"],0)+1
+                if r["state"]=="PENDIENTE":
+                    pending_order_exceptions[r["specialty"]]=pending_order_exceptions.get(r["specialty"],0)+1
                 if len(warnings)<30:warnings.append(f"Fila {r['excel_row']}: plan no reconocido")
                 continue
             minutes=r["minutes"] if r["minutes"] is not None else plan["tiempo_ejecucion_min"]
@@ -239,7 +248,22 @@ def import_team_food(filename:str,content:bytes,*,year:int|None=None,month:int|N
           VALUES(:tid,:date,:turn,:iid,now()) ON CONFLICT(tecnico_id,fecha) DO UPDATE SET
           turno_id=excluded.turno_id,importacion_id=excluded.importacion_id,actualizado_en=now()""",roster_rows)
         processed+=len(roster_rows)
-        state=_finish(conn,iid,sync_id,processed,rejected,warnings)
+
+        source_summary=(parsed["orders"].metadata.get("monthly_summary") or {}).get(str(target_month),{})
+        reconciliation={}
+        for code in ("MEC","ELE","SER","MET"):
+            base=dict(source_summary.get(code) or {
+                "master_rows":0,"unique_ot":0,"pending_unique_ot":0,
+                "finalized_unique_ot":0,"repeated_extra_rows":0
+            })
+            base["exceptions"]=int(order_exceptions.get(code,0))
+            base["pending_exceptions"]=int(pending_order_exceptions.get(code,0))
+            base["available_after_import"]=max(
+                0,int(base.get("pending_unique_ot",0))-base["pending_exceptions"]
+            )
+            reconciliation[code]=base
+
+        state=_finish(conn,iid,sync_id,processed,rejected,warnings,reconciliation)
 
     return {"status":state,"year":source_year,"month":target_month,"rows_read":total,
       "processed":processed,"rejected":rejected,"assets":len(asset_rows),"plans":len(plan_rows),
