@@ -3,7 +3,10 @@ import {getPendingDefinitions,savePlanDefinition} from '../api'
 
 const SPECS=['ALL','MEC','ELE','SER','MET']
 const NAMES={ALL:'Todos',MEC:'Mecánica',ELE:'Eléctrica',SER:'Servicios',MET:'Metrología'}
-const CONDITIONS=['OPERANDO','EQUIPO DETENIDO','LINEA DETENIDA','AREA/PLANTA DETENIDA']
+const CONDITIONS=[
+ {value:'OPERANDO',label:'No — se puede atender con el equipo operando'},
+ {value:'EQUIPO DETENIDO',label:'Sí — requiere detener el equipo'}
+]
 
 function MissingBadge({children}){
  return <span className="definition-missing">{children}</span>
@@ -94,7 +97,7 @@ export default function PendingDefinitions({year=2026,month=9}){
    <div>
     <span className="section-kicker">PREPARACIÓN DEL PMP</span>
     <h2>Pendientes por definir</h2>
-    <p>Completa aquí los datos faltantes. Cuando un plan queda completo, deja de aparecer en esta lista y pasa automáticamente a Programación semanal.</p>
+    <p>Completa aquí los datos faltantes y responde si el equipo debe detenerse. Cuando el plan queda completo, pasa automáticamente a Programación semanal.</p>
    </div>
    <button className="ghost" onClick={load}>Actualizar</button>
   </div>
@@ -173,18 +176,18 @@ export default function PendingDefinitions({year=2026,month=9}){
       </label>
 
       <label className={!selected.falta_condicion?'field-complete':''}>
-       Condición para ejecutar
+       ¿Necesita detener el equipo?
        <select value={condition} disabled={!selected.falta_condicion} onChange={e=>setCondition(e.target.value)}>
-        <option value="">Seleccionar...</option>
-        {CONDITIONS.map(x=><option key={x}>{x}</option>)}
+        <option value="">Seleccionar respuesta...</option>
+        {CONDITIONS.map(x=><option key={x.value} value={x.value}>{x.label}</option>)}
        </select>
-       <small>{selected.falta_condicion?'Define si puede ejecutarse operando o requiere detención':'Ya clasificado'}</small>
+       <small>{selected.falta_condicion?'Esta respuesta la define el usuario; no se deduce de TiempoParada.':'Ya definido manualmente'}</small>
       </label>
      </div>
 
      <div className="definition-destination">
       <span>Destino al quedar completo</span>
-      <b>{condition==='OPERANDO'?'PMP ATENDIBLES OPERANDO':condition?'PMP QUE REQUIEREN DETENCIÓN':'Se definirá según la condición'}</b>
+      <b>{condition==='OPERANDO'?'PMP DISPONIBLE · OPERANDO':condition==='EQUIPO DETENIDO'?'PMP DISPONIBLE · REQUIERE DETENCIÓN':'Se definirá según tu respuesta'}</b>
      </div>
 
      <button className="primary definition-save" onClick={save} disabled={saving}>{saving?'Guardando...':'Guardar definición'}</button>
