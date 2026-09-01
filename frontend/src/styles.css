@@ -481,3 +481,24 @@ tbody tr:hover{background:#f9fbfd}
 .backlog-add:hover{background:#f9e9bf}
 @media(max-width:1200px){.programming-groups{grid-template-columns:1fr 1fr}}
 @media(max-width:800px){.backlog-head{flex-direction:column}.backlog-tools{width:100%;flex-direction:column;align-items:stretch}.backlog-tools input{min-width:0;width:100%}}
+
+
+.master-page{display:grid;gap:12px}
+.master-info-note{display:flex;gap:10px;align-items:flex-start;margin:14px 0;padding:11px 12px;border:1px solid #d5e5f5;background:#f5f9fd;border-radius:10px;font-size:10px;color:#526579}
+.master-info-note b{color:var(--blue-dark);white-space:nowrap}
+.master-upload-card{display:grid;grid-template-columns:1fr minmax(320px,430px);gap:18px;align-items:center;margin-top:16px;padding:15px;border:1px solid var(--border);background:#fbfcfe;border-radius:12px}
+.master-upload-copy h3{margin:4px 0 4px;font-size:15px}
+.master-upload-copy p{margin:0 0 8px;color:var(--muted);font-size:10px;line-height:1.45}
+.master-upload-copy small{color:var(--muted);font-size:9px}
+.master-upload{display:flex;flex-direction:column;gap:8px}
+.master-upload input{width:100%}
+.selected-master-file{font-size:9px;color:var(--blue-dark);font-weight:800;word-break:break-all}
+.master-message{margin-top:12px;padding:9px 11px;border-radius:8px;background:#eef8f3;border:1px solid #cfe6da;color:#276b4c;font-size:10px;font-weight:700}
+.master-message.error{background:#fff2f2;border-color:#edcccc;color:#9b3e3e}
+.master-history-panel{margin-top:0}
+.master-history-table{margin-top:12px;border:1px solid var(--border);border-radius:10px}
+.import-state{display:inline-block;padding:4px 7px;border-radius:999px;font-size:8px;font-weight:900;background:#eef3f7;color:#526579}
+.import-state.completada{background:#eaf7f0;color:#29704f}
+.import-state.con_advertencias{background:#fff4d8;color:#8b651d}
+.import-state.error,.import-state.fallida{background:#fdeeee;color:#9b3e3e}
+@media(max-width:850px){.master-upload-card{grid-template-columns:1fr}.master-info-note{flex-direction:column}}
