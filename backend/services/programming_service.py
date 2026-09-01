@@ -365,11 +365,7 @@ def reset_test_data()->dict:
           )"""))
 
         learned_rows=conn.execute(text("""UPDATE mantenimiento.clasificacion_plan cp
-          SET condicion=CASE
-                WHEN pt.tiempo_parada_min IS NULL THEN 'SIN CLASIFICAR'
-                WHEN pt.tiempo_parada_min>0 THEN 'EQUIPO DETENIDO'
-                ELSE 'OPERANDO'
-              END,
+          SET condicion='SIN CLASIFICAR',
               personas_usar=pt.personas_defecto,
               observacion='Sincronizado desde TEAM FOOD',
               actualizado_por=NULL,
