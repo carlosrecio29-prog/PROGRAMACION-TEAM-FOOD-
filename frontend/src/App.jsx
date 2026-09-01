@@ -1,24 +1,77 @@
-import { useState } from 'react'
+import {useEffect,useState} from 'react'
 import ImportPanel from './components/ImportPanel'
 import SpecialtyPlanner from './components/SpecialtyPlanner'
 import MasterImportPanel from './components/MasterImportPanel'
+import {getMasterStatus} from './api'
 import './styles.css'
 
-const SPECS=['MEC','ELE','MET','SER']
-const NAMES={MEC:'Mecánica',ELE:'Eléctrica',MET:'Metrología',SER:'Servicios'}
+const SPECS=['MEC','ELE','SER','MET']
+const NAMES={MEC:'Mecánica',ELE:'Eléctrica',SER:'Servicios',MET:'Metrología'}
+const ICONS={MEC:'ME',ELE:'EL',SER:'SE',MET:'MT'}
 
 export default function App(){
   const [active,setActive]=useState('MEC')
   const [capacity,setCapacity]=useState({})
-  const [week,setWeek]=useState(null)
+  const [week,setWeek]=useState({from:'2026-09-01',to:'2026-09-07'})
+  const [master,setMaster]=useState(null)
+
+  useEffect(()=>{getMasterStatus().then(setMaster).catch(()=>{})},[])
+  const latest=master?.latest_period
+  const period=latest?String(latest.mes).padStart(2,'0')+'/'+latest.anio:'09/2026'
+
   return <div className="app-shell">
-    <aside><h1>Programador de Mantenimiento</h1><p>React + FastAPI + Supabase</p><a href="#imports">Archivos</a><a href="#planner">Programación</a></aside>
-    <main><header><div><h2>Programación semanal</h2><p>Importa, calcula capacidad y selecciona PMP.</p></div><span>BASE DE DATOS</span></header>
-      <div id="imports"><ImportPanel onCapacity={(c,w)=>{setCapacity(c);setWeek(w)}}/><MasterImportPanel/></div>
-      <section id="planner" className="panel"><h2>Programación por especialidad</h2>
-        <div className="tabs">{SPECS.map(s=><button className={active===s?'active':''} key={s} onClick={()=>setActive(s)}>{NAMES[s]}</button>)}</div>
-        <SpecialtyPlanner specialty={active} capacity={capacity[active]} week={week}/>
+    <aside className="sidebar">
+      <div className="brand">
+        <div className="brand-mark">CEK</div>
+        <div><strong>Programación</strong><span>Mantenimiento preventivo</span></div>
+      </div>
+      <nav>
+        <a className="nav-active" href="#planner"><span>01</span> Programación semanal</a>
+        <a href="#master"><span>02</span> Fuente maestra</a>
+      </nav>
+      <div className="sidebar-foot">
+        <small>Periodo activo</small>
+        <strong>{period}</strong>
+        <span>TEAM FOOD · Supabase</span>
+      </div>
+    </aside>
+
+    <main>
+      <header className="topbar">
+        <div>
+          <div className="eyebrow">PLANTA BARRANQUILLA · PMP</div>
+          <h1>Programación semanal de mantenimiento</h1>
+          <p>Selecciona la semana, revisa la capacidad de la especialidad y arma el paquete de trabajo.</p>
+        </div>
+        <div className="status-pill"><i/> Base conectada</div>
+      </header>
+
+      <ImportPanel onCapacity={(c,w)=>{setCapacity(c);setWeek(w)}} initialWeek={week}/>
+
+      <section id="planner" className="panel planner-panel">
+        <div className="section-head">
+          <div>
+            <span className="section-kicker">PASO 2</span>
+            <h2>Selecciona la especialidad</h2>
+            <p>La capacidad se calcula con los turnos reales y solo se programa hasta el 80%.</p>
+          </div>
+          <div className="week-badge">{week?.from} → {week?.to}</div>
+        </div>
+
+        <div className="specialty-tabs">
+          {SPECS.map(s=>{
+            const c=capacity[s]||{}
+            return <button className={active===s?'active':''} key={s} onClick={()=>setActive(s)}>
+              <span className="spec-icon">{ICONS[s]}</span>
+              <span className="spec-copy"><b>{NAMES[s]}</b><small>{Number(c.technicians||0)} técnicos · {Number(c.target||0).toFixed(1)} H-H meta</small></span>
+            </button>
+          })}
+        </div>
+
+        <SpecialtyPlanner specialty={active} specialtyName={NAMES[active]} capacity={capacity[active]} week={week} year={2026} month={9}/>
       </section>
+
+      <div id="master"><MasterImportPanel/></div>
     </main>
   </div>
 }
