@@ -65,3 +65,10 @@ export async function analyzeProgrammingClose(versionId,file){
   body:form
  }))
 }
+
+
+export async function analyzeProgrammingCloseLive(versionId){
+ return check(await fetch(`/api/programming/version/${versionId}/analyze-close-live`,{
+  method:'POST'
+ }))
+}
