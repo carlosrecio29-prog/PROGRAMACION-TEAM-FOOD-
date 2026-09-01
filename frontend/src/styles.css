@@ -401,7 +401,7 @@ tbody tr:hover{background:#f9fbfd}
 .definition-destination b{display:block;margin-top:4px;font-size:10px;color:var(--blue-dark)}
 .definition-save{width:100%;margin-top:12px}
 
-.programming-groups{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin:14px 0 18px}
+.programming-groups{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin:14px 0 18px}
 .programming-group-card{border:1px solid var(--border);border-radius:11px;padding:12px;background:#fff}
 .programming-group-card span{display:block;font-size:8px;text-transform:uppercase;font-weight:900;letter-spacing:.45px;color:var(--muted)}
 .programming-group-card b{display:block;font-size:22px;margin:5px 0 1px}
@@ -465,3 +465,19 @@ tbody tr:hover{background:#f9fbfd}
 .state-no-encontrada,.result-revisar{background:#fdeeee;color:#9b3e3e;border:1px solid #ebcaca}
 @media(max-width:900px){.close-analysis-metrics{grid-template-columns:1fr 1fr}}
 @media(max-width:600px){.close-analysis-metrics{grid-template-columns:1fr}.close-analysis-note{flex-direction:column}}
+
+.programming-group-card.backlog{background:#fff9ed;border-color:#ead9ad}
+.programming-group-card.backlog b{color:#9b6b16}
+.backlog-section{margin-top:14px;border:1px solid #e5d7b9;background:#fffdf8;border-radius:12px;padding:13px}
+.backlog-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+.backlog-head h3{margin:3px 0 4px;font-size:14px}
+.backlog-head p{margin:0;color:var(--muted);font-size:9px}
+.backlog-kicker{font-size:8px;font-weight:900;letter-spacing:.5px;color:#9b6b16}
+.backlog-tools{display:flex;align-items:center;gap:8px}
+.backlog-tools input{min-width:280px}
+.backlog-tools span{white-space:nowrap;font-size:9px;font-weight:900;color:#7d5b1c;background:#fff4d8;border:1px solid #ead6a5;border-radius:999px;padding:6px 9px}
+.backlog-table{margin-top:12px;max-height:520px;border:1px solid #e7dcc2;border-radius:9px}
+.backlog-add{background:#fff4d8;border-color:#d9bf82;color:#7d5b1c}
+.backlog-add:hover{background:#f9e9bf}
+@media(max-width:1200px){.programming-groups{grid-template-columns:1fr 1fr}}
+@media(max-width:800px){.backlog-head{flex-direction:column}.backlog-tools{width:100%;flex-direction:column;align-items:stretch}.backlog-tools input{min-width:0;width:100%}}
