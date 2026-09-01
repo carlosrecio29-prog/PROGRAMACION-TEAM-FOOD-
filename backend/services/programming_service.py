@@ -380,6 +380,11 @@ def reset_test_data()->dict:
             AND cp.actualizado_por=:m
           RETURNING cp.id"""),{"m":TEST_MARKER}).fetchall()
 
+        time_rows=conn.execute(text("""UPDATE mantenimiento.plan_trabajo
+          SET tiempo_ejecucion_min=NULL,actualizado_por=NULL
+          WHERE actualizado_por=:m
+          RETURNING id"""),{"m":TEST_MARKER}).fetchall()
+
     return {
       "ok":True,
       "programming_deleted":programming_count,
@@ -387,4 +392,5 @@ def reset_test_data()->dict:
       "items_deleted":item_count,
       "closures_deleted":closure_count,
       "learning_reset":len(learned_rows),
+      "time_defaults_reset":len(time_rows),
     }
