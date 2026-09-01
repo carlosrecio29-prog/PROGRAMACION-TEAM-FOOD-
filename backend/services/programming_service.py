@@ -1,6 +1,18 @@
 from __future__ import annotations
 from datetime import date
+from io import BytesIO
+
 from sqlalchemy import text
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.utils import get_column_letter
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import mm
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
 from backend.database import get_engine
 from backend.services.query_service import get_capacity
 
@@ -85,3 +97,217 @@ def close_programming(*,programming_id:int,version_id:int,reasons:dict,closed_by
             VALUES(:c,:i,:s,:r,:d,:o)"""),{"c":cid,"i":r["item_id"],"s":r["estado"],"r":reason_id,"d":detail,"o":related})
         conn.execute(text("UPDATE mantenimiento.programacion_semanal SET estado='CERRADA',cerrado_en=NOW() WHERE id=:id"),{"id":programming_id})
     return {"closure_id":int(cid),"hh_programmed":total,"hh_finalized":final,"hh_pending":pending,"compliance_pct":pct}
+
+
+def _programming_export_data(version_id:int):
+    with get_engine().connect() as conn:
+        header=conn.execute(text("""SELECT
+          ps.id programming_id,pv.id version_id,pv.numero_version,pv.tipo,pv.creado_en,
+          per.fecha_desde,per.fecha_hasta,e.codigo especialidad,
+          ps.hh_disponibles,ps.hh_objetivo,ps.hh_standby,
+          COALESCE(SUM(pi.hh_programadas),0)::float hh_programadas,
+          COUNT(pi.id)::int items
+        FROM mantenimiento.programacion_semanal ps
+        JOIN mantenimiento.periodo_semanal per ON per.id=ps.periodo_semanal_id
+        JOIN mantenimiento.especialidad e ON e.id=ps.especialidad_id
+        JOIN mantenimiento.programacion_version pv ON pv.programacion_semanal_id=ps.id
+        LEFT JOIN mantenimiento.programacion_item pi ON pi.programacion_version_id=pv.id
+        WHERE pv.id=:v
+        GROUP BY ps.id,pv.id,per.id,e.id"""),{"v":version_id}).mappings().one_or_none()
+        if not header:
+            raise ProgrammingError("Versión de programación no encontrada")
+
+        rows=conn.execute(text("""SELECT
+          om.numero_orden,a.area_nombre,a.linea_nombre,a.codigo activo_codigo,
+          a.descripcion activo_descripcion,p.titulo actividad,pt.nombre plan_trabajo,
+          pi.criticidad_snapshot criticidad,pi.condicion_snapshot condicion,
+          pi.personas_usar,pi.tiempo_planeado_min,pi.hh_programadas,pi.origen,
+          COALESCE(om.estado,'PENDIENTE') estado
+        FROM mantenimiento.programacion_item pi
+        JOIN mantenimiento.pmp p ON p.id=pi.pmp_id
+        JOIN mantenimiento.activo a ON a.id=p.activo_id
+        JOIN mantenimiento.plan_trabajo pt ON pt.id=p.plan_trabajo_id
+        LEFT JOIN mantenimiento.orden_mantenimiento om ON om.id=pi.orden_id
+        WHERE pi.programacion_version_id=:v
+        ORDER BY a.area_nombre,pt.nombre,p.titulo,a.codigo"""),{"v":version_id}).mappings().all()
+    return dict(header),[dict(r) for r in rows]
+
+
+def export_programming_excel(version_id:int):
+    header,rows=_programming_export_data(version_id)
+    wb=Workbook()
+    ws=wb.active
+    ws.title="Programación semanal"
+    ws.sheet_view.showGridLines=False
+    ws.freeze_panes="A9"
+    ws.page_setup.orientation="landscape"
+    ws.page_setup.paperSize=ws.PAPERSIZE_A4
+    ws.page_setup.fitToWidth=1
+    ws.page_setup.fitToHeight=0
+    ws.sheet_properties.pageSetUpPr.fitToPage=True
+    ws.print_title_rows="1:8"
+    ws.page_margins.left=0.25
+    ws.page_margins.right=0.25
+    ws.page_margins.top=0.35
+    ws.page_margins.bottom=0.35
+
+    navy="17365D"; blue="2F75B5"; light="D9EAF7"; pale="F3F6FA"
+    green="E2F0D9"; white="FFFFFF"; dark="1F2937"; gray="6B7280"
+    thin=Side(style="thin",color="D9E2F3")
+
+    ws.merge_cells("A1:N1")
+    ws["A1"]="PROGRAMACIÓN SEMANAL DE MANTENIMIENTO"
+    ws["A1"].font=Font(size=18,bold=True,color=white)
+    ws["A1"].fill=PatternFill("solid",fgColor=navy)
+    ws["A1"].alignment=Alignment(horizontal="center",vertical="center")
+    ws.row_dimensions[1].height=30
+
+    ws.merge_cells("A2:N2")
+    ws["A2"]=f"Semana {header['fecha_desde']:%d/%m/%Y} al {header['fecha_hasta']:%d/%m/%Y}  |  Especialidad: {header['especialidad']}  |  Versión: {header['numero_version']}"
+    ws["A2"].font=Font(size=10,bold=True,color=dark)
+    ws["A2"].alignment=Alignment(horizontal="center")
+
+    cards=[
+      ("A4:C4","A5:C6","H-H DISPONIBLES",float(header["hh_disponibles"] or 0)),
+      ("D4:F4","D5:F6","META 80%",float(header["hh_objetivo"] or 0)),
+      ("G4:I4","G5:I6","H-H PROGRAMADAS",float(header["hh_programadas"] or 0)),
+      ("J4:L4","J5:L6","STANDBY 20%",float(header["hh_standby"] or 0)),
+      ("M4:N4","M5:N6","ACTIVIDADES",int(header["items"] or 0)),
+    ]
+    for title_range,value_range,label,value in cards:
+        ws.merge_cells(title_range);ws.merge_cells(value_range)
+        t=ws[title_range.split(":")[0]];v=ws[value_range.split(":")[0]]
+        t.value=label;t.font=Font(size=9,bold=True,color=gray);t.fill=PatternFill("solid",fgColor=pale);t.alignment=Alignment(horizontal="center")
+        v.value=value;v.font=Font(size=16,bold=True,color=navy);v.fill=PatternFill("solid",fgColor=light);v.alignment=Alignment(horizontal="center",vertical="center")
+        v.number_format='0.0'
+
+    headers=["OT","Área","Línea","Código equipo","Descripción equipo","Actividad","Plan de trabajo","Crit.","Condición","Personas","Tiempo min","H-H","Origen","Estado"]
+    for c,label in enumerate(headers,1):
+        cell=ws.cell(row=8,column=c,value=label)
+        cell.font=Font(bold=True,color=white,size=9)
+        cell.fill=PatternFill("solid",fgColor=blue)
+        cell.alignment=Alignment(horizontal="center",vertical="center",wrap_text=True)
+        cell.border=Border(left=thin,right=thin,top=thin,bottom=thin)
+
+    for r_idx,row in enumerate(rows,9):
+        values=[
+          row.get("numero_orden") or "",row.get("area_nombre") or "",row.get("linea_nombre") or "",
+          row.get("activo_codigo") or "",row.get("activo_descripcion") or "",row.get("actividad") or "",
+          row.get("plan_trabajo") or "",row.get("criticidad") or "",row.get("condicion") or "",
+          float(row["personas_usar"]) if row.get("personas_usar") is not None else "",
+          float(row["tiempo_planeado_min"]) if row.get("tiempo_planeado_min") is not None else "",
+          float(row["hh_programadas"]) if row.get("hh_programadas") is not None else "",
+          row.get("origen") or "",row.get("estado") or ""
+        ]
+        for c_idx,value in enumerate(values,1):
+            cell=ws.cell(row=r_idx,column=c_idx,value=value)
+            cell.font=Font(size=8,color=dark)
+            cell.alignment=Alignment(vertical="top",wrap_text=True)
+            cell.border=Border(left=thin,right=thin,top=thin,bottom=thin)
+            if r_idx%2==0:cell.fill=PatternFill("solid",fgColor="F8FAFC")
+        ws.cell(r_idx,10).number_format='0'
+        ws.cell(r_idx,11).number_format='0.0'
+        ws.cell(r_idx,12).number_format='0.0'
+
+    widths=[16,18,17,21,34,34,34,8,20,10,11,10,10,12]
+    for idx,width in enumerate(widths,1):
+        ws.column_dimensions[get_column_letter(idx)].width=width
+    ws.auto_filter.ref=f"A8:N{max(8,8+len(rows))}"
+    ws.print_area=f"A1:N{max(8,8+len(rows))}"
+
+    out=BytesIO()
+    wb.save(out)
+    out.seek(0)
+    filename=f"programacion_{header['especialidad']}_{header['fecha_desde']:%Y%m%d}_{header['fecha_hasta']:%Y%m%d}_v{header['numero_version']}.xlsx"
+    return out.getvalue(),filename
+
+
+def export_programming_pdf(version_id:int):
+    header,rows=_programming_export_data(version_id)
+    out=BytesIO()
+    doc=SimpleDocTemplate(
+        out,pagesize=landscape(A4),
+        leftMargin=8*mm,rightMargin=8*mm,topMargin=8*mm,bottomMargin=8*mm,
+        title="Programación semanal de mantenimiento"
+    )
+    styles=getSampleStyleSheet()
+    title_style=ParagraphStyle("ReportTitle",parent=styles["Heading1"],fontName="Helvetica-Bold",
+        fontSize=15,leading=18,textColor=colors.HexColor("#17365D"),alignment=TA_CENTER,spaceAfter=4)
+    subtitle_style=ParagraphStyle("ReportSub",parent=styles["Normal"],fontName="Helvetica",
+        fontSize=8,leading=10,textColor=colors.HexColor("#4B5563"),alignment=TA_CENTER,spaceAfter=7)
+    cell_style=ParagraphStyle("Cell",parent=styles["Normal"],fontName="Helvetica",fontSize=5.7,leading=7)
+    cell_center=ParagraphStyle("CellCenter",parent=cell_style,alignment=TA_CENTER)
+    small_bold=ParagraphStyle("SmallBold",parent=cell_style,fontName="Helvetica-Bold")
+
+    story=[
+      Paragraph("PROGRAMACIÓN SEMANAL DE MANTENIMIENTO",title_style),
+      Paragraph(
+        f"Semana {header['fecha_desde']:%d/%m/%Y} al {header['fecha_hasta']:%d/%m/%Y} &nbsp;&nbsp;|&nbsp;&nbsp; "
+        f"Especialidad: <b>{header['especialidad']}</b> &nbsp;&nbsp;|&nbsp;&nbsp; Versión: {header['numero_version']}",
+        subtitle_style
+      )
+    ]
+
+    summary=[
+      [Paragraph("H-H DISPONIBLES",small_bold),Paragraph("META 80%",small_bold),
+       Paragraph("H-H PROGRAMADAS",small_bold),Paragraph("STANDBY 20%",small_bold),Paragraph("ACTIVIDADES",small_bold)],
+      [f"{float(header['hh_disponibles'] or 0):.1f}",f"{float(header['hh_objetivo'] or 0):.1f}",
+       f"{float(header['hh_programadas'] or 0):.1f}",f"{float(header['hh_standby'] or 0):.1f}",str(int(header['items'] or 0))]
+    ]
+    summary_table=Table(summary,colWidths=[54*mm,54*mm,54*mm,54*mm,45*mm],rowHeights=[7*mm,8*mm])
+    summary_table.setStyle(TableStyle([
+      ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#F3F6FA")),
+      ("BACKGROUND",(0,1),(-1,1),colors.HexColor("#D9EAF7")),
+      ("TEXTCOLOR",(0,0),(-1,-1),colors.HexColor("#17365D")),
+      ("FONTNAME",(0,1),(-1,1),"Helvetica-Bold"),("FONTSIZE",(0,1),(-1,1),12),
+      ("ALIGN",(0,0),(-1,-1),"CENTER"),("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+      ("GRID",(0,0),(-1,-1),0.35,colors.HexColor("#C9D6E3")),
+    ]))
+    story.extend([summary_table,Spacer(1,5*mm)])
+
+    table_headers=["OT","Área","Línea","Equipo","Descripción","Actividad","Plan","Crit.","Condición","Pers.","Min","H-H","Origen","Estado"]
+    data=[[Paragraph(h,small_bold) for h in table_headers]]
+    for row in rows:
+        data.append([
+          Paragraph(str(row.get("numero_orden") or ""),cell_center),
+          Paragraph(str(row.get("area_nombre") or ""),cell_style),
+          Paragraph(str(row.get("linea_nombre") or ""),cell_style),
+          Paragraph(str(row.get("activo_codigo") or ""),cell_style),
+          Paragraph(str(row.get("activo_descripcion") or ""),cell_style),
+          Paragraph(str(row.get("actividad") or ""),cell_style),
+          Paragraph(str(row.get("plan_trabajo") or ""),cell_style),
+          Paragraph(str(row.get("criticidad") or ""),cell_center),
+          Paragraph(str(row.get("condicion") or ""),cell_style),
+          Paragraph("" if row.get("personas_usar") is None else f"{float(row['personas_usar']):.0f}",cell_center),
+          Paragraph("" if row.get("tiempo_planeado_min") is None else f"{float(row['tiempo_planeado_min']):.0f}",cell_center),
+          Paragraph("" if row.get("hh_programadas") is None else f"{float(row['hh_programadas']):.1f}",cell_center),
+          Paragraph(str(row.get("origen") or ""),cell_center),
+          Paragraph(str(row.get("estado") or ""),cell_center),
+        ])
+
+    widths=[18,22,20,25,36,38,38,10,24,10,11,11,13,16]
+    detail=Table(data,colWidths=[w*mm for w in widths],repeatRows=1)
+    style=[
+      ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#2F75B5")),
+      ("TEXTCOLOR",(0,0),(-1,0),colors.white),
+      ("ALIGN",(0,0),(-1,0),"CENTER"),("VALIGN",(0,0),(-1,-1),"TOP"),
+      ("GRID",(0,0),(-1,-1),0.25,colors.HexColor("#D9E2F3")),
+      ("LEFTPADDING",(0,0),(-1,-1),2),("RIGHTPADDING",(0,0),(-1,-1),2),
+      ("TOPPADDING",(0,0),(-1,-1),2.5),("BOTTOMPADDING",(0,0),(-1,-1),2.5),
+    ]
+    for idx in range(1,len(data)):
+        if idx%2==0:style.append(("BACKGROUND",(0,idx),(-1,idx),colors.HexColor("#F8FAFC")))
+    detail.setStyle(TableStyle(style))
+    story.append(detail)
+
+    def add_page_number(canvas,doc_obj):
+        canvas.saveState()
+        canvas.setFont("Helvetica",6.5)
+        canvas.setFillColor(colors.HexColor("#6B7280"))
+        canvas.drawRightString(landscape(A4)[0]-8*mm,5*mm,f"Página {doc_obj.page}")
+        canvas.restoreState()
+
+    doc.build(story,onFirstPage=add_page_number,onLaterPages=add_page_number)
+    out.seek(0)
+    filename=f"programacion_{header['especialidad']}_{header['fecha_desde']:%Y%m%d}_{header['fecha_hasta']:%Y%m%d}_v{header['numero_version']}.pdf"
+    return out.getvalue(),filename
