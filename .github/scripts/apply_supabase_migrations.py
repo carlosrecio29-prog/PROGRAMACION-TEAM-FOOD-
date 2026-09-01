@@ -24,6 +24,7 @@ def api_query(sql: str):
             "Authorization": f"Bearer {ACCESS_TOKEN}",
             "Content-Type": "application/json",
             "Accept": "application/json",
+            "User-Agent": "GitHub-Actions-Programacion-Team-Food/1.0",
         },
     )
     try:
