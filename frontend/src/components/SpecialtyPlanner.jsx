@@ -1,5 +1,5 @@
 import {useEffect,useMemo,useState} from 'react'
-import {getCandidates,learnPlan,saveProgramming} from '../api'
+import {getCandidates,getMonthReconciliation,learnPlan,saveProgramming} from '../api'
 
 const CONDITIONS=['OPERANDO','EQUIPO DETENIDO','LINEA DETENIDA','AREA/PLANTA DETENIDA']
 
@@ -98,6 +98,7 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
  const [origin,setOrigin]=useState('MES')
  const [chosenPlan,setChosenPlan]=useState(''),[chosenActivity,setChosenActivity]=useState(''),[currentId,setCurrentId]=useState('')
  const [message,setMessage]=useState(''),[refresh,setRefresh]=useState(0),[loading,setLoading]=useState(false)
+ const [reconciliation,setReconciliation]=useState({})
  const [learnCondition,setLearnCondition]=useState(''),[learnPeople,setLearnPeople]=useState(''),[learning,setLearning]=useState(false)
 
  useEffect(()=>{
@@ -120,6 +121,14 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
   return()=>{active=false;clearTimeout(timer)}
  },[specialty,year,month,area,criticality,condition,origin,refresh])
 
+ useEffect(()=>{
+  let active=true
+  getMonthReconciliation(year,month)
+   .then(r=>{if(active)setReconciliation(r||{})})
+   .catch(()=>{if(active)setReconciliation({})})
+  return()=>{active=false}
+ },[year,month,refresh,selected.length])
+
  const available=useMemo(()=>candidates.filter(x=>!selected.some(s=>s.pmp_id===x.pmp_id)),[candidates,selected])
  const areaOptions=useMemo(()=>[...new Set(candidates.map(x=>x.area_nombre).filter(Boolean))].sort(),[candidates])
 
@@ -134,6 +143,7 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
  })),[activityRows])
  const current=useMemo(()=>candidates.find(x=>String(x.pmp_id)===String(currentId)),[candidates,currentId])
 
+ const stats=reconciliation[specialty]||{}
  const target=Number(capacity?.target||0)
  const total=Number(capacity?.available||0)
  const standby=Number(capacity?.standby||0)
@@ -208,6 +218,28 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
   <div className="capacity-progress">
    <div className="progress-copy"><span>Uso de la meta semanal</span><b>{pct(used,target).toFixed(0)}%</b></div>
    <div className="progress-track"><i style={{width:pct(used,target)+'%'}}/></div>
+  </div>
+
+  <div className="reconciliation-card">
+   <div className="reconciliation-head">
+    <div><span className="section-kicker">CONCILIACIÓN CON MAESTRO</span><h3>De Excel a programación</h3><p>Las OT repetidas se consolidan; las OT distintas se conservan como PMP independientes.</p></div>
+    <span className="reconciliation-period">09 / 2026</span>
+   </div>
+   <div className="reconciliation-grid">
+    <div><span>PMP en maestro</span><b>{Number(stats.master_rows||0)}</b><small>Filas de {specialtyName}</small></div>
+    <div><span>OT únicas</span><b>{Number(stats.unique_ot||0)}</b><small>{Number(stats.repeated_extra_rows||0)} repetidas consolidadas</small></div>
+    <div><span>Pendientes</span><b>{Number(stats.pending_unique_ot||0)}</b><small>OT pendientes únicas</small></div>
+    <div><span>Finalizadas</span><b>{Number(stats.finalized_unique_ot||0)}</b><small>No entran a programación</small></div>
+    <div className="reconciliation-warn"><span>Inconsistencias</span><b>{Number(stats.pending_exceptions||0)}</b><small>Requieren corregir relación</small></div>
+    <div className="reconciliation-ok"><span>Disponibles ahora</span><b>{Number(stats.available_now??available.length)}</b><small>Para seguir programando</small></div>
+   </div>
+   <div className="reconciliation-equation">
+    <span>{Number(stats.master_rows||0)} maestro</span><i>→</i>
+    <span>{Number(stats.unique_ot||0)} OT únicas</span><i>→</i>
+    <span>{Number(stats.pending_unique_ot||0)} pendientes</span><i>→</i>
+    <span>{Number(stats.pending_exceptions||0)} inconsistencias</span><i>→</i>
+    <strong>{Number(stats.available_now??available.length)} disponibles</strong>
+   </div>
   </div>
 
   <div className="candidate-summary">
