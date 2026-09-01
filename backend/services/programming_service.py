@@ -48,7 +48,7 @@ def save_programming(*,date_from:date,date_to:date,specialty:str,pmp_ids:list[in
 def programming_history(limit=50):
     with get_engine().connect() as conn:
         rows=conn.execute(text("""SELECT ps.id programming_id,pv.id version_id,pv.numero_version,pv.tipo,pv.es_actual,pv.creado_en,per.fecha_desde,per.fecha_hasta,e.codigo especialidad,
-        ps.hh_disponibles,ps.hh_objetivo,ps.hh_standby,COALESCE(SUM(pi.hh_programadas),0)::float hh_programadas,COUNT(pi.id) items
+        ps.estado,ps.hh_disponibles,ps.hh_objetivo,ps.hh_standby,COALESCE(SUM(pi.hh_programadas),0)::float hh_programadas,COUNT(pi.id) items
         FROM mantenimiento.programacion_semanal ps JOIN mantenimiento.periodo_semanal per ON per.id=ps.periodo_semanal_id
         JOIN mantenimiento.especialidad e ON e.id=ps.especialidad_id JOIN mantenimiento.programacion_version pv ON pv.programacion_semanal_id=ps.id
         LEFT JOIN mantenimiento.programacion_item pi ON pi.programacion_version_id=pv.id GROUP BY ps.id,pv.id,per.id,e.id ORDER BY pv.creado_en DESC LIMIT :l"""),{"l":limit}).mappings().all()
@@ -57,7 +57,7 @@ def programming_history(limit=50):
 def programming_detail(version_id:int):
     with get_engine().connect() as conn:
         rows=conn.execute(text("""SELECT pi.id program_item_id,pi.pmp_id,om.numero_orden,a.codigo activo_codigo,a.descripcion activo_descripcion,a.area_nombre,a.linea_nombre,
-        pt.nombre plan_trabajo,pi.criticidad_snapshot criticidad,pi.condicion_snapshot condicion,pi.personas_usar,pi.tiempo_planeado_min,pi.hh_programadas,pi.origen,
+        p.titulo actividad,pt.nombre plan_trabajo,pi.criticidad_snapshot criticidad,pi.condicion_snapshot condicion,pi.personas_usar,pi.tiempo_planeado_min,pi.hh_programadas,pi.origen,
         COALESCE(om.estado,'PENDIENTE') estado FROM mantenimiento.programacion_item pi JOIN mantenimiento.pmp p ON p.id=pi.pmp_id
         JOIN mantenimiento.activo a ON a.id=p.activo_id JOIN mantenimiento.plan_trabajo pt ON pt.id=p.plan_trabajo_id
         LEFT JOIN mantenimiento.orden_mantenimiento om ON om.id=pi.orden_id WHERE pi.programacion_version_id=:v ORDER BY a.area_nombre,pt.nombre,a.codigo"""),{"v":version_id}).mappings().all()
