@@ -40,3 +40,18 @@ export async function resetTestingData(){
   body:JSON.stringify({confirmation:'REINICIAR PRUEBAS'})
  }))
 }
+
+
+export async function getPendingDefinitions(year,month,specialty=''){
+ const qs=new URLSearchParams({year,month})
+ if(specialty)qs.set('specialty',specialty)
+ return check(await fetch(`/api/definitions/pending?${qs}`))
+}
+
+export async function savePlanDefinition(planId,payload){
+ return check(await fetch(`/api/definitions/plans/${planId}`,{
+  method:'POST',
+  headers:{'Content-Type':'application/json'},
+  body:JSON.stringify(payload)
+ }))
+}
