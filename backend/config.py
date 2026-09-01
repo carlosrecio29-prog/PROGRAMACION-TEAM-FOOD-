@@ -8,6 +8,7 @@ DATABASE_URL = os.getenv("DATABASE_URL", "")
 APP_ENV = os.getenv("APP_ENV", "development")
 MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(8 * 1024 * 1024)))
 SUPABASE_REGION = os.getenv("SUPABASE_REGION", "us-west-2")
+SUPABASE_PROJECT_REF = os.getenv("SUPABASE_PROJECT_REF", "eovzsaufwqsqsjvapbdx")
 
 
 def normalize_database_url(value: str) -> str:
@@ -50,11 +51,15 @@ def normalize_database_url(value: str) -> str:
 
     host = hostpart.split(":", 1)[0]
     direct_match = re.fullmatch(r"db\.([a-z0-9]+)\.supabase\.co", host, re.I)
+    pooler_host = bool(host and host.endswith(".pooler.supabase.com"))
 
     if direct_match:
         project_ref = direct_match.group(1)
         username = f"postgres.{project_ref}"
         hostpart = f"aws-0-{SUPABASE_REGION}.pooler.supabase.com:5432"
+    elif pooler_host and username.lower() == "postgres":
+        # En Supavisor el usuario debe ser postgres.<project-ref>.
+        username = f"postgres.{SUPABASE_PROJECT_REF}"
 
     if username:
         username = quote(unquote(username), safe="")
