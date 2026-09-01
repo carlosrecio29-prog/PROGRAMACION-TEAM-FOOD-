@@ -133,7 +133,7 @@ export default function SavedProgramming(){
 
     <div className="saved-actions">
      <button className="analyze-close-btn" disabled={!selectedVersion||analyzing} onClick={analyzeClose}>
-      {analyzing?'Sincronizando TEAM FOOD...':'Analizar cierre'}
+      {analyzing?'Consultando maestro...':'Analizar cierre'}
      </button>
      <button className="export-excel" disabled={!selectedVersion||!!exporting} onClick={()=>exportFile('xlsx')}>
       {exporting==='xlsx'?'Generando...':'Exportar Excel'}
@@ -148,13 +148,10 @@ export default function SavedProgramming(){
     <div className="section-head">
      <div>
       <span className="section-kicker">ANÁLISIS DE CIERRE · SOLO LECTURA</span>
-      <h2>Resultado contra TEAM FOOD actualizado</h2>
-      <p>Se compararon únicamente las OT de esta programación contra los estados sincronizados desde TEAM FOOD. No necesitas subir ningún archivo.</p>
-      <small className="sync-stamp">Última sincronización de estados: <b>{fmtDateTime(closeAnalysis.last_status_sync)}</b></small>
-      {closeAnalysis.sheet_sync&&<small className="sync-stamp">
-       Fuente: <b>{closeAnalysis.sheet_sync.synced?'Google Sheets en vivo':'Base de datos'}</b>
-       {closeAnalysis.sheet_sync.synced?<> · {closeAnalysis.sheet_sync.matched} OT encontradas{closeAnalysis.sheet_sync.missing?<> · {closeAnalysis.sheet_sync.missing} no encontradas</>:null}</>:<> · conexión de Google pendiente</>}
-      </small>}
+      <h2>Resultado contra el último Excel maestro</h2>
+      <p>Se comparan las OT de esta programación contra los estados almacenados en Supabase durante la última carga del Excel maestro TEAM FOOD.</p>
+      <small className="sync-stamp">Última carga del maestro: <b>{fmtDateTime(closeAnalysis.last_master_upload)}</b>{closeAnalysis.master_file?<> · {closeAnalysis.master_file}</>:null}</small>
+      <small className="sync-stamp">Última actualización de estados en base: <b>{fmtDateTime(closeAnalysis.last_status_sync)}</b></small>
      </div>
      <span className="week-badge">{Number(closeAnalysis.compliance_pct||0).toFixed(1)}% cumplimiento</span>
     </div>
