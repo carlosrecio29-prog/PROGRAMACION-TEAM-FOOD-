@@ -3,9 +3,12 @@ from __future__ import annotations
 from datetime import date
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from sqlalchemy import text
 from pydantic import BaseModel, Field
 
 from backend.config import MAX_UPLOAD_BYTES
+from backend.database import get_engine
 from backend.services.import_service import (
     import_master_assets, import_master_classification, import_master_personnel_turns,
     import_master_plans, import_monthly_planning, import_order_states, import_technician_roster,
@@ -33,7 +36,22 @@ def run_import(fn,filename,content,**kwargs):
     except Exception as exc:raise HTTPException(500,f"Error procesando archivo: {exc}") from exc
 
 @app.get("/api/health")
-def health():return {"ok":True,"service":"programador-mantenimiento","version":"1.1.0"}
+def health():
+    try:
+        with get_engine().connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return {"ok":True,"service":"programador-mantenimiento","version":"1.2.0","database":"connected"}
+    except Exception as exc:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "ok":False,
+                "service":"programador-mantenimiento",
+                "version":"1.2.0",
+                "database":"disconnected",
+                "error_type":type(exc).__name__,
+            },
+        )
 
 @app.post("/api/imports/team-food")
 async def upload_team_food(file:UploadFile=File(...),year:int|None=Query(None),month:int|None=Query(None,ge=1,le=12)):
