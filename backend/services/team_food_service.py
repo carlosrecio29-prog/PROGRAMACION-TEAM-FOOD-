@@ -227,6 +227,31 @@ def import_team_food(filename:str,content:bytes,*,year:int|None=None,month:int|N
           VALUES(:number,:pmp,:state,:iid,now()) ON CONFLICT(numero_orden) DO UPDATE SET pmp_id=excluded.pmp_id,
           estado=excluded.estado,importacion_id_ultima=excluded.importacion_id_ultima,actualizado_en=now()""",order_rows)
 
+        # El maestro completo también funciona como fuente de estados para OT históricas.
+        # Así, un backlog de meses anteriores se actualiza al volver a cargar TEAM FOOD.
+        all_status_map={}
+        for r in orders:
+            number=(r.get("order_number") or "").strip()
+            state=(r.get("state") or "").strip().upper()
+            if not number or state not in {"PENDIENTE","FINALIZADA"}:
+                continue
+            previous=all_status_map.get(number)
+            if previous is None or state=="PENDIENTE" or previous["state"]!="PENDIENTE":
+                all_status_map[number]={"number":number,"state":state,"iid":iid}
+        all_status_rows=list(all_status_map.values())
+        matched_order_states=0
+        if all_status_rows:
+            existing=conn.execute(text("""SELECT numero_orden
+              FROM mantenimiento.orden_mantenimiento
+              WHERE numero_orden=ANY(:numbers)"""),
+              {"numbers":[r["number"] for r in all_status_rows]}).scalars().all()
+            existing_set=set(existing)
+            status_updates=[r for r in all_status_rows if r["number"] in existing_set]
+            matched_order_states=len(status_updates)
+            _execute_many(conn,"""UPDATE mantenimiento.orden_mantenimiento
+              SET estado=:state,importacion_id_ultima=:iid,actualizado_en=now()
+              WHERE numero_orden=:number""",status_updates)
+
         turn_rows=[{"code":"VA","hours":0.0,"absence":True},{"code":"IN","hours":0.0,"absence":True},{"code":"COMP","hours":0.0,"absence":True}]
         for r in parsed["turns"].rows:turn_rows.append({"code":r["code"],"hours":r["hours"],"absence":False})
         turn_rows=list({r["code"]:r for r in turn_rows}.values())
@@ -279,7 +304,8 @@ def import_team_food(filename:str,content:bytes,*,year:int|None=None,month:int|N
 
     return {"status":state,"year":source_year,"month":target_month,"rows_read":total,
       "processed":processed,"rejected":rejected,"assets":len(asset_rows),"plans":len(plan_rows),
-      "activities":len(activity_rows),"pmp":len(pmp_rows),"orders":len(order_rows),"technicians":len(technician_rows),"roster":len(roster_rows),
+      "activities":len(activity_rows),"pmp":len(pmp_rows),"orders":len(order_rows),
+      "order_status_updates":matched_order_states,"technicians":len(technician_rows),"roster":len(roster_rows),
       "incomplete_people":sum(1 for r in parsed["plans"].rows if r["persons"] is None),
       "incomplete_condition":sum(1 for r in parsed["plans"].rows if r["condition"]=="SIN CLASIFICAR"),
       "warnings":warnings[:20]}
