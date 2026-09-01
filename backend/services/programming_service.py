@@ -316,3 +316,75 @@ def export_programming_pdf(version_id:int):
     out.seek(0)
     filename=f"programacion_{header['especialidad']}_{header['fecha_desde']:%Y%m%d}_{header['fecha_hasta']:%Y%m%d}_v{header['numero_version']}.pdf"
     return out.getvalue(),filename
+
+
+TEST_MARKER="PRUEBA_WEB"
+
+def reset_test_data()->dict:
+    with get_engine().begin() as conn:
+        programming_ids=[int(x) for x in conn.execute(text(
+            "SELECT id FROM mantenimiento.programacion_semanal WHERE creado_por=:m"
+        ),{"m":TEST_MARKER}).scalars().all()]
+
+        version_ids=[]
+        if programming_ids:
+            version_ids=[int(x) for x in conn.execute(text(
+                "SELECT id FROM mantenimiento.programacion_version WHERE programacion_semanal_id=ANY(:ids)"
+            ),{"ids":programming_ids}).scalars().all()]
+
+        item_count=0
+        closure_count=0
+        if programming_ids:
+            closure_ids=[int(x) for x in conn.execute(text(
+                "SELECT id FROM mantenimiento.cierre_semanal WHERE programacion_semanal_id=ANY(:ids)"
+            ),{"ids":programming_ids}).scalars().all()]
+            if closure_ids:
+                conn.execute(text("DELETE FROM mantenimiento.cierre_item WHERE cierre_semanal_id=ANY(:ids)"),{"ids":closure_ids})
+                closure_count=conn.execute(text(
+                    "DELETE FROM mantenimiento.cierre_semanal WHERE id=ANY(:ids) RETURNING id"
+                ),{"ids":closure_ids}).rowcount or 0
+
+        if version_ids:
+            item_count=conn.execute(text(
+                "DELETE FROM mantenimiento.programacion_item WHERE programacion_version_id=ANY(:ids)"
+            ),{"ids":version_ids}).rowcount or 0
+            conn.execute(text(
+                "DELETE FROM mantenimiento.programacion_version WHERE id=ANY(:ids)"
+            ),{"ids":version_ids})
+
+        programming_count=0
+        if programming_ids:
+            programming_count=conn.execute(text(
+                "DELETE FROM mantenimiento.programacion_semanal WHERE id=ANY(:ids)"
+            ),{"ids":programming_ids}).rowcount or 0
+
+        conn.execute(text("""DELETE FROM mantenimiento.periodo_semanal ps
+          WHERE NOT EXISTS (
+            SELECT 1 FROM mantenimiento.programacion_semanal p
+            WHERE p.periodo_semanal_id=ps.id
+          )"""))
+
+        learned_rows=conn.execute(text("""UPDATE mantenimiento.clasificacion_plan cp
+          SET condicion=CASE
+                WHEN pt.tiempo_parada_min IS NULL THEN 'SIN CLASIFICAR'
+                WHEN pt.tiempo_parada_min>0 THEN 'EQUIPO DETENIDO'
+                ELSE 'OPERANDO'
+              END,
+              personas_usar=pt.personas_defecto,
+              observacion='Sincronizado desde TEAM FOOD',
+              actualizado_por=NULL,
+              fuente='MAESTRO',
+              actualizado_en=now()
+          FROM mantenimiento.plan_trabajo pt
+          WHERE cp.plan_trabajo_id=pt.id
+            AND cp.actualizado_por=:m
+          RETURNING cp.id"""),{"m":TEST_MARKER}).fetchall()
+
+    return {
+      "ok":True,
+      "programming_deleted":programming_count,
+      "versions_deleted":len(version_ids),
+      "items_deleted":item_count,
+      "closures_deleted":closure_count,
+      "learning_reset":len(learned_rows),
+    }
