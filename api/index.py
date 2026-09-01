@@ -180,9 +180,9 @@ def list_programming_history(limit:int=Query(50,ge=1,le=200)):return programming
 def get_programming_version(version_id:int):return programming_detail(version_id)
 
 @app.post("/api/programming/version/{version_id}/analyze-close")
-async def analyze_programming_close(version_id:int,file:UploadFile=File(...)):
+def analyze_programming_close(version_id:int):
     try:
-        return analyze_programming_closure(version_id=version_id,content=await read_upload(file))
+        return analyze_programming_closure_db(version_id=version_id)
     except ProgrammingError as exc:
         raise HTTPException(422,str(exc)) from exc
 
