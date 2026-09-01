@@ -1,5 +1,5 @@
-import {useEffect,useMemo,useRef,useState} from 'react'
-import {analyzeProgrammingClose,downloadProgrammingExport,getProgrammingHistory,getProgrammingVersion} from '../api'
+import {useEffect,useMemo,useState} from 'react'
+import {analyzeProgrammingCloseLive,downloadProgrammingExport,getProgrammingHistory,getProgrammingVersion} from '../api'
 
 const SPECS=['MEC','ELE','SER','MET']
 const NAMES={MEC:'Mecánica',ELE:'Eléctrica',SER:'Servicios',MET:'Metrología'}
@@ -21,7 +21,6 @@ export default function SavedProgramming(){
  const [exporting,setExporting]=useState('')
  const [analyzing,setAnalyzing]=useState(false)
  const [closeAnalysis,setCloseAnalysis]=useState(null)
- const closeFileRef=useRef(null)
 
  async function loadHistory(){
   try{
@@ -68,19 +67,18 @@ export default function SavedProgramming(){
   finally{setExporting('')}
  }
 
- async function analyzeClose(file){
-  if(!selectedVersion||!file)return
+ async function analyzeClose(){
+  if(!selectedVersion)return
   try{
    setAnalyzing(true)
    setMessage('')
-   const result=await analyzeProgrammingClose(selectedVersion,file)
+   const result=await analyzeProgrammingCloseLive(selectedVersion)
    setCloseAnalysis(result)
   }catch(e){
    setCloseAnalysis(null)
    setMessage(e.message)
   }finally{
    setAnalyzing(false)
-   if(closeFileRef.current)closeFileRef.current.value=''
   }
  }
 
@@ -129,14 +127,7 @@ export default function SavedProgramming(){
     </div>}
 
     <div className="saved-actions">
-     <input
-      ref={closeFileRef}
-      className="hidden-close-file"
-      type="file"
-      accept=".xlsx"
-      onChange={e=>analyzeClose(e.target.files?.[0])}
-     />
-     <button className="analyze-close-btn" disabled={!selectedVersion||analyzing} onClick={()=>closeFileRef.current?.click()}>
+     <button className="analyze-close-btn" disabled={!selectedVersion||analyzing} onClick={analyzeClose}>
       {analyzing?'Analizando TEAM FOOD...':'Analizar cierre'}
      </button>
      <button className="export-excel" disabled={!selectedVersion||!!exporting} onClick={()=>exportFile('xlsx')}>
@@ -153,7 +144,7 @@ export default function SavedProgramming(){
      <div>
       <span className="section-kicker">ANÁLISIS DE CIERRE · SOLO LECTURA</span>
       <h2>Resultado contra TEAM FOOD actualizado</h2>
-      <p>Se compararon únicamente las OT de esta programación. Este análisis todavía no modifica ni cierra la semana.</p>
+      <p>Se compararon únicamente las OT de esta programación contra los estados sincronizados desde TEAM FOOD. No necesitas subir ningún archivo.</p>
      </div>
      <span className="week-badge">{Number(closeAnalysis.compliance_pct||0).toFixed(1)}% cumplimiento</span>
     </div>
