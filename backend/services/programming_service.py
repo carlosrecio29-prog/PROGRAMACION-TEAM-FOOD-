@@ -181,6 +181,9 @@ def analyze_programming_closure_from_db(*,version_id:int)->dict:
         LEFT JOIN mantenimiento.orden_mantenimiento om ON om.id=pi.orden_id
         WHERE pi.programacion_version_id=:v
         ORDER BY a.area_nombre,pt.nombre,a.codigo"""),{"v":version_id}).mappings().all()
+        last_status_sync=conn.execute(text(
+          "SELECT MAX(actualizado_en) FROM mantenimiento.orden_mantenimiento"
+        )).scalar_one_or_none()
 
     if not rows:
         raise ProgrammingError("La programación no tiene actividades")
@@ -218,6 +221,7 @@ def analyze_programming_closure_from_db(*,version_id:int)->dict:
       "date_to":header["fecha_hasta"],
       "programming_status":header["estado"],
       "source":"TEAM FOOD sincronizado",
+      "last_status_sync":last_status_sync,
       "total_programmed":total,
       "finalized":finalized,
       "pending":pending,
