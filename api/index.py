@@ -18,7 +18,8 @@ from backend.services.team_food_service import import_team_food, learn_plan
 from backend.services.definition_service import (
     DefinitionError, define_plan, get_pending_definitions,
 )
-from backend.services.google_sheet_service import GoogleSheetSyncError, google_sheet_status, sync_programming_statuses_from_google_sheet\nfrom backend.services.programming_service import (
+from backend.services.google_sheet_service import GoogleSheetSyncError, google_sheet_status, sync_programming_statuses_from_google_sheet
+from backend.services.programming_service import (
     ProgrammingError, close_programming, programming_detail, programming_history, save_programming,
     export_programming_excel, export_programming_pdf, reset_test_data, analyze_programming_closure,
     analyze_programming_closure_from_db,
