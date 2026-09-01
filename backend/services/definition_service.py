@@ -81,7 +81,7 @@ def define_plan(
         raise DefinitionError("No se recibió ningún dato para definir")
 
     with get_engine().begin() as conn:
-        plan=conn.execute(text("""SELECT id,tiempo_ejecucion_min,tiempo_parada_min,personas_defecto
+        plan=conn.execute(text("""SELECT id,tiempo_ejecucion_min,personas_defecto
           FROM mantenimiento.plan_trabajo WHERE id=:id AND activo=true"""),{"id":plan_id}).mappings().one_or_none()
         if not plan:
             raise DefinitionError("Plan de trabajo no encontrado")
@@ -99,12 +99,7 @@ def define_plan(
                 fallback_condition=current["condicion"]
                 fallback_people=current["personas_usar"]
             else:
-                if plan["tiempo_parada_min"] is None:
-                    fallback_condition="SIN CLASIFICAR"
-                elif float(plan["tiempo_parada_min"])>0:
-                    fallback_condition="EQUIPO DETENIDO"
-                else:
-                    fallback_condition="OPERANDO"
+                fallback_condition="SIN CLASIFICAR"
                 fallback_people=plan["personas_defecto"]
 
             next_condition=condition or fallback_condition
