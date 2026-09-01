@@ -237,3 +237,6 @@ tbody tr:hover{background:#f9fbfd}
 .status-pill.status-error i{background:#d94b4b}
 .status-pill.status-checking{background:#fff8e8;border-color:#ead9b2;color:#84631e}
 .status-pill.status-checking i{background:#d5a135}
+
+.backend-error{margin:10px 0 0;padding:10px 12px;border:1px solid #efcaca;background:#fff3f3;color:#8f3434;border-radius:10px;font-size:10px;display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap}
+.backend-error b{white-space:nowrap}.backend-error span{font-family:Consolas,monospace;word-break:break-word}
