@@ -21,6 +21,7 @@ from backend.services.definition_service import (
 from backend.services.programming_service import (
     ProgrammingError, close_programming, programming_detail, programming_history, save_programming,
     export_programming_excel, export_programming_pdf, reset_test_data, analyze_programming_closure,
+    analyze_programming_closure_from_db,
 )
 
 app=FastAPI(title="Programador de Mantenimiento API",version="1.1.0")
@@ -182,6 +183,13 @@ def get_programming_version(version_id:int):return programming_detail(version_id
 async def analyze_programming_close(version_id:int,file:UploadFile=File(...)):
     try:
         return analyze_programming_closure(version_id=version_id,content=await read_upload(file))
+    except ProgrammingError as exc:
+        raise HTTPException(422,str(exc)) from exc
+
+@app.post("/api/programming/version/{version_id}/analyze-close-live")
+def analyze_programming_close_live(version_id:int):
+    try:
+        return analyze_programming_closure_from_db(version_id=version_id)
     except ProgrammingError as exc:
         raise HTTPException(422,str(exc)) from exc
 
