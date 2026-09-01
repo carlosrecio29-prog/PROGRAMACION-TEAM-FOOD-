@@ -93,6 +93,9 @@ function SearchableSelect({label,value,options,onChange,placeholder,disabled=fal
 
 export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,year,month}){
  const [candidates,setCandidates]=useState([])
+ const [stoppedCandidates,setStoppedCandidates]=useState([])
+ const [stoppedSearch,setStoppedSearch]=useState('')
+ const [stoppedLoading,setStoppedLoading]=useState(false)
  const [selected,setSelected]=useState([])
  const [area,setArea]=useState(''),[criticality,setCriticality]=useState(''),[condition,setCondition]=useState('')
  const [origin,setOrigin]=useState('MES')
@@ -125,6 +128,26 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
 
  useEffect(()=>{
   let active=true
+  const timer=setTimeout(async()=>{
+   try{
+    setStoppedLoading(true)
+    const rows=await getCandidates({
+      specialty,year,month,
+      area:area||undefined,
+      criticality:criticality||undefined,
+      condition:'EQUIPO DETENIDO',
+      origin,
+      limit:2000
+    })
+    if(active)setStoppedCandidates(rows)
+   }catch(e){if(active)setMessage(e.message)}
+   finally{if(active)setStoppedLoading(false)}
+  },120)
+  return()=>{active=false;clearTimeout(timer)}
+ },[specialty,year,month,area,criticality,origin,refresh])
+
+ useEffect(()=>{
+  let active=true
   getMonthReconciliation(year,month)
    .then(r=>{if(active)setReconciliation(r||{})})
    .catch(()=>{if(active)setReconciliation({})})
@@ -143,7 +166,19 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
    label:`${x.activo_codigo} — ${x.activo_descripcion} — ${x.numero_orden||'SIN OT'}`,
    search:`${x.activo_codigo} ${x.activo_descripcion} ${x.numero_orden||''} ${x.area_nombre||''}`
  })),[activityRows])
- const current=useMemo(()=>candidates.find(x=>String(x.pmp_id)===String(currentId)),[candidates,currentId])
+ const stoppedAvailable=useMemo(()=>{
+  const base=stoppedCandidates.filter(x=>!selected.some(s=>s.pmp_id===x.pmp_id))
+  const q=stoppedSearch.trim().toLowerCase()
+  if(!q)return base
+  return base.filter(x=>[
+    x.numero_orden,x.area_nombre,x.activo_codigo,x.activo_descripcion,
+    x.actividad,x.plan_trabajo,x.criticidad
+  ].some(v=>String(v||'').toLowerCase().includes(q)))
+ },[stoppedCandidates,selected,stoppedSearch])
+ const current=useMemo(
+  ()=>[...candidates,...stoppedCandidates].find(x=>String(x.pmp_id)===String(currentId)),
+  [candidates,stoppedCandidates,currentId]
+ )
 
  const stats=reconciliation[specialty]||{}
  const target=Number(capacity?.target||0)
@@ -165,7 +200,7 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
  }
  function chooseCurrent(value){
   setCurrentId(value)
-  const item=candidates.find(x=>String(x.pmp_id)===String(value))
+  const item=[...candidates,...stoppedCandidates].find(x=>String(x.pmp_id)===String(value))
   if(item){
    setLearnCondition(item.condicion==='SIN CLASIFICAR'?'':item.condicion)
    setLearnPeople(item.personas_usar??'')
@@ -313,6 +348,57 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
    <span><b>{planOptions.length}</b> planes</span>
    <span><b>{activityOptions.length}</b> actividades del plan</span>
    <span><b>{equipmentOptions.length}</b> equipos / OT</span>
+  </div>
+
+  <div className="stopped-section">
+   <div className="stopped-head">
+    <div>
+     <span className="stopped-kicker">ACCESO RÁPIDO</span>
+     <h3>PMP con equipo detenido</h3>
+     <p>Visualiza directamente los equipos detenidos de {specialtyName} y agrégalos a la semana.</p>
+    </div>
+    <div className="stopped-tools">
+     <input
+      value={stoppedSearch}
+      onChange={e=>setStoppedSearch(e.target.value)}
+      placeholder="Buscar OT, equipo, actividad o plan..."
+     />
+     <span>{stoppedAvailable.length} PMP</span>
+    </div>
+   </div>
+
+   <div className="table-wrap stopped-table">
+    <table>
+     <thead><tr><th>OT</th><th>Área</th><th>Equipo</th><th>Actividad</th><th>Plan</th><th>Crit.</th><th>Personas</th><th>H-H</th><th>Datos</th><th></th></tr></thead>
+     <tbody>
+      {stoppedLoading&&<tr><td colSpan="10" className="empty">Cargando equipos detenidos...</td></tr>}
+      {!stoppedLoading&&!stoppedAvailable.length&&<tr><td colSpan="10" className="empty">No hay PMP con equipo detenido para estos filtros.</td></tr>}
+      {!stoppedLoading&&stoppedAvailable.slice(0,300).map(x=><tr key={x.pmp_id}>
+       <td><b>{x.numero_orden||'—'}</b></td>
+       <td>{x.area_nombre||'—'}</td>
+       <td><span className="asset-code">{x.activo_codigo}</span><small className="asset-name">{x.activo_descripcion}</small></td>
+       <td>{x.actividad||'—'}</td>
+       <td>{x.plan_trabajo}</td>
+       <td><span className={'criticality crit-'+(x.criticidad||'x')}>{x.criticidad||'—'}</span></td>
+       <td>{x.personas_usar??'—'}</td>
+       <td><b>{hh(x.hh_pmp)}</b></td>
+       <td>{x.datos_completos?<span className="data-ready">Listo</span>:<span className="data-missing">Falta {(x.datos_faltantes||[]).join(' + ')}</span>}</td>
+       <td><button
+        className={x.datos_completos?'add-btn':'complete-btn'}
+        onClick={()=>{
+         if(x.datos_completos)addItem(x)
+         else{
+          chooseCurrent(String(x.pmp_id))
+          setMessage('Este PMP está detenido pero necesita completar datos antes de programarlo.')
+         }
+        }}>
+        {x.datos_completos?'Agregar':'Completar'}
+       </button></td>
+      </tr>)}
+     </tbody>
+    </table>
+   </div>
+   {stoppedAvailable.length>300&&<small className="stopped-limit">Mostrando 300 de {stoppedAvailable.length}. Usa el buscador para reducir la lista.</small>}
   </div>
 
   {current&&<div className="selected-equipment-card">
