@@ -296,3 +296,11 @@ tbody tr:hover{background:#f9fbfd}
 .export-pdf{background:#fff2f2;border-color:#edcccc;color:#a63f3f;font-weight:800}
 .export-pdf:hover{background:#fde7e7;border-color:#dda8a8}
 .table-actions button:disabled{opacity:.6;cursor:not-allowed}
+
+.test-reset-box{margin-top:auto;padding:12px 6px;border-top:1px solid #ffffff18;border-bottom:1px solid #ffffff18}
+.test-reset-box>span{display:block;color:#f0c4c4;font-size:9px;font-weight:900;letter-spacing:.8px;margin-bottom:7px}
+.test-reset-box small{display:block;color:#91a6bb;font-size:8px;line-height:1.35;margin-top:6px}
+.reset-tests-btn{width:100%;background:#3a1f29;border:1px solid #7b4050;color:#ffd9df;font-size:10px;font-weight:900;padding:8px 10px}
+.reset-tests-btn:hover{background:#4c2633;border-color:#a65c70}
+.reset-tests-btn:disabled{opacity:.55;cursor:not-allowed}
+.sidebar-foot{margin-top:10px}
