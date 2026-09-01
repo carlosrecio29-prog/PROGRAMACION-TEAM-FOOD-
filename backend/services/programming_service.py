@@ -1,6 +1,7 @@
 from __future__ import annotations
 from datetime import date
 from io import BytesIO
+from html import escape
 
 from sqlalchemy import text
 from openpyxl import Workbook
@@ -265,27 +266,30 @@ def export_programming_pdf(version_id:int):
     ]))
     story.extend([summary_table,Spacer(1,5*mm)])
 
+    def pp(value,style=cell_style):
+        return Paragraph(escape(str(value or "")),style)
+
     table_headers=["OT","Área","Línea","Equipo","Descripción","Actividad","Plan","Crit.","Condición","Pers.","Min","H-H","Origen","Estado"]
-    data=[[Paragraph(h,small_bold) for h in table_headers]]
+    data=[[pp(h,small_bold) for h in table_headers]]
     for row in rows:
         data.append([
-          Paragraph(str(row.get("numero_orden") or ""),cell_center),
-          Paragraph(str(row.get("area_nombre") or ""),cell_style),
-          Paragraph(str(row.get("linea_nombre") or ""),cell_style),
-          Paragraph(str(row.get("activo_codigo") or ""),cell_style),
-          Paragraph(str(row.get("activo_descripcion") or ""),cell_style),
-          Paragraph(str(row.get("actividad") or ""),cell_style),
-          Paragraph(str(row.get("plan_trabajo") or ""),cell_style),
-          Paragraph(str(row.get("criticidad") or ""),cell_center),
-          Paragraph(str(row.get("condicion") or ""),cell_style),
-          Paragraph("" if row.get("personas_usar") is None else f"{float(row['personas_usar']):.0f}",cell_center),
-          Paragraph("" if row.get("tiempo_planeado_min") is None else f"{float(row['tiempo_planeado_min']):.0f}",cell_center),
-          Paragraph("" if row.get("hh_programadas") is None else f"{float(row['hh_programadas']):.1f}",cell_center),
-          Paragraph(str(row.get("origen") or ""),cell_center),
-          Paragraph(str(row.get("estado") or ""),cell_center),
+          pp(row.get("numero_orden"),cell_center),
+          pp(row.get("area_nombre")),
+          pp(row.get("linea_nombre")),
+          pp(row.get("activo_codigo")),
+          pp(row.get("activo_descripcion")),
+          pp(row.get("actividad")),
+          pp(row.get("plan_trabajo")),
+          pp(row.get("criticidad"),cell_center),
+          pp(row.get("condicion")),
+          pp("" if row.get("personas_usar") is None else f"{float(row['personas_usar']):.0f}",cell_center),
+          pp("" if row.get("tiempo_planeado_min") is None else f"{float(row['tiempo_planeado_min']):.0f}",cell_center),
+          pp("" if row.get("hh_programadas") is None else f"{float(row['hh_programadas']):.1f}",cell_center),
+          pp(row.get("origen"),cell_center),
+          pp(row.get("estado"),cell_center),
         ])
 
-    widths=[18,22,20,25,36,38,38,10,24,10,11,11,13,16]
+    widths=[17,20,18,23,32,34,34,9,22,9,10,10,12,15]
     detail=Table(data,colWidths=[w*mm for w in widths],repeatRows=1)
     style=[
       ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#2F75B5")),
