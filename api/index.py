@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy import text
 from pydantic import BaseModel, Field
 
@@ -17,6 +17,7 @@ from backend.services.query_service import get_candidates, get_capacity, get_imp
 from backend.services.team_food_service import import_team_food, learn_plan
 from backend.services.programming_service import (
     ProgrammingError, close_programming, programming_detail, programming_history, save_programming,
+    export_programming_excel, export_programming_pdf,
 )
 
 app=FastAPI(title="Programador de Mantenimiento API",version="1.1.0")
@@ -150,6 +151,30 @@ def list_programming_history(limit:int=Query(50,ge=1,le=200)):return programming
 
 @app.get("/api/programming/version/{version_id}")
 def get_programming_version(version_id:int):return programming_detail(version_id)
+
+@app.get("/api/programming/version/{version_id}/export.xlsx")
+def export_programming_xlsx(version_id:int):
+    try:
+        content,filename=export_programming_excel(version_id)
+        return StreamingResponse(
+            iter([content]),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition":f'attachment; filename="{filename}"'}
+        )
+    except ProgrammingError as exc:
+        raise HTTPException(404,str(exc)) from exc
+
+@app.get("/api/programming/version/{version_id}/export.pdf")
+def export_programming_pdf_file(version_id:int):
+    try:
+        content,filename=export_programming_pdf(version_id)
+        return StreamingResponse(
+            iter([content]),
+            media_type="application/pdf",
+            headers={"Content-Disposition":f'attachment; filename="{filename}"'}
+        )
+    except ProgrammingError as exc:
+        raise HTTPException(404,str(exc)) from exc
 
 @app.post("/api/programming/close")
 def close_program(body:ProgrammingClose):
