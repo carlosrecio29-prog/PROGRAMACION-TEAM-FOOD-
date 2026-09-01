@@ -15,6 +15,9 @@ from backend.services.import_service import (
 )
 from backend.services.query_service import get_candidates, get_capacity, get_import_history, get_master_status, get_month_reconciliation
 from backend.services.team_food_service import import_team_food, learn_plan
+from backend.services.definition_service import (
+    DefinitionError, define_plan, get_pending_definitions,
+)
 from backend.services.programming_service import (
     ProgrammingError, close_programming, programming_detail, programming_history, save_programming,
     export_programming_excel, export_programming_pdf, reset_test_data,
@@ -109,6 +112,29 @@ def month_reconciliation(year:int,month:int=Query(...,ge=1,le=12)):
 
 @app.get("/api/imports")
 def imports(limit:int=Query(30,ge=1,le=200)):return get_import_history(limit)
+
+class PlanDefinition(BaseModel):
+    execution_minutes:float|None=Field(default=None,gt=0)
+    people:float|None=Field(default=None,gt=0)
+    condition:str|None=None
+    updated_by:str="PRUEBA_WEB"
+
+@app.get("/api/definitions/pending")
+def pending_definitions(year:int,month:int=Query(...,ge=1,le=12),specialty:str|None=None):
+    return get_pending_definitions(year=year,month=month,specialty=specialty)
+
+@app.post("/api/definitions/plans/{plan_id}")
+def save_plan_definition(plan_id:int,body:PlanDefinition):
+    try:
+        return define_plan(
+            plan_id=plan_id,
+            execution_minutes=body.execution_minutes,
+            people=body.people,
+            condition=body.condition,
+            updated_by=body.updated_by,
+        )
+    except DefinitionError as exc:
+        raise HTTPException(422,str(exc)) from exc
 
 class PlanLearning(BaseModel):
     condition:str|None=None
