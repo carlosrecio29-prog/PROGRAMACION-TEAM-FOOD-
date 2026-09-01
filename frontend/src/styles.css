@@ -232,3 +232,8 @@ tbody tr:hover{background:#f9fbfd}
   .week-presets{grid-template-columns:1fr}
   .table-actions{width:100%}.table-actions button{flex:1}
 }
+
+.status-pill.status-error{background:#fff1f1;border-color:#efcaca;color:#a13c3c}
+.status-pill.status-error i{background:#d94b4b}
+.status-pill.status-checking{background:#fff8e8;border-color:#ead9b2;color:#84631e}
+.status-pill.status-checking i{background:#d5a135}
