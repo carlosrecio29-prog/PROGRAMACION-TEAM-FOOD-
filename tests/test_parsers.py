@@ -44,3 +44,22 @@ def test_team_food_preserves_unknown_plan_data():
     assert p["orders"].metadata["program_year"]==2026
     assert [r["specialty"] for r in p["technicians"].rows]==["MEC","SER"]
     assert p["technicians"].rows[1]["name_normalized"]=="MIGUEL OSORIO"
+
+
+def test_team_food_deduplicates_only_repeated_ot():
+    wb=Workbook()
+    ws=wb.active;ws.title="ORDENES MENSUALES"
+    ws.append(["MES","ÁREA","# DE ORDEN","ESPECIALIDAD","CÓDIGO","DESCRIPCIÓN","OBSERVACIÓN","ESTADO","FECHA PROG","CRITICIDAD","AÑO","TIEMPO"])
+    ws.append(["SEPTIEMBRE","A","OT-1","MEC","EQ-1","Equipo 1","RUTINA","PENDIENTE","2026-09-01","A",2026,18])
+    ws.append(["SEPTIEMBRE","A","OT-1","MEC","EQ-1","Equipo 1","RUTINA","PENDIENTE","2026-09-01","A",2026,29])
+    ws.append(["SEPTIEMBRE","A","OT-2","MEC","EQ-1","Equipo 1","RUTINA","PENDIENTE","2026-09-01","A",2026,18])
+    b=BytesIO();wb.save(b)
+    parsed=parse_team_food(b.getvalue())
+    orders=parsed["orders"].rows
+    stats=parsed["orders"].metadata["monthly_summary"]["9"]["MEC"]
+    assert len(orders)==2
+    assert {r["order_number"] for r in orders}=={"OT-1","OT-2"}
+    assert stats["master_rows"]==3
+    assert stats["unique_ot"]==2
+    assert stats["repeated_extra_rows"]==1
+    assert stats["pending_unique_ot"]==2
