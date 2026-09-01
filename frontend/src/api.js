@@ -31,3 +31,12 @@ export async function downloadProgrammingExport(versionId,format){
  document.body.appendChild(a);a.click();a.remove()
  URL.revokeObjectURL(url)
 }
+
+
+export async function resetTestingData(){
+ return check(await fetch('/api/testing/reset',{
+  method:'POST',
+  headers:{'Content-Type':'application/json'},
+  body:JSON.stringify({confirmation:'REINICIAR PRUEBAS'})
+ }))
+}
