@@ -63,6 +63,75 @@ def programming_detail(version_id:int):
         LEFT JOIN mantenimiento.orden_mantenimiento om ON om.id=pi.orden_id WHERE pi.programacion_version_id=:v ORDER BY a.area_nombre,pt.nombre,a.codigo"""),{"v":version_id}).mappings().all()
     return [dict(r) for r in rows]
 
+def analyze_programming_closure_db(*,version_id:int)->dict:
+    with get_engine().connect() as conn:
+        header=conn.execute(text("""SELECT
+          ps.id programming_id,pv.id version_id,pv.numero_version,
+          per.fecha_desde,per.fecha_hasta,e.codigo especialidad,ps.estado,
+          (SELECT MAX(finalizado_en) FROM mantenimiento.sincronizacion_fuente_maestra
+           WHERE fuente='TEAM_FOOD' AND estado IN ('COMPLETADA','CON_ADVERTENCIAS')) AS master_synced_at
+        FROM mantenimiento.programacion_version pv
+        JOIN mantenimiento.programacion_semanal ps ON ps.id=pv.programacion_semanal_id
+        JOIN mantenimiento.periodo_semanal per ON per.id=ps.periodo_semanal_id
+        JOIN mantenimiento.especialidad e ON e.id=ps.especialidad_id
+        WHERE pv.id=:v"""),{"v":version_id}).mappings().one_or_none()
+        if not header:
+            raise ProgrammingError("Programación no encontrada")
+
+        rows=conn.execute(text("""SELECT
+          pi.id program_item_id,pi.hh_programadas,
+          om.numero_orden,COALESCE(om.estado,'PENDIENTE') estado_maestro,
+          a.codigo activo_codigo,a.descripcion activo_descripcion,
+          a.area_nombre,p.titulo actividad,pt.nombre plan_trabajo
+        FROM mantenimiento.programacion_item pi
+        JOIN mantenimiento.pmp p ON p.id=pi.pmp_id
+        JOIN mantenimiento.activo a ON a.id=p.activo_id
+        JOIN mantenimiento.plan_trabajo pt ON pt.id=p.plan_trabajo_id
+        LEFT JOIN mantenimiento.orden_mantenimiento om ON om.id=pi.orden_id
+        WHERE pi.programacion_version_id=:v
+        ORDER BY a.area_nombre,pt.nombre,a.codigo"""),{"v":version_id}).mappings().all()
+
+    if not rows:
+        raise ProgrammingError("La programación no tiene actividades")
+
+    detail=[]
+    finalized=pending=review=0
+    hh_programmed=hh_finalized=0.0
+    for row in rows:
+        item=dict(row)
+        hh=float(item.get("hh_programadas") or 0)
+        hh_programmed+=hh
+        state=(item.get("estado_maestro") or "").strip().upper()
+        if state=="FINALIZADA":
+            result="FINALIZADA"; finalized+=1; hh_finalized+=hh
+        elif state=="PENDIENTE":
+            result="PENDIENTE"; pending+=1
+        else:
+            result="REVISAR"; review+=1
+        item["resultado_cierre"]=result
+        detail.append(item)
+
+    total=len(detail)
+    return {
+      "programming_id":int(header["programming_id"]),
+      "version_id":int(header["version_id"]),
+      "version":int(header["numero_version"]),
+      "specialty":header["especialidad"],
+      "date_from":header["fecha_desde"],
+      "date_to":header["fecha_hasta"],
+      "programming_status":header["estado"],
+      "master_synced_at":header["master_synced_at"],
+      "total_programmed":total,
+      "finalized":finalized,
+      "pending":pending,
+      "review":review,
+      "compliance_pct":(finalized/total*100) if total else 0.0,
+      "hh_programmed":hh_programmed,
+      "hh_finalized":hh_finalized,
+      "hh_pending":max(0.0,hh_programmed-hh_finalized),
+      "items":detail,
+    }
+
 def analyze_programming_closure(*,version_id:int,content:bytes)->dict:
     from backend.parsers.team_food import parse_team_food
 
