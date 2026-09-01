@@ -58,12 +58,9 @@ export async function savePlanDefinition(planId,payload){
 }
 
 
-export async function analyzeProgrammingClose(versionId,file){
- const form=new FormData()
- form.append('file',file)
+export async function analyzeProgrammingClose(versionId){
  return check(await fetch(`/api/programming/version/${versionId}/analyze-close`,{
-  method:'POST',
-  body:form
+  method:'POST'
  }))
 }
 
