@@ -17,7 +17,7 @@ from backend.services.query_service import get_candidates, get_capacity, get_imp
 from backend.services.team_food_service import import_team_food, learn_plan
 from backend.services.programming_service import (
     ProgrammingError, close_programming, programming_detail, programming_history, save_programming,
-    export_programming_excel, export_programming_pdf,
+    export_programming_excel, export_programming_pdf, reset_test_data,
 )
 
 app=FastAPI(title="Programador de Mantenimiento API",version="1.1.0")
@@ -182,3 +182,13 @@ def close_program(body:ProgrammingClose):
     try:return close_programming(programming_id=body.programming_id,version_id=body.version_id,
       reasons=reason_map,closed_by=body.closed_by)
     except ProgrammingError as exc:raise HTTPException(422,str(exc)) from exc
+
+
+class TestResetRequest(BaseModel):
+    confirmation:str
+
+@app.post("/api/testing/reset")
+def reset_testing_data(body:TestResetRequest):
+    if body.confirmation!="REINICIAR PRUEBAS":
+        raise HTTPException(400,"Confirmación inválida")
+    return reset_test_data()
