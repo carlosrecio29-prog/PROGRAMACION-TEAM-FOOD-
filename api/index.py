@@ -18,7 +18,6 @@ from backend.services.team_food_service import import_team_food, learn_plan
 from backend.services.definition_service import (
     DefinitionError, define_plan, get_pending_definitions,
 )
-from backend.services.google_sheet_service import GoogleSheetSyncError, google_sheet_status, sync_programming_statuses_from_google_sheet
 from backend.services.programming_service import (
     ProgrammingError, close_programming, programming_detail, programming_history, save_programming,
     export_programming_excel, export_programming_pdf, reset_test_data, analyze_programming_closure,
@@ -187,21 +186,10 @@ async def analyze_programming_close(version_id:int,file:UploadFile=File(...)):
     except ProgrammingError as exc:
         raise HTTPException(422,str(exc)) from exc
 
-@app.get("/api/team-food/google-sheet-status")
-def team_food_google_sheet_status():
-    return google_sheet_status()
-
 @app.post("/api/programming/version/{version_id}/analyze-close-live")
 def analyze_programming_close_live(version_id:int):
     try:
-        sheet_sync=sync_programming_statuses_from_google_sheet(version_id=version_id)
-        result=analyze_programming_closure_from_db(version_id=version_id)
-        result["sheet_sync"]=sheet_sync
-        if sheet_sync.get("synced"):
-            result["source"]="Google Sheets · TEAM FOOD"
-        return result
-    except GoogleSheetSyncError as exc:
-        raise HTTPException(502,str(exc)) from exc
+        return analyze_programming_closure_from_db(version_id=version_id)
     except ProgrammingError as exc:
         raise HTTPException(422,str(exc)) from exc
 
