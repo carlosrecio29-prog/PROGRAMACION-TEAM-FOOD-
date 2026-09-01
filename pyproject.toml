@@ -1,0 +1,15 @@
+[project]
+name = "programacion-team-food"
+version = "0.1.0"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+  "fastapi>=0.117,<1",
+  "python-multipart>=0.0.20,<1",
+  "openpyxl>=3.1.5,<4",
+  "SQLAlchemy>=2.0.43,<3",
+  "psycopg[binary]>=3.2.9,<4"
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
