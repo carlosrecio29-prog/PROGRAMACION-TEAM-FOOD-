@@ -1,0 +1,6 @@
+import {useState} from 'react'
+import {uploadFile} from '../api'
+const ITEMS=[['Activos','/api/imports/masters/assets'],['Planes de trabajo','/api/imports/masters/plans'],['Clasificación de planes','/api/imports/masters/classification'],['Personal y turnos','/api/imports/masters/personnel-turns']]
+export default function MasterImportPanel(){const [states,setStates]=useState({});async function run(label,endpoint,file){if(!file)return;setStates(s=>({...s,[label]:'Procesando...'}));try{const r=await uploadFile(endpoint,file);setStates(s=>({...s,[label]:`OK · ${r.rows_read} leídas · ${r.inserted} nuevas · ${r.updated} actualizadas · ${r.rejected} rechazadas`}))}catch(e){setStates(s=>({...s,[label]:`Error: ${e.message}`}))}}
+ return <details className="masters-box"><summary>Configuración inicial / actualizar maestros</summary><p>Se usan cuando cambia un activo, plan, técnico o turno.</p><div className="uploads">{ITEMS.map(([l,e])=><MasterBox key={l} label={l} status={states[l]} onRun={f=>run(l,e,f)}/>)}</div></details>}
+function MasterBox({label,status,onRun}){const [file,setFile]=useState(null);return <div className="upload-card"><strong>{label}</strong><input type="file" accept=".xlsx" onChange={e=>setFile(e.target.files?.[0]||null)}/><button onClick={()=>onRun(file)}>Actualizar maestro</button><small>{status||'Sin cargar'}</small></div>}
