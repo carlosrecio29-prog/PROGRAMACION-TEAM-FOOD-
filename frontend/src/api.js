@@ -10,3 +10,5 @@ export async function getProgrammingVersion(versionId){return check(await fetch(
 export async function closeProgramming(payload){return check(await fetch('/api/programming/close',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}))}
 
 export async function getHealth(){return check(await fetch('/api/health'))}
+
+export async function getMonthReconciliation(year,month){return check(await fetch(`/api/month-reconciliation?${new URLSearchParams({year,month})}`))}
