@@ -180,7 +180,8 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
    setLearning(true)
    await learnPlan(current.plan_trabajo_id,{
     condition:learnCondition||current.condicion,
-    people:learnPeople?Number(learnPeople):null
+    people:learnPeople?Number(learnPeople):null,
+    updated_by:'PRUEBA_WEB'
    })
    setMessage('Dato aprendido. Se reutilizará cuando este plan vuelva a aparecer.')
    setRefresh(x=>x+1)
@@ -201,7 +202,8 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
   if(!selected.length)return setMessage('Agrega al menos una actividad.')
   try{
    const r=await saveProgramming({
-    date_from:week.from,date_to:week.to,specialty,pmp_ids:selected.map(x=>x.pmp_id)
+    date_from:week.from,date_to:week.to,specialty,pmp_ids:selected.map(x=>x.pmp_id),
+    created_by:'PRUEBA_WEB'
    })
    setLastSaved(r)
    setMessage(`Programación guardada · ${Number(r.hh_programmed).toFixed(1)} H-H · versión ${r.version}. Ya puedes exportarla en Excel o PDF.`)
