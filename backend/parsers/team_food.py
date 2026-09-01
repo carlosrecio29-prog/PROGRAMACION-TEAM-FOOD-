@@ -10,7 +10,7 @@ from backend.parsers.common import (
 )
 
 MONTHS={"ENERO":1,"FEBRERO":2,"MARZO":3,"ABRIL":4,"MAYO":5,"JUNIO":6,"JULIO":7,"AGOSTO":8,"SEPTIEMBRE":9,"SETIEMBRE":9,"OCTUBRE":10,"NOVIEMBRE":11,"DICIEMBRE":12}
-SPECIALTIES={"MEC":"MEC","MECANICA":"MEC","MECANICO":"MEC","ELE":"ELE","ELECTRICA":"ELE","ELECTRICO":"ELE","MET":"MET","METROLOGIA":"MET","SER":"SER","SERVICIO":"SER","SERVICIOS":"SER"}
+SPECIALTIES={"MEC":"MEC","MECANICA":"MEC","MECANICO":"MEC","ELE":"ELE","ELECTRICA":"ELE","ELECTRICO":"ELE","MET":"MET","METROLOGIA":"MET","SER":"SER","SERVICIO":"SER","SERVICIOS":"SER","REFRIGERACION":"SER","REFRI GERACION":"SER"}
 
 def normalize_specialty(v): return SPECIALTIES.get(normalize_text(v),"")
 def optional_float(v):
@@ -43,7 +43,7 @@ def _duration_hours(text_value):
 
 def parse_team_food(content:bytes)->dict[str,ParsedWorkbook]:
     wb=workbook_from_bytes(content)
-    out={k:ParsedWorkbook() for k in ("assets","plans","planning","orders","turns","roster")}
+    out={k:ParsedWorkbook() for k in ("assets","plans","planning","orders","turns","technicians","roster")}
 
     ws=_sheet(wb,"EQUIPOS PLANTA BARRANQUILLA")
     if ws:
@@ -146,6 +146,29 @@ def parse_team_food(content:bytes)->dict[str,ParsedWorkbook]:
             hours=_duration_hours(text_value)
             if not m or hours is None:continue
             out["turns"].rows.append({"excel_row":n,"code":_turn_code(m.group(1)),"raw_code":m.group(1),"hours":hours,"description":text_value})
+
+    ws=_sheet(wb,"ESPECIALIDAD DE CADA TECNICO")
+    if ws:
+        m=header_mapping(ws,1); out["technicians"].metadata["sheet"]=ws.title
+        seen=set()
+        for n,row in enumerate(ws.iter_rows(min_row=2,values_only=True),start=2):
+            name=str(cell_by_header(row,m,"NOMBRE","Nombre") or "").strip()
+            raw_specialty=cell_by_header(row,m,"Especialiidad","Especialidad")
+            if not name:continue
+            specialty=normalize_specialty(raw_specialty)
+            if not specialty:
+                out["technicians"].warnings.append(
+                    f"Fila {n} de ESPECIALIDAD DE CADA TECNICO sin especialidad reconocida: {raw_specialty}"
+                )
+                continue
+            normalized=normalize_text(name)
+            if normalized in seen:continue
+            seen.add(normalized)
+            out["technicians"].rows.append({
+                "excel_row":n,"name":name,"name_normalized":normalized,
+                "specialty":specialty,"specialty_raw":normalize_text(raw_specialty)
+            })
+    else: out["technicians"].warnings.append("No se encontró ESPECIALIDAD DE CADA TECNICO")
 
     ws=_sheet(wb,"PROGRAMACION DE TECNICOS")
     if ws:
