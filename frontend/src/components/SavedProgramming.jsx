@@ -10,6 +10,11 @@ function fmtDate(v){
  return `${d}/${m}/${y}`
 }
 function hh(v){return Number(v||0).toFixed(1)}
+function fmtDateTime(v){
+ if(!v)return '—'
+ const d=new Date(v)
+ return Number.isNaN(d.getTime())?'—':d.toLocaleString('es-CO',{dateStyle:'short',timeStyle:'short'})
+}
 
 export default function SavedProgramming(){
  const [history,setHistory]=useState([])
@@ -145,6 +150,7 @@ export default function SavedProgramming(){
       <span className="section-kicker">ANÁLISIS DE CIERRE · SOLO LECTURA</span>
       <h2>Resultado contra TEAM FOOD actualizado</h2>
       <p>Se compararon únicamente las OT de esta programación contra los estados sincronizados desde TEAM FOOD. No necesitas subir ningún archivo.</p>
+      <small className="sync-stamp">Última sincronización de estados: <b>{fmtDateTime(closeAnalysis.last_status_sync)}</b></small>
      </div>
      <span className="week-badge">{Number(closeAnalysis.compliance_pct||0).toFixed(1)}% cumplimiento</span>
     </div>
