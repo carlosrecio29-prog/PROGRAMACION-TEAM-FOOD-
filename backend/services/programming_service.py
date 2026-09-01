@@ -4,16 +4,6 @@ from io import BytesIO
 from html import escape
 
 from sqlalchemy import text
-from openpyxl import Workbook
-from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
-from openpyxl.utils import get_column_letter
-from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER
-from reportlab.lib.pagesizes import A4, landscape
-from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-from reportlab.lib.units import mm
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
-
 from backend.database import get_engine
 from backend.services.query_service import get_capacity
 
@@ -135,6 +125,10 @@ def _programming_export_data(version_id:int):
 
 
 def export_programming_excel(version_id:int):
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
+
     header,rows=_programming_export_data(version_id)
     wb=Workbook()
     ws=wb.active
@@ -224,6 +218,13 @@ def export_programming_excel(version_id:int):
 
 
 def export_programming_pdf(version_id:int):
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import mm
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
     header,rows=_programming_export_data(version_id)
     out=BytesIO()
     doc=SimpleDocTemplate(
