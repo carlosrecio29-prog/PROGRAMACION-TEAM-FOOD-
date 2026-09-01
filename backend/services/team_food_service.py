@@ -56,6 +56,31 @@ def import_team_food(filename:str,content:bytes,*,year:int|None=None,month:int|N
         iid,sync_id=_begin_import(conn,filename,source_year,target_month,total)
         spec_ids={r["codigo"]:int(r["id"]) for r in conn.execute(text("SELECT id,codigo FROM mantenimiento.especialidad")).mappings()}
 
+        roster_code_by_name={}
+        for r in parsed["roster"].rows:
+            if r["external_code"]:
+                roster_code_by_name.setdefault(r["technician_normalized"],r["external_code"])
+
+        technician_rows=[]
+        for r in parsed["technicians"].rows:
+            sid=spec_ids.get(r["specialty"])
+            if not sid:
+                warnings.append(f"Especialidad no configurada para técnico {r['name']}: {r['specialty']}")
+                continue
+            technician_rows.append({
+                "external":roster_code_by_name.get(r["name_normalized"]) or None,
+                "name":r["name"],"normalized":r["name_normalized"],"sid":sid
+            })
+        if technician_rows:
+            conn.execute(text("UPDATE mantenimiento.tecnico SET activo=false,codigo_externo=NULL"))
+            _execute_many(conn,"""INSERT INTO mantenimiento.tecnico(codigo_externo,nombre,nombre_normalizado,especialidad_id,activo)
+              VALUES(:external,:name,:normalized,:sid,true)
+              ON CONFLICT(nombre_normalizado) DO UPDATE SET
+              codigo_externo=COALESCE(excluded.codigo_externo,mantenimiento.tecnico.codigo_externo),
+              nombre=excluded.nombre,especialidad_id=excluded.especialidad_id,activo=true""",technician_rows)
+            processed+=len(technician_rows)
+
+
         asset_rows=[]
         for r in parsed["assets"].rows:
             if not r["code"]:continue
@@ -193,14 +218,23 @@ def import_team_food(filename:str,content:bytes,*,year:int|None=None,month:int|N
         tech_rows=list(conn.execute(text("SELECT id,codigo_externo,nombre_normalizado FROM mantenimiento.tecnico WHERE activo=true")).mappings())
         tech_by_name={r["nombre_normalizado"]:dict(r) for r in tech_rows}
         tech_by_code={str(r["codigo_externo"]):dict(r) for r in tech_rows if r["codigo_externo"]}
-        roster_rows=[]
+        roster_rows=[]; missing_roster_techs=set(); missing_turn_codes=set()
         for r in parsed["roster"].rows:
             tech=tech_by_code.get(r["external_code"]) or tech_by_name.get(r["technician_normalized"])
             turn_id=turn_map.get(r["turn_code"])
-            if not tech or not turn_id:rejected+=1;continue
+            if not tech:
+                missing_roster_techs.add(r["technician_name"])
+                continue
+            if not turn_id:
+                missing_turn_codes.add(r["turn_code"])
+                continue
             try:work_date=date(roster_year,roster_month,int(r["day"]))
             except ValueError:continue
             roster_rows.append({"tid":int(tech["id"]),"date":work_date,"turn":turn_id,"iid":iid})
+        if missing_roster_techs:
+            warnings.append("Sin especialidad maestra y excluidos de capacidad: "+", ".join(sorted(missing_roster_techs)))
+        if missing_turn_codes:
+            warnings.append("Turnos sin duración configurada y excluidos de capacidad: "+", ".join(sorted(missing_turn_codes)))
         _execute_many(conn,"""INSERT INTO mantenimiento.programacion_tecnico(tecnico_id,fecha,turno_id,importacion_id,actualizado_en)
           VALUES(:tid,:date,:turn,:iid,now()) ON CONFLICT(tecnico_id,fecha) DO UPDATE SET
           turno_id=excluded.turno_id,importacion_id=excluded.importacion_id,actualizado_en=now()""",roster_rows)
@@ -209,7 +243,7 @@ def import_team_food(filename:str,content:bytes,*,year:int|None=None,month:int|N
 
     return {"status":state,"year":source_year,"month":target_month,"rows_read":total,
       "processed":processed,"rejected":rejected,"assets":len(asset_rows),"plans":len(plan_rows),
-      "activities":len(activity_rows),"pmp":len(pmp_rows),"orders":len(order_rows),"roster":len(roster_rows),
+      "activities":len(activity_rows),"pmp":len(pmp_rows),"orders":len(order_rows),"technicians":len(technician_rows),"roster":len(roster_rows),
       "incomplete_people":sum(1 for r in parsed["plans"].rows if r["persons"] is None),
       "incomplete_condition":sum(1 for r in parsed["plans"].rows if r["condition"]=="SIN CLASIFICAR"),
       "warnings":warnings[:20]}
