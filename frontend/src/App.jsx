@@ -2,7 +2,7 @@ import {useEffect,useState} from 'react'
 import ImportPanel from './components/ImportPanel'
 import SpecialtyPlanner from './components/SpecialtyPlanner'
 import MasterImportPanel from './components/MasterImportPanel'
-import {getHealth,getMasterStatus} from './api'
+import {getHealth,getMasterStatus,resetTestingData} from './api'
 import './styles.css'
 
 const SPECS=['MEC','ELE','SER','MET']
@@ -16,11 +16,33 @@ export default function App(){
   const [master,setMaster]=useState(null)
   const [health,setHealth]=useState('checking')
   const [healthError,setHealthError]=useState('')
+  const [resetting,setResetting]=useState(false)
 
   useEffect(()=>{
     getMasterStatus().then(setMaster).catch(()=>{})
     getHealth().then(()=>{setHealth('ok');setHealthError('')}).catch(e=>{setHealth('error');setHealthError(e.message)})
   },[])
+  async function resetTests(){
+    const ok=window.confirm(
+      '¿Reiniciar todas las pruebas?\n\nSe borrarán únicamente programaciones y aprendizajes marcados como PRUEBA_WEB. Los maestros, PMP, activos, técnicos y turnos NO se tocarán.'
+    )
+    if(!ok)return
+    try{
+      setResetting(true)
+      const r=await resetTestingData()
+      window.alert(
+        'Pruebas reiniciadas.\nProgramaciones: '+r.programming_deleted+
+        '\nActividades: '+r.items_deleted+
+        '\nAprendizajes: '+r.learning_reset
+      )
+      window.location.reload()
+    }catch(e){
+      window.alert('No se pudo reiniciar: '+e.message)
+    }finally{
+      setResetting(false)
+    }
+  }
+
   const latest=master?.latest_period
   const period=latest?String(latest.mes).padStart(2,'0')+'/'+latest.anio:'09/2026'
 
@@ -34,6 +56,13 @@ export default function App(){
         <a className="nav-active" href="#planner"><span>01</span> Programación semanal</a>
         <a href="#master"><span>02</span> Fuente maestra</a>
       </nav>
+      <div className="test-reset-box">
+        <span>MODO PRUEBAS</span>
+        <button className="reset-tests-btn" onClick={resetTests} disabled={resetting}>
+          {resetting?'Reiniciando...':'Reiniciar pruebas'}
+        </button>
+        <small>Solo borra datos creados durante las pruebas.</small>
+      </div>
       <div className="sidebar-foot">
         <small>Periodo activo</small>
         <strong>{period}</strong>
