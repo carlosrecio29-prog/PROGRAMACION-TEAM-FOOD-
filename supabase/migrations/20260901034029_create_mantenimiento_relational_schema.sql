@@ -1,0 +1,2 @@
+-- Baseline migration already applied to Supabase project eovzsaufwqsqsjvapbdx.
+-- Kept in source control so Supabase CLI migration history stays aligned.
