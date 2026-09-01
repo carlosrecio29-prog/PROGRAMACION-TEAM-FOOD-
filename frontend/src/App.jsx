@@ -3,6 +3,7 @@ import ImportPanel from './components/ImportPanel'
 import SpecialtyPlanner from './components/SpecialtyPlanner'
 import MasterImportPanel from './components/MasterImportPanel'
 import SavedProgramming from './components/SavedProgramming'
+import PendingDefinitions from './components/PendingDefinitions'
 import {getHealth,getMasterStatus,resetTestingData} from './api'
 import './styles.css'
 
@@ -50,6 +51,7 @@ export default function App(){
   const period=latest?String(latest.mes).padStart(2,'0')+'/'+latest.anio:'09/2026'
   const header={
     planner:['Programación semanal de mantenimiento','Selecciona la semana, revisa la capacidad de la especialidad y arma el paquete de trabajo.'],
+    definitions:['Pendientes por definir','Completa tiempo, número de personas y condición antes de que los PMP entren a programación.'],
     saved:['Programaciones guardadas','Consulta las semanas que ya guardaste y revisa cada especialidad sin perder lo que asignaste.'],
     master:['Fuente maestra','Consulta y actualiza la información base que alimenta la programación.']
   }[view]
@@ -63,8 +65,9 @@ export default function App(){
 
       <nav>
         <button className={view==='planner'?'nav-active':''} onClick={()=>setView('planner')}><span>01</span> Programación semanal</button>
-        <button className={view==='saved'?'nav-active':''} onClick={()=>setView('saved')}><span>02</span> Programaciones guardadas</button>
-        <button className={view==='master'?'nav-active':''} onClick={()=>setView('master')}><span>03</span> Fuente maestra</button>
+        <button className={view==='definitions'?'nav-active':''} onClick={()=>setView('definitions')}><span>02</span> Pendientes por definir</button>
+        <button className={view==='saved'?'nav-active':''} onClick={()=>setView('saved')}><span>03</span> Programaciones guardadas</button>
+        <button className={view==='master'?'nav-active':''} onClick={()=>setView('master')}><span>04</span> Fuente maestra</button>
       </nav>
 
       <div className="test-reset-box">
