@@ -81,7 +81,7 @@ def define_plan(
         raise DefinitionError("No se recibió ningún dato para definir")
 
     with get_engine().begin() as conn:
-        plan=conn.execute(text("""SELECT id,tiempo_ejecucion_min,personas_defecto
+        plan=conn.execute(text("""SELECT id,tiempo_ejecucion_min,tiempo_parada_min,personas_defecto
           FROM mantenimiento.plan_trabajo WHERE id=:id AND activo=true"""),{"id":plan_id}).mappings().one_or_none()
         if not plan:
             raise DefinitionError("Plan de trabajo no encontrado")
@@ -91,22 +91,35 @@ def define_plan(
               SET tiempo_ejecucion_min=:t,actualizado_por=:u
               WHERE id=:id"""),{"t":execution_minutes,"u":updated_by,"id":plan_id})
 
-        current=conn.execute(text("""SELECT condicion,personas_usar
-          FROM mantenimiento.clasificacion_plan WHERE plan_trabajo_id=:id"""),{"id":plan_id}).mappings().one_or_none()
+        if people is not None or condition is not None:
+            current=conn.execute(text("""SELECT condicion,personas_usar
+              FROM mantenimiento.clasificacion_plan WHERE plan_trabajo_id=:id"""),{"id":plan_id}).mappings().one_or_none()
 
-        next_condition=condition or (current["condicion"] if current else "SIN CLASIFICAR")
-        next_people=people if people is not None else (current["personas_usar"] if current else None)
+            if current:
+                fallback_condition=current["condicion"]
+                fallback_people=current["personas_usar"]
+            else:
+                if plan["tiempo_parada_min"] is None:
+                    fallback_condition="SIN CLASIFICAR"
+                elif float(plan["tiempo_parada_min"])>0:
+                    fallback_condition="EQUIPO DETENIDO"
+                else:
+                    fallback_condition="OPERANDO"
+                fallback_people=plan["personas_defecto"]
 
-        conn.execute(text("""INSERT INTO mantenimiento.clasificacion_plan(
-            plan_trabajo_id,condicion,personas_usar,observacion,actualizado_por,fuente
-          ) VALUES(:id,:c,:p,'Definido desde Pendientes por definir',:u,'USUARIO')
-          ON CONFLICT(plan_trabajo_id) DO UPDATE SET
-            condicion=EXCLUDED.condicion,
-            personas_usar=EXCLUDED.personas_usar,
-            observacion=EXCLUDED.observacion,
-            actualizado_por=EXCLUDED.actualizado_por,
-            fuente='USUARIO',
-            actualizado_en=now()"""),
-          {"id":plan_id,"c":next_condition,"p":next_people,"u":updated_by})
+            next_condition=condition or fallback_condition
+            next_people=people if people is not None else fallback_people
+
+            conn.execute(text("""INSERT INTO mantenimiento.clasificacion_plan(
+                plan_trabajo_id,condicion,personas_usar,observacion,actualizado_por,fuente
+              ) VALUES(:id,:c,:p,'Definido desde Pendientes por definir',:u,'USUARIO')
+              ON CONFLICT(plan_trabajo_id) DO UPDATE SET
+                condicion=EXCLUDED.condicion,
+                personas_usar=EXCLUDED.personas_usar,
+                observacion=EXCLUDED.observacion,
+                actualizado_por=EXCLUDED.actualizado_por,
+                fuente='USUARIO',
+                actualizado_en=now()"""),
+              {"id":plan_id,"c":next_condition,"p":next_people,"u":updated_by})
 
     return {"ok":True,"plan_id":plan_id}
