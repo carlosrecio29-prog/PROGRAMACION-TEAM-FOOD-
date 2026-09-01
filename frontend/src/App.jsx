@@ -126,7 +126,7 @@ export default function App(){
             })}
           </div>
 
-          <SpecialtyPlanner specialty={active} specialtyName={NAMES[active]} capacity={capacity[active]} week={week} year={2026} month={9}/>
+          <SpecialtyPlanner specialty={active} specialtyName={NAMES[active]} capacity={capacity[active]} week={week} year={2026} month={9} onOpenDefinitions={()=>setView('definitions')}/>
         </section>
       </>}
 
