@@ -102,6 +102,10 @@ def candidates(specialty:str,year:int|None=None,month:int|None=Query(None,ge=1,l
       condition=condition,plan_search=plan_search,origin=origin,limit=limit)
     except ValueError as exc:raise HTTPException(422,str(exc)) from exc
 
+@app.get("/api/month-reconciliation")
+def month_reconciliation(year:int,month:int=Query(...,ge=1,le=12)):
+    return get_month_reconciliation(year=year,month=month)
+
 @app.get("/api/imports")
 def imports(limit:int=Query(30,ge=1,le=200)):return get_import_history(limit)
 
