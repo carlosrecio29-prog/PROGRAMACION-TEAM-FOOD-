@@ -71,7 +71,7 @@ function SearchableSelect({label,value,options,onChange,placeholder,disabled=fal
  </div>
 }
 
-export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,year,month}){
+export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,year,month,onOpenDefinitions}){
  const [operatingRows,setOperatingRows]=useState([])
  const [stoppedRows,setStoppedRows]=useState([])
  const [selected,setSelected]=useState([])
@@ -323,6 +323,15 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
     {loading&&<span className="loading-chip">Actualizando...</span>}
    </div>
 
+   {!loading&&operatingReady.length===0&&<div className="operating-empty">
+    <div>
+     <span>0 PMP OPERANDO DISPONIBLES</span>
+     <h4>No hay planes completos clasificados como OPERANDO.</h4>
+     <p>Esto no es un error del buscador. Primero debes definir la condición de los planes pendientes. Cuando un plan quede como OPERANDO, aparecerá aquí automáticamente.</p>
+    </div>
+    <button className="primary" onClick={()=>onOpenDefinitions?.()}>Ir a Pendientes por definir</button>
+   </div>}
+
    <div className="cascade-selectors">
     <SearchableSelect
      label="1. Plan del PMP"
@@ -330,7 +339,7 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
      options={planOptions}
      onChange={v=>{setChosenPlan(v);setChosenActivity('');setCurrentId('')}}
      placeholder="Haz clic o escribe un plan..."
-     emptyText="No hay planes operando con estos filtros."
+     emptyText={operatingReady.length===0?'Todavía no hay PMP clasificados como OPERANDO.':'No hay planes OPERANDO con estos filtros.'}
     />
     <SearchableSelect
      label="2. Actividad del plan"
