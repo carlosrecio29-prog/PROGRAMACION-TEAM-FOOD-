@@ -2,7 +2,7 @@ import {useEffect,useState} from 'react'
 import ImportPanel from './components/ImportPanel'
 import SpecialtyPlanner from './components/SpecialtyPlanner'
 import MasterImportPanel from './components/MasterImportPanel'
-import {getMasterStatus} from './api'
+import {getHealth,getMasterStatus} from './api'
 import './styles.css'
 
 const SPECS=['MEC','ELE','SER','MET']
@@ -14,8 +14,12 @@ export default function App(){
   const [capacity,setCapacity]=useState({})
   const [week,setWeek]=useState({from:'2026-09-01',to:'2026-09-07'})
   const [master,setMaster]=useState(null)
+  const [health,setHealth]=useState('checking')
 
-  useEffect(()=>{getMasterStatus().then(setMaster).catch(()=>{})},[])
+  useEffect(()=>{
+    getMasterStatus().then(setMaster).catch(()=>{})
+    getHealth().then(()=>setHealth('ok')).catch(()=>setHealth('error'))
+  },[])
   const latest=master?.latest_period
   const period=latest?String(latest.mes).padStart(2,'0')+'/'+latest.anio:'09/2026'
 
@@ -43,7 +47,9 @@ export default function App(){
           <h1>Programación semanal de mantenimiento</h1>
           <p>Selecciona la semana, revisa la capacidad de la especialidad y arma el paquete de trabajo.</p>
         </div>
-        <div className="status-pill"><i/> Base conectada</div>
+        <div className={'status-pill '+(health==='error'?'status-error':health==='checking'?'status-checking':'')}>
+          <i/> {health==='ok'?'Base conectada':health==='error'?'Error de conexión':'Verificando base...'}
+        </div>
       </header>
 
       <ImportPanel onCapacity={(c,w)=>{setCapacity(c);setWeek(w)}} initialWeek={week}/>
