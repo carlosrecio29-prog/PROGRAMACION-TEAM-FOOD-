@@ -132,6 +132,7 @@ export default function SavedProgramming(){
     </div>}
 
     <div className="saved-actions">
+     <span className="auto-sync-note">Estados sincronizados automáticamente desde TEAM FOOD</span>
      <button className="analyze-close-btn" disabled={!selectedVersion||analyzing} onClick={analyzeClose}>
       {analyzing?'Consultando maestro...':'Analizar cierre'}
      </button>
