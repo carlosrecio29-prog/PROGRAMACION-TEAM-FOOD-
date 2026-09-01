@@ -37,7 +37,8 @@ export default function App(){
       window.alert(
         'Pruebas reiniciadas.\nProgramaciones: '+r.programming_deleted+
         '\nActividades: '+r.items_deleted+
-        '\nAprendizajes: '+r.learning_reset
+        '\nAprendizajes: '+r.learning_reset+
+        '\nTiempos definidos: '+(r.time_defaults_reset||0)
       )
       window.location.reload()
     }catch(e){
@@ -128,6 +129,8 @@ export default function App(){
           <SpecialtyPlanner specialty={active} specialtyName={NAMES[active]} capacity={capacity[active]} week={week} year={2026} month={9}/>
         </section>
       </>}
+
+      {view==='definitions'&&<PendingDefinitions year={latest?.anio||2026} month={latest?.mes||9}/>}
 
       {view==='saved'&&<SavedProgramming/>}
 
