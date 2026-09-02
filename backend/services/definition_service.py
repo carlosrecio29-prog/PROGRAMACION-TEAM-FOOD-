@@ -24,7 +24,7 @@ def get_pending_definitions(*,year:int,month:int,specialty:str|None=None)->list[
         "v.anio=:year",
         "v.mes=:month",
         "v.estado_orden<>'FINALIZADA'",
-        "NOT v.datos_completos",
+        "('PERSONAS'=ANY(v.datos_faltantes) OR 'CONDICION'=ANY(v.datos_faltantes))",
     ]
     params={"year":year,"month":month}
     if specialty:
@@ -36,6 +36,7 @@ def get_pending_definitions(*,year:int,month:int,specialty:str|None=None)->list[
       v.plan_trabajo_id,
       v.especialidad,
       v.plan_trabajo,
+      COALESCE(g.nombre,'SIN GRUPO') AS descripcion_grupo,
       COUNT(*)::int AS pmp_afectados,
       COUNT(DISTINCT v.activo_id)::int AS equipos_afectados,
       BOOL_OR('TIEMPO'=ANY(v.datos_faltantes)) AS falta_tiempo,
@@ -48,10 +49,11 @@ def get_pending_definitions(*,year:int,month:int,specialty:str|None=None)->list[
       MIN(v.activo_codigo) AS equipo_ejemplo
     FROM mantenimiento.vw_pmp_calculado v
     JOIN mantenimiento.plan_trabajo pt ON pt.id=v.plan_trabajo_id
+    LEFT JOIN mantenimiento.grupo_plan_trabajo g ON g.id=pt.grupo_id
     LEFT JOIN mantenimiento.clasificacion_plan cp ON cp.plan_trabajo_id=v.plan_trabajo_id
     WHERE {' AND '.join(filters)}
     GROUP BY
-      v.plan_trabajo_id,v.especialidad,v.plan_trabajo,
+      v.plan_trabajo_id,v.especialidad,v.plan_trabajo,g.nombre,
       pt.tiempo_ejecucion_min,cp.personas_usar,pt.personas_defecto,cp.condicion
     ORDER BY
       CASE v.especialidad WHEN 'MEC' THEN 1 WHEN 'ELE' THEN 2 WHEN 'SER' THEN 3 ELSE 4 END,
