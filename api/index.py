@@ -18,6 +18,7 @@ from backend.services.team_food_service import import_team_food, learn_plan
 from backend.services.definition_service import (
     DefinitionError, define_plan, get_pending_definitions,
 )
+from backend.services.v2_import_service import import_software_base, get_v2_status
 from backend.services.programming_service import (
     ProgrammingError, close_programming, programming_detail, programming_history, save_programming,
     export_programming_excel, export_programming_pdf, reset_test_data,
@@ -73,6 +74,40 @@ def health():
 @app.post("/api/imports/team-food")
 async def upload_team_food(file:UploadFile=File(...),year:int|None=Query(None),month:int|None=Query(None,ge=1,le=12)):
     return run_import(import_team_food,file.filename,await read_upload(file),year=year,month=month)
+
+@app.post("/api/v2/import-base")
+async def import_v2_base(
+    assets:UploadFile=File(...),
+    plans:UploadFile=File(...),
+    planning:UploadFile=File(...),
+    monthly:UploadFile=File(...),
+    technicians:UploadFile=File(...),
+    year:int=Query(...,ge=2020,le=2100),
+    month:int=Query(...,ge=1,le=12),
+):
+    try:
+        return import_software_base(
+            assets_content=await read_upload(assets),
+            plans_content=await read_upload(plans),
+            planning_content=await read_upload(planning),
+            monthly_content=await read_upload(monthly),
+            technicians_content=await read_upload(technicians),
+            year=year,
+            month=month,
+        )
+    except ValueError as exc:
+        raise HTTPException(422,str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(500,f"Error importando base V2: {exc}") from exc
+
+
+@app.get("/api/v2/status")
+def v2_status():
+    try:
+        return get_v2_status()
+    except Exception as exc:
+        raise HTTPException(500,f"Error consultando base V2: {exc}") from exc
+
 
 @app.get("/api/master-status")
 def master_status():return get_master_status()
