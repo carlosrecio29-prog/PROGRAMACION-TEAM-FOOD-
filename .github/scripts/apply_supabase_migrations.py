@@ -47,7 +47,7 @@ def main() -> int:
 
     api_query("""
     CREATE SCHEMA IF NOT EXISTS sistema;
-    DO $
+    DO $$
     BEGIN
       IF to_regclass('sistema.app_migration_history') IS NULL
          AND EXISTS (
@@ -61,7 +61,7 @@ def main() -> int:
       THEN
         ALTER TABLE mantenimiento.app_migration_history SET SCHEMA sistema;
       END IF;
-    END $;
+    END $$;
     CREATE TABLE IF NOT EXISTS sistema.app_migration_history (
         version text PRIMARY KEY,
         name text NOT NULL,
