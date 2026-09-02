@@ -163,15 +163,18 @@ def parse_team_food(content:bytes)->dict[str,ParsedWorkbook]:
 
         out["orders"].metadata["monthly_summary"]=monthly_summary
 
-        seen=set()
+        consolidated={}
         for r in raw:
             if r["state"]=="ANULADA":continue
-            # Regla operativa: si el número de OT se repite en el mes, se consolida.
+            # Regla operativa: una OT repetida representa un solo PMP.
+            # La última aparición en el maestro es la vigente para estado y tiempo.
             # Si no hay OT, cada fila se conserva como PMP independiente.
             identity=(r["order_number"] or "").strip() or f"__ROW__{r['excel_row']}"
             sk=stable_sha256([program_year,r["month"],identity])
-            if sk in seen:continue
-            seen.add(sk); r["source_key"]=sk; r["program_year"]=program_year; out["orders"].rows.append(r)
+            r["source_key"]=sk
+            r["program_year"]=program_year
+            consolidated[sk]=r
+        out["orders"].rows.extend(consolidated.values())
     else: out["orders"].warnings.append("No se encontró ORDENES MENSUALES")
 
     ws=_sheet(wb,"INFORMACION DE TURNOS")
