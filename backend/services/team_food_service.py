@@ -154,12 +154,14 @@ def import_team_food(filename:str,content:bytes,*,year:int|None=None,month:int|N
             rec=plan_map.get((r["specialty"],r["plan_key"]))
             if rec:classifications.append({"pid":int(rec["id"]),"condition":r["condition"],"people":r["persons"]})
         _execute_many(conn,"""INSERT INTO mantenimiento.clasificacion_plan(plan_trabajo_id,condicion,personas_usar,fuente,observacion)
-          VALUES(:pid,'SIN CLASIFICAR',:people,'MAESTRO','Sincronizado desde TEAM FOOD')
+          VALUES(:pid,:condition,:people,'MAESTRO','Sincronizado desde TEAM FOOD')
           ON CONFLICT(plan_trabajo_id) DO UPDATE SET
           condicion=CASE
             WHEN mantenimiento.clasificacion_plan.fuente='USUARIO'
               THEN mantenimiento.clasificacion_plan.condicion
-            ELSE 'SIN CLASIFICAR'
+            WHEN excluded.condicion<>'SIN CLASIFICAR'
+              THEN excluded.condicion
+            ELSE mantenimiento.clasificacion_plan.condicion
           END,
           personas_usar=CASE
             WHEN mantenimiento.clasificacion_plan.fuente='USUARIO'
