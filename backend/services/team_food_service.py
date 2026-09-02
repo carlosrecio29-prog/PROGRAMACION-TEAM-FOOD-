@@ -97,7 +97,7 @@ def import_team_food(filename:str,content:bytes,*,year:int|None=None,month:int|N
           area_nombre=COALESCE(excluded.area_nombre,mantenimiento.activo.area_nombre),
           linea_nombre=COALESCE(excluded.linea_nombre,mantenimiento.activo.linea_nombre),actualizado_en=now()""",asset_rows)
         processed+=len(asset_rows)
-        asset_map={r["codigo"]:dict(r) for r in conn.execute(text("SELECT id,codigo FROM mantenimiento.activo")).mappings()}
+        asset_map={str(r["codigo"]).strip().upper():dict(r) for r in conn.execute(text("SELECT id,codigo FROM mantenimiento.activo")).mappings()}
 
         groups={}
         for r in parsed["plans"].rows:
@@ -129,10 +129,23 @@ def import_team_food(filename:str,content:bytes,*,year:int|None=None,month:int|N
           FROM mantenimiento.plan_trabajo p JOIN mantenimiento.especialidad e ON e.id=p.especialidad_id""")).mappings())
         plan_map={(r["especialidad"],r["nombre_canonico"]):dict(r) for r in plan_records}
         plan_by_key={}
-        for r in plan_records:plan_by_key.setdefault(r["nombre_canonico"],dict(r))
+        for r in plan_records:
+            plan_by_key.setdefault(r["nombre_canonico"],dict(r))
+        for src in parsed["plans"].rows:
+            rec=plan_map.get((src["specialty"],src["plan_key"]))
+            if rec and src.get("description_key"):
+                existing=plan_by_key.get(src["description_key"])
+                if existing is None or int(existing["id"])==int(rec["id"]):
+                    plan_by_key[src["description_key"]]=dict(rec)
 
-        aliases=[{"pid":int(plan_map[(r["specialty"],r["plan_key"])]["id"]),"alias":r["plan_key"]}
-          for r in parsed["plans"].rows if (r["specialty"],r["plan_key"]) in plan_map]
+        aliases=[]
+        for r in parsed["plans"].rows:
+            rec=plan_map.get((r["specialty"],r["plan_key"]))
+            if not rec:continue
+            aliases.append({"pid":int(rec["id"]),"alias":r["plan_key"]})
+            if r.get("description_key"):
+                aliases.append({"pid":int(rec["id"]),"alias":r["description_key"]})
+        aliases=list({x["alias"]:x for x in aliases}.values())
         _execute_many(conn,"""INSERT INTO mantenimiento.plan_trabajo_alias(plan_trabajo_id,alias_normalizado)
           VALUES(:pid,:alias) ON CONFLICT(alias_normalizado) DO UPDATE SET plan_trabajo_id=excluded.plan_trabajo_id""",aliases)
 
@@ -160,11 +173,14 @@ def import_team_food(filename:str,content:bytes,*,year:int|None=None,month:int|N
           END,
           actualizado_en=now()""",classifications)
 
-        plan_source={r["plan_key"]:r for r in parsed["plans"].rows}
+        plan_source={}
+        for r in parsed["plans"].rows:
+            plan_source[r["plan_key"]]=r
+            if r.get("description_key"):plan_source.setdefault(r["description_key"],r)
         activity_rows=[]
         for r in parsed["planning"].rows:
             if r["state"]!="HABILITADO":continue
-            a=asset_map.get(r["asset_code"]);p=plan_by_key.get(r["plan_key"]);src=plan_source.get(r["plan_key"])
+            a=asset_map.get(str(r["asset_code"]).strip().upper());p=plan_by_key.get(r["plan_key"]);src=plan_source.get(r["plan_key"])
             if not a or not p:rejected+=1;continue
             activity_rows.append({"aid":int(a["id"]),"pid":int(p["id"]),"sid":spec_ids[p["especialidad"]],
                 "time":src["execution_minutes"] if src else p["tiempo_ejecucion_min"],
@@ -181,12 +197,13 @@ def import_team_food(filename:str,content:bytes,*,year:int|None=None,month:int|N
           ON CONFLICT(anio,mes) DO UPDATE SET anio=excluded.anio RETURNING id"""),{"y":source_year,"m":target_month}).scalar_one()
         planning_lookup={}
         for r in parsed["planning"].rows:
-            if r["state"]=="HABILITADO":planning_lookup[(r["asset_code"],r["description_key"])]=r
+            if r["state"]=="HABILITADO":
+                planning_lookup[(str(r["asset_code"]).strip().upper(),r["description_key"])]=r
         selected=[r for r in orders if int(r["month"])==target_month and r["state"] in {"PENDIENTE","FINALIZADA"}]
         order_exceptions={}; pending_order_exceptions={}
         pmp_rows=[];order_context=[];asset_updates=[]
         for r in selected:
-            link=planning_lookup.get((r["asset_code"],r["observation_key"]));asset=asset_map.get(r["asset_code"])
+            link=planning_lookup.get((str(r["asset_code"]).strip().upper(),r["observation_key"]));asset=asset_map.get(str(r["asset_code"]).strip().upper())
             if not link or not asset:
                 rejected+=1
                 order_exceptions[r["specialty"]]=order_exceptions.get(r["specialty"],0)+1
