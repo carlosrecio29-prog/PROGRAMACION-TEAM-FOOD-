@@ -347,6 +347,27 @@ def import_software_base(
     warnings=list(tech_warnings)
 
     with get_engine().begin() as conn:
+        # Los complementos hechos en la app sobreviven a una nueva exportación del software.
+        plan_complements={
+            _plan_key(r["grupo"],r["plan_trabajo"]):{
+                "numero_personas_app":r["numero_personas_app"],
+                "tiempo_parada_app_min":r["tiempo_parada_app_min"],
+            }
+            for r in conn.execute(text("""
+                SELECT grupo,plan_trabajo,numero_personas_app,tiempo_parada_app_min
+                FROM programacion.plan_trabajo
+                WHERE numero_personas_app IS NOT NULL OR tiempo_parada_app_min IS NOT NULL
+            """)).mappings()
+        }
+        technician_complements={
+            r["nombre_normalizado"]:r["especialidad_app"]
+            for r in conn.execute(text("""
+                SELECT nombre_normalizado,especialidad_app
+                FROM programacion.tecnico
+                WHERE especialidad_app IS NOT NULL
+            """)).mappings()
+        }
+
         conn.execute(text("""TRUNCATE TABLE
           programacion.programacion_tecnico,
           programacion.orden_mantenimiento,
@@ -377,6 +398,31 @@ def import_software_base(
               :valor_frecuencia,:tiempo_ejecucion_min,:numero_personas,:tiempo_parada_min,
               :especialidad,:orden_tipo,:estado,:habilitado,:fila_origen
             )"""),plans)
+
+        if plan_complements:
+            for key,values in plan_complements.items():
+                grupo,plan_name=key.split("-",1) if "-" in key else ("",key)
+                # Se busca por la clave normalizada completa para tolerar mayúsculas/acentos.
+                for row in conn.execute(text("""
+                    SELECT id,grupo,plan_trabajo
+                    FROM programacion.plan_trabajo
+                """)).mappings():
+                    if _plan_key(row["grupo"],row["plan_trabajo"])==key:
+                        conn.execute(text("""
+                            UPDATE programacion.plan_trabajo
+                            SET numero_personas_app=:people,
+                                tiempo_parada_app_min=:stop,
+                                complementado_en=CASE
+                                  WHEN :people IS NOT NULL OR :stop IS NOT NULL THEN now()
+                                  ELSE complementado_en
+                                END
+                            WHERE id=:id
+                        """),{
+                            "people":values["numero_personas_app"],
+                            "stop":values["tiempo_parada_app_min"],
+                            "id":row["id"],
+                        })
+                        break
 
         asset_map={
             normalize_text(r["codigo"]):int(r["id"])
@@ -487,6 +533,15 @@ def import_software_base(
               :identificacion,:nombre,:nombre_normalizado,:especialidad,:fila_origen
             )"""),technicians)
 
+        if technician_complements:
+            for name_normalized,specialty in technician_complements.items():
+                conn.execute(text("""
+                    UPDATE programacion.tecnico
+                    SET especialidad_app=:specialty,
+                        complementado_en=now()
+                    WHERE nombre_normalizado=:name
+                """),{"specialty":specialty,"name":name_normalized})
+
         technician_map={
             r["nombre_normalizado"]:int(r["id"])
             for r in conn.execute(text("SELECT id,nombre_normalizado FROM programacion.tecnico")).mappings()
@@ -512,9 +567,9 @@ def import_software_base(
           (SELECT count(*) FROM programacion.orden_mantenimiento) ordenes_mes,
           (SELECT count(*) FROM programacion.tecnico) tecnicos,
           (SELECT count(*) FROM programacion.programacion_tecnico) turnos_tecnico,
-          (SELECT count(*) FROM programacion.plan_trabajo WHERE numero_personas IS NULL) planes_sin_numero_personas,
+          (SELECT count(*) FROM programacion.plan_trabajo WHERE numero_personas_efectivo IS NULL) planes_sin_numero_personas,
           (SELECT count(*) FROM programacion.plan_trabajo WHERE requiere_parada) planes_con_parada,
-          (SELECT count(*) FROM programacion.tecnico WHERE especialidad IS NULL) tecnicos_sin_especialidad,
+          (SELECT count(*) FROM programacion.tecnico WHERE especialidad_efectiva IS NULL) tecnicos_sin_especialidad,
           (SELECT count(*) FROM programacion.orden_mantenimiento WHERE numero_ot IS NULL) registros_sin_ot
         """)).mappings().one()
 
