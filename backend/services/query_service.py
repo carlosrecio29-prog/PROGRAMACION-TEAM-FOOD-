@@ -105,3 +105,44 @@ def get_master_status():
         last=conn.execute(text("""SELECT estado,anio,mes,filas_leidas,filas_procesadas,mensaje,iniciado_en,finalizado_en
           FROM mantenimiento.sincronizacion_fuente_maestra ORDER BY iniciado_en DESC LIMIT 1""")).mappings().one_or_none()
     return {"latest_period":dict(period) if period else None,"counts":dict(counts),"last_sync":dict(last) if last else None}
+
+
+def get_month_summary(*,year:int,month:int)->dict[str,Any]:
+    with get_engine().connect() as conn:
+        rows=conn.execute(text("""
+          SELECT
+            v.especialidad,
+            COUNT(*)::int AS total_orders,
+            COUNT(*) FILTER (WHERE v.estado_orden='FINALIZADA')::int AS finalized,
+            COUNT(*) FILTER (WHERE v.estado_orden<>'FINALIZADA')::int AS pending,
+            COALESCE(SUM(v.hh_pmp) FILTER (WHERE v.hh_pmp IS NOT NULL),0)::float AS hh_total,
+            COUNT(*) FILTER (WHERE v.hh_pmp IS NULL)::int AS hh_pending
+          FROM mantenimiento.vw_pmp_calculado v
+          WHERE v.anio=:y AND v.mes=:m
+          GROUP BY v.especialidad
+        """),{"y":year,"m":month}).mappings().all()
+
+    by_code={r["especialidad"]:dict(r) for r in rows}
+    specialties={}
+    for code in ("MEC","ELE","SER","MET"):
+        r=by_code.get(code) or {}
+        specialties[code]={
+            "total_orders":int(r.get("total_orders",0) or 0),
+            "finalized":int(r.get("finalized",0) or 0),
+            "pending":int(r.get("pending",0) or 0),
+            "hh_total":float(r.get("hh_total",0) or 0),
+            "hh_pending":int(r.get("hh_pending",0) or 0),
+        }
+
+    return {
+        "year":year,
+        "month":month,
+        "specialties":specialties,
+        "totals":{
+            "total_orders":sum(x["total_orders"] for x in specialties.values()),
+            "finalized":sum(x["finalized"] for x in specialties.values()),
+            "pending":sum(x["pending"] for x in specialties.values()),
+            "hh_total":sum(x["hh_total"] for x in specialties.values()),
+            "hh_pending":sum(x["hh_pending"] for x in specialties.values()),
+        },
+    }
