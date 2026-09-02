@@ -10,7 +10,7 @@ from sqlalchemy import text
 from backend.database import get_engine
 from backend.parsers.team_food import parse_team_food
 
-VALID_CONDITIONS={"OPERANDO","EQUIPO DETENIDO","LINEA DETENIDA","AREA/PLANTA DETENIDA","SIN CLASIFICAR"}
+VALID_CONDITIONS={"OPERANDO","EQUIPO DETENIDO","SIN CLASIFICAR"}
 
 def _chunks(rows:list[dict[str,Any]],size:int=500):
     for i in range(0,len(rows),size): yield rows[i:i+size]
@@ -114,18 +114,20 @@ def import_team_food(filename:str,content:bytes,*,year:int|None=None,month:int|N
             sid=spec_ids.get(r["specialty"])
             if not sid:rejected+=1;continue
             label=(f"{r['group_code']} - {r['group']}" if r["group_code"] else r["group"])[:255]
+            stopped=True if r["condition"]=="EQUIPO DETENIDO" else False if r["condition"]=="OPERANDO" else None
             plan_rows.append({"sid":sid,"gid":group_map.get((sid,label)),"name":r["plan_raw"],"canonical":r["plan_key"],
-                "people":r["persons"],"execution":r["execution_minutes"],"stop":r["stop_minutes"]})
-        _execute_many(conn,"""INSERT INTO mantenimiento.plan_trabajo(especialidad_id,grupo_id,nombre,nombre_canonico,personas_defecto,tiempo_ejecucion_min,tiempo_parada_min,fuente_maestra,activo)
-          VALUES(:sid,:gid,:name,:canonical,:people,:execution,:stop,'TEAM_FOOD',true)
+                "people":r["persons"],"stopped":stopped,"execution":r["execution_minutes"],"stop":r["stop_minutes"]})
+        _execute_many(conn,"""INSERT INTO mantenimiento.plan_trabajo(especialidad_id,grupo_id,nombre,nombre_canonico,numero_personas,equipo_detenido,tiempo_ejecucion_min,tiempo_parada_min,fuente_maestra,activo)
+          VALUES(:sid,:gid,:name,:canonical,:people,:stopped,:execution,:stop,'TEAM_FOOD',true)
           ON CONFLICT(especialidad_id,nombre_canonico) DO UPDATE SET grupo_id=excluded.grupo_id,nombre=excluded.nombre,
-          personas_defecto=COALESCE(excluded.personas_defecto,mantenimiento.plan_trabajo.personas_defecto),
+          numero_personas=COALESCE(excluded.numero_personas,mantenimiento.plan_trabajo.numero_personas),
+          equipo_detenido=COALESCE(excluded.equipo_detenido,mantenimiento.plan_trabajo.equipo_detenido),
           tiempo_ejecucion_min=COALESCE(excluded.tiempo_ejecucion_min,mantenimiento.plan_trabajo.tiempo_ejecucion_min),
           tiempo_parada_min=COALESCE(excluded.tiempo_parada_min,mantenimiento.plan_trabajo.tiempo_parada_min),
           fuente_maestra='TEAM_FOOD',activo=true""",plan_rows)
         processed+=len(plan_rows)
 
-        plan_records=list(conn.execute(text("""SELECT p.id,p.nombre_canonico,p.tiempo_ejecucion_min,p.personas_defecto,e.codigo especialidad
+        plan_records=list(conn.execute(text("""SELECT p.id,p.nombre_canonico,p.tiempo_ejecucion_min,p.numero_personas,e.codigo especialidad
           FROM mantenimiento.plan_trabajo p JOIN mantenimiento.especialidad e ON e.id=p.especialidad_id""")).mappings())
         plan_map={(r["especialidad"],r["nombre_canonico"]):dict(r) for r in plan_records}
         plan_by_key={}
@@ -149,32 +151,6 @@ def import_team_food(filename:str,content:bytes,*,year:int|None=None,month:int|N
         _execute_many(conn,"""INSERT INTO mantenimiento.plan_trabajo_alias(plan_trabajo_id,alias_normalizado)
           VALUES(:pid,:alias) ON CONFLICT(alias_normalizado) DO UPDATE SET plan_trabajo_id=excluded.plan_trabajo_id""",aliases)
 
-        classifications=[]
-        for r in parsed["plans"].rows:
-            rec=plan_map.get((r["specialty"],r["plan_key"]))
-            if rec:classifications.append({"pid":int(rec["id"]),"condition":r["condition"],"people":r["persons"]})
-        _execute_many(conn,"""INSERT INTO mantenimiento.clasificacion_plan(plan_trabajo_id,condicion,personas_usar,fuente,observacion)
-          VALUES(:pid,:condition,:people,'MAESTRO','Sincronizado desde TEAM FOOD')
-          ON CONFLICT(plan_trabajo_id) DO UPDATE SET
-          condicion=CASE
-            WHEN mantenimiento.clasificacion_plan.fuente='USUARIO'
-              THEN mantenimiento.clasificacion_plan.condicion
-            WHEN excluded.condicion<>'SIN CLASIFICAR'
-              THEN excluded.condicion
-            ELSE mantenimiento.clasificacion_plan.condicion
-          END,
-          personas_usar=CASE
-            WHEN mantenimiento.clasificacion_plan.fuente='USUARIO'
-                 AND mantenimiento.clasificacion_plan.personas_usar IS NOT NULL
-              THEN mantenimiento.clasificacion_plan.personas_usar
-            ELSE COALESCE(excluded.personas_usar,mantenimiento.clasificacion_plan.personas_usar)
-          END,
-          fuente=CASE
-            WHEN mantenimiento.clasificacion_plan.fuente='USUARIO' THEN 'USUARIO'
-            ELSE 'MAESTRO'
-          END,
-          actualizado_en=now()""",classifications)
-
         plan_source={}
         for r in parsed["plans"].rows:
             plan_source[r["plan_key"]]=r
@@ -186,7 +162,7 @@ def import_team_food(filename:str,content:bytes,*,year:int|None=None,month:int|N
             if not a or not p:rejected+=1;continue
             activity_rows.append({"aid":int(a["id"]),"pid":int(p["id"]),"sid":spec_ids[p["especialidad"]],
                 "time":src["execution_minutes"] if src else p["tiempo_ejecucion_min"],
-                "people":src["persons"] if src else p["personas_defecto"],"iid":iid})
+                "people":src["persons"] if src else p["numero_personas"],"iid":iid})
         _execute_many(conn,"""INSERT INTO mantenimiento.actividad_maestra(activo_id,plan_trabajo_id,especialidad_id,tiempo_estandar_min,personas_requeridas,fuente_datos,importacion_id_ultima,activo,actualizado_en)
           VALUES(:aid,:pid,:sid,:time,:people,'TEAM_FOOD',:iid,true,now())
           ON CONFLICT(activo_id,plan_trabajo_id,especialidad_id) DO UPDATE SET
@@ -308,22 +284,32 @@ def learn_plan(*,plan_id:int,condition:str|None,people:float|None,updated_by:str
     if condition not in VALID_CONDITIONS:raise ValueError("Condición no válida")
     if people is not None and people<=0:raise ValueError("El número de personas debe ser mayor que cero")
     if condition=="SIN CLASIFICAR" and people is None:raise ValueError("Debes completar al menos un dato")
+
+    equipment_stopped=None
+    if condition=="EQUIPO DETENIDO":
+        equipment_stopped=True
+    elif condition=="OPERANDO":
+        equipment_stopped=False
+
     with get_engine().begin() as conn:
         if not conn.execute(text("SELECT id FROM mantenimiento.plan_trabajo WHERE id=:p"),{"p":plan_id}).scalar_one_or_none():
             raise ValueError("Plan no encontrado")
-        conn.execute(text("""INSERT INTO mantenimiento.clasificacion_plan(plan_trabajo_id,condicion,personas_usar,observacion,actualizado_por,fuente)
-          VALUES(:p,:c,:n,'Aprendido durante la programación',:u,'USUARIO')
-          ON CONFLICT(plan_trabajo_id) DO UPDATE SET
-          condicion=CASE WHEN :c='SIN CLASIFICAR' THEN mantenimiento.clasificacion_plan.condicion ELSE :c END,
-          personas_usar=COALESCE(:n,mantenimiento.clasificacion_plan.personas_usar),
-          observacion='Aprendido durante la programación',actualizado_por=:u,fuente='USUARIO',actualizado_en=now()"""),
-          {"p":plan_id,"c":condition,"n":people,"u":updated_by})
-        if people is not None and updated_by!="PRUEBA_WEB":
-            conn.execute(text("UPDATE mantenimiento.plan_trabajo SET personas_defecto=:n,actualizado_por=:u WHERE id=:p"),
-              {"n":people,"u":updated_by,"p":plan_id})
-        row=conn.execute(text("""SELECT p.id plan_id,p.nombre,cp.condicion,
-          COALESCE(cp.personas_usar,p.personas_defecto) personas
+
+        conn.execute(text("""UPDATE mantenimiento.plan_trabajo
+          SET numero_personas=COALESCE(:n,numero_personas),
+              equipo_detenido=COALESCE(:ed,equipo_detenido),
+              actualizado_por=:u
+          WHERE id=:p"""),
+          {"p":plan_id,"n":people,"ed":equipment_stopped,"u":updated_by})
+
+        row=conn.execute(text("""SELECT
+          p.id plan_id,p.nombre,p.numero_personas personas,p.equipo_detenido,
+          CASE
+            WHEN p.equipo_detenido IS TRUE THEN 'EQUIPO DETENIDO'
+            WHEN p.equipo_detenido IS FALSE THEN 'OPERANDO'
+            ELSE 'SIN CLASIFICAR'
+          END condicion
           FROM mantenimiento.plan_trabajo p
-          LEFT JOIN mantenimiento.clasificacion_plan cp ON cp.plan_trabajo_id=p.id WHERE p.id=:p"""),
-          {"p":plan_id}).mappings().one()
+          WHERE p.id=:p"""),{"p":plan_id}).mappings().one()
+
     return dict(row)
