@@ -1,5 +1,5 @@
 import {useEffect,useState} from 'react'
-import {getCapacity} from '../api'
+import {getCapacity,getMonthSummary} from '../api'
 
 const PRESETS=[
  {label:'Semana 1',from:'2026-09-01',to:'2026-09-07'},
@@ -9,42 +9,76 @@ const PRESETS=[
  {label:'Cierre mes',from:'2026-09-29',to:'2026-09-30'}
 ]
 
+const SPECS=[
+ {code:'MEC',name:'Mecánica'},
+ {code:'ELE',name:'Eléctrica'},
+ {code:'SER',name:'Servicios'},
+ {code:'MET',name:'Metrología'}
+]
+
 export default function ImportPanel({onCapacity,initialWeek}){
  const [from,setFrom]=useState(initialWeek?.from||'2026-09-01')
  const [to,setTo]=useState(initialWeek?.to||'2026-09-07')
- const [status,setStatus]=useState(''),[busy,setBusy]=useState(false)
+ const [summary,setSummary]=useState(null)
+ const [busy,setBusy]=useState(false)
+ const [error,setError]=useState('')
 
- async function calculate(nextFrom=from,nextTo=to){
-  if(!nextFrom||!nextTo)return setStatus('Selecciona el rango semanal')
+ async function selectWeek(p){
   try{
-   setBusy(true);setStatus('Calculando capacidad...')
-   const r=await getCapacity(nextFrom,nextTo)
-   onCapacity(r,{from:nextFrom,to:nextTo})
-   setStatus('Capacidad actualizada desde la programación de turnos')
-  }catch(e){setStatus(e.message)}finally{setBusy(false)}
+   setBusy(true);setError('')
+   setFrom(p.from);setTo(p.to)
+   const r=await getCapacity(p.from,p.to)
+   onCapacity(r,{from:p.from,to:p.to})
+  }catch(e){setError(e.message)}finally{setBusy(false)}
  }
 
- function usePreset(p){
-  setFrom(p.from);setTo(p.to);calculate(p.from,p.to)
- }
+ useEffect(()=>{
+  const initial=PRESETS.find(p=>p.from===(initialWeek?.from||from)&&p.to===(initialWeek?.to||to))||PRESETS[0]
+  selectWeek(initial)
+  getMonthSummary(2026,9).then(setSummary).catch(e=>setError(e.message))
+ },[])
 
- useEffect(()=>{calculate(initialWeek?.from||from,initialWeek?.to||to)},[])
-
- return <section className="panel week-panel">
+ return <section className="panel week-panel compact-start">
   <div className="section-head">
-   <div><span className="section-kicker">PASO 1</span><h2>Semana a programar</h2><p>El sistema suma las horas reales de los turnos y protege 20% como reserva operativa.</p></div>
+   <div>
+    <span className="section-kicker">PASO 1</span>
+    <h2>Selecciona la semana</h2>
+    <p>Elige la semana y revisa rápidamente la carga mensual antes de programar.</p>
+   </div>
    <span className="month-chip">SEPTIEMBRE 2026</span>
   </div>
 
-  <div className="week-presets">
-   {PRESETS.map(p=><button key={p.label} className={from===p.from&&to===p.to?'active':''} onClick={()=>usePreset(p)}>{p.label}<small>{p.from.slice(8)}–{p.to.slice(8)} sep</small></button>)}
+  <div className="week-presets clean-weeks">
+   {PRESETS.map(p=><button
+    key={p.label}
+    className={from===p.from&&to===p.to?'active':''}
+    onClick={()=>selectWeek(p)}
+    disabled={busy}
+   >
+    <b>{p.label}</b>
+    <small>{p.from.slice(8)}–{p.to.slice(8)} sep</small>
+   </button>)}
   </div>
 
-  <div className="week-row">
-   <label>Desde<input type="date" value={from} onChange={e=>setFrom(e.target.value)}/></label>
-   <label>Hasta<input type="date" value={to} onChange={e=>setTo(e.target.value)}/></label>
-   <button className="primary" onClick={()=>calculate()} disabled={busy}>{busy?'Calculando...':'Actualizar H-H'}</button>
-   <span className="inline-status">{status}</span>
+  <div className="month-overview">
+   {SPECS.map(s=>{
+    const x=summary?.specialties?.[s.code]||{}
+    return <article key={s.code} className="overview-card">
+     <div className="overview-title"><span>{s.code}</span><b>{s.name}</b></div>
+     <div className="overview-main">{Number(x.total_orders||0)}<small>OT totales</small></div>
+     <div className="overview-stats">
+      <div><span>H-H</span><b>{Number(x.hh_total||0).toFixed(1)}</b></div>
+      <div><span>Pend.</span><b>{Number(x.pending||0)}</b></div>
+      <div><span>Final.</span><b>{Number(x.finalized||0)}</b></div>
+     </div>
+    </article>
+   })}
   </div>
+
+  {summary?.totals&&<div className="overview-foot">
+   <b>{Number(summary.totals.total_orders||0)} OT cargadas</b>
+   <span>{Number(summary.totals.hh_total||0).toFixed(1)} H-H calculadas con personal ya definido</span>
+  </div>}
+  {error&&<div className="inline-error">{error}</div>}
  </section>
 }
