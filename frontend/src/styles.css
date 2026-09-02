@@ -439,3 +439,30 @@ tbody tr:hover{background:#f9fbfd}
 .operating-empty p{margin:0;color:var(--muted);font-size:9px;line-height:1.4;max-width:720px}
 .operating-empty button{white-space:nowrap;font-size:10px;font-weight:800}
 @media(max-width:700px){.operating-empty{flex-direction:column;align-items:flex-start}.operating-empty button{width:100%}}
+
+
+/* Programación semanal simplificada */
+.compact-start{padding-bottom:16px}
+.clean-weeks{margin-top:14px}
+.clean-weeks button{min-height:66px;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:3px}
+.clean-weeks button b{font-size:12px}
+.month-overview{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:16px}
+.overview-card{border:1px solid var(--border);border-radius:12px;background:#fff;padding:13px;min-width:0}
+.overview-title{display:flex;align-items:center;gap:8px}
+.overview-title span{display:inline-grid;place-items:center;min-width:31px;height:25px;border-radius:7px;background:var(--blue-soft);color:var(--blue-dark);font-size:9px;font-weight:900}
+.overview-title b{font-size:11px}
+.overview-main{font-size:26px;font-weight:900;margin:13px 0 10px;color:var(--ink)}
+.overview-main small{display:block;margin-top:2px;font-size:8px;font-weight:800;text-transform:uppercase;color:var(--muted);letter-spacing:.35px}
+.overview-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding-top:9px;border-top:1px solid #edf1f5}
+.overview-stats div{min-width:0}
+.overview-stats span{display:block;font-size:7px;text-transform:uppercase;font-weight:900;color:var(--muted)}
+.overview-stats b{display:block;font-size:12px;margin-top:2px}
+.overview-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px;padding:9px 11px;background:#f7f9fc;border-radius:9px;color:var(--muted);font-size:9px}
+.overview-foot b{color:var(--ink)}
+.inline-error{margin-top:10px;padding:8px 10px;border-radius:8px;background:#fff2f2;border:1px solid #efcdcd;color:#9b4141;font-size:9px}
+.compact-capacity{grid-template-columns:repeat(3,1fr)}
+@media(max-width:1100px){.month-overview{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:650px){
+ .month-overview,.compact-capacity{grid-template-columns:1fr}
+ .overview-foot{align-items:flex-start;flex-direction:column}
+}
