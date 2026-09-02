@@ -43,9 +43,9 @@ def get_pending_definitions(*,year:int,month:int,specialty:str|None=None)->list[
       END AS condicion,
       MIN(v.area_nombre) AS area_ejemplo,
       MIN(v.activo_codigo) AS equipo_ejemplo
-    FROM mantenimiento.vw_pmp_calculado v
-    JOIN mantenimiento.plan_trabajo pt ON pt.id=v.plan_trabajo_id
-    LEFT JOIN mantenimiento.grupo_plan_trabajo g ON g.id=pt.grupo_id
+    FROM vw_pmp_calculado v
+    JOIN plan_trabajo pt ON pt.id=v.plan_trabajo_id
+    LEFT JOIN grupo_plan_trabajo g ON g.id=pt.grupo_id
     WHERE {' AND '.join(filters)}
     GROUP BY
       v.plan_trabajo_id,v.especialidad,v.plan_trabajo,g.nombre,
@@ -83,12 +83,12 @@ def define_plan(
 
     with get_engine().begin() as conn:
         plan=conn.execute(text("""SELECT id,tiempo_ejecucion_min,numero_personas,equipo_detenido
-          FROM mantenimiento.plan_trabajo
+          FROM plan_trabajo
           WHERE id=:id AND activo=true"""),{"id":plan_id}).mappings().one_or_none()
         if not plan:
             raise DefinitionError("Plan de trabajo no encontrado")
 
-        conn.execute(text("""UPDATE mantenimiento.plan_trabajo
+        conn.execute(text("""UPDATE plan_trabajo
           SET
             tiempo_ejecucion_min=CASE
               WHEN :t IS NOT NULL AND tiempo_ejecucion_min IS NULL THEN :t
@@ -109,7 +109,7 @@ def define_plan(
               WHEN equipo_detenido IS FALSE THEN 'OPERANDO'
               ELSE 'SIN CLASIFICAR'
             END AS condicion
-          FROM mantenimiento.plan_trabajo
+          FROM plan_trabajo
           WHERE id=:id"""),{"id":plan_id}).mappings().one()
 
     return {
