@@ -140,17 +140,6 @@ def import_team_food(filename:str,content:bytes,*,year:int|None=None,month:int|N
                 if existing is None or int(existing["id"])==int(rec["id"]):
                     plan_by_key[src["description_key"]]=dict(rec)
 
-        aliases=[]
-        for r in parsed["plans"].rows:
-            rec=plan_map.get((r["specialty"],r["plan_key"]))
-            if not rec:continue
-            aliases.append({"pid":int(rec["id"]),"alias":r["plan_key"]})
-            if r.get("description_key"):
-                aliases.append({"pid":int(rec["id"]),"alias":r["description_key"]})
-        aliases=list({x["alias"]:x for x in aliases}.values())
-        _execute_many(conn,"""INSERT INTO mantenimiento.plan_trabajo_alias(plan_trabajo_id,alias_normalizado)
-          VALUES(:pid,:alias) ON CONFLICT(alias_normalizado) DO UPDATE SET plan_trabajo_id=excluded.plan_trabajo_id""",aliases)
-
         plan_source={}
         for r in parsed["plans"].rows:
             plan_source[r["plan_key"]]=r
@@ -160,14 +149,10 @@ def import_team_food(filename:str,content:bytes,*,year:int|None=None,month:int|N
             if r["state"]!="HABILITADO":continue
             a=asset_map.get(str(r["asset_code"]).strip().upper());p=plan_by_key.get(r["plan_key"]);src=plan_source.get(r["plan_key"])
             if not a or not p:rejected+=1;continue
-            activity_rows.append({"aid":int(a["id"]),"pid":int(p["id"]),"sid":spec_ids[p["especialidad"]],
-                "time":src["execution_minutes"] if src else p["tiempo_ejecucion_min"],
-                "people":src["persons"] if src else p["numero_personas"],"iid":iid})
-        _execute_many(conn,"""INSERT INTO mantenimiento.actividad_maestra(activo_id,plan_trabajo_id,especialidad_id,tiempo_estandar_min,personas_requeridas,fuente_datos,importacion_id_ultima,activo,actualizado_en)
-          VALUES(:aid,:pid,:sid,:time,:people,'TEAM_FOOD',:iid,true,now())
+            activity_rows.append({"aid":int(a["id"]),"pid":int(p["id"]),"sid":spec_ids[p["especialidad"]],"iid":iid})
+        _execute_many(conn,"""INSERT INTO mantenimiento.actividad_maestra(activo_id,plan_trabajo_id,especialidad_id,fuente_datos,importacion_id_ultima,activo,actualizado_en)
+          VALUES(:aid,:pid,:sid,'TEAM_FOOD',:iid,true,now())
           ON CONFLICT(activo_id,plan_trabajo_id,especialidad_id) DO UPDATE SET
-          tiempo_estandar_min=COALESCE(excluded.tiempo_estandar_min,mantenimiento.actividad_maestra.tiempo_estandar_min),
-          personas_requeridas=COALESCE(excluded.personas_requeridas,mantenimiento.actividad_maestra.personas_requeridas),
           fuente_datos='TEAM_FOOD',importacion_id_ultima=excluded.importacion_id_ultima,activo=true,actualizado_en=now()""",activity_rows)
         processed+=len(activity_rows)
 
