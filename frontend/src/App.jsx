@@ -261,8 +261,13 @@ function WeeklyProgramming({year,month,dashboard}){
   const remaining=Math.max(0,target-selectedHH)
   const progress=target>0?Math.min(100,selectedHH/target*100):0
 
-  function toggle(row){
+  function toggle(row,event){
+    event?.preventDefault()
+    const pageY=window.scrollY
+    const scroller=event?.currentTarget?.closest('.v2-program-table')
+    const tableY=scroller?.scrollTop??0
     const id=Number(row.orden_mantenimiento_id)
+
     setError('');setMessage('')
     setSelected(prev=>{
       const next=new Set(prev)
@@ -272,8 +277,7 @@ function WeeklyProgramming({year,month,dashboard}){
         return next
       }
 
-      // Calcular contra el estado real de la selección, no contra un valor
-      // de un render anterior. Esto evita superar el 80% al seleccionar rápido.
+      // Calcular contra el estado real de la selección, no contra un render anterior.
       const currentHH=[...prev].reduce((sum,selectedId)=>sum+number(rowMap.get(selectedId)?.hh),0)
       const nextHH=currentHH+number(row.hh)
 
@@ -284,6 +288,16 @@ function WeeklyProgramming({year,month,dashboard}){
       next.add(id)
       setDirty(true)
       return next
+    })
+
+    // Mantener exactamente la posición en la que estabas trabajando.
+    requestAnimationFrame(()=>{
+      window.scrollTo({top:pageY,left:0,behavior:'auto'})
+      if(scroller)scroller.scrollTop=tableY
+      requestAnimationFrame(()=>{
+        window.scrollTo({top:pageY,left:0,behavior:'auto'})
+        if(scroller)scroller.scrollTop=tableY
+      })
     })
   }
 
@@ -310,8 +324,8 @@ function WeeklyProgramming({year,month,dashboard}){
       })
       setProgrammingId(r.programming_id)
       setDirty(false)
-      setMessage(`Programación guardada: ${fmt(r.hh_programmed,1)} H-H de ${fmt(r.hh_target,1)} H-H objetivo.`)
       await load()
+      setMessage(`Programación guardada: ${fmt(r.hh_programmed,1)} H-H de ${fmt(r.hh_target,1)} H-H objetivo.`)
     }catch(e){setError(e.message)}
     finally{setSaving(false)}
   }
@@ -326,7 +340,7 @@ function WeeklyProgramming({year,month,dashboard}){
   }
 
   function ActivityTable({rows,title,stopped}){
-    const visible=filtered(rows)
+    const visible=filtered(rows).filter(r=>!selected.has(Number(r.orden_mantenimiento_id)))
     return <section className={'v2-activity-section '+(stopped?'stopped':'operating')}>
       <div className="v2-activity-head">
         <div>
@@ -342,9 +356,8 @@ function WeeklyProgramming({year,month,dashboard}){
           <tbody>
           {visible.map(r=>{
             const id=Number(r.orden_mantenimiento_id)
-            const isSelected=selected.has(id)
-            return <tr key={id} className={isSelected?'v2-selected-row':''}>
-              <td>{isSelected?<Badge tone="ok">Esta semana</Badge>:<span className="v2-muted">Disponible</span>}</td>
+            return <tr key={id}>
+              <td><span className="v2-muted">Disponible</span></td>
               <td><b>{r.numero_ot||'SIN ASIGNAR'}</b></td>
               <td><Badge>{r.area_codigo||'—'}</Badge><small>{r.area_nombre||''}</small></td>
               <td><b>{r.activo_codigo}</b><small>{r.activo_descripcion}</small></td>
@@ -352,10 +365,57 @@ function WeeklyProgramming({year,month,dashboard}){
               <td><b>{r.numero_personas_efectivo}</b></td>
               <td>{fmt(r.tiempo_min,0)} min</td>
               <td><b>{fmt(r.hh,1)}</b></td>
-              <td><button className={isSelected?'v2-unselect':'v2-select'} onClick={()=>toggle(r)}>{isSelected?'Quitar':'Seleccionar'}</button></td>
+              <td><button type="button" className="v2-select" onClick={e=>toggle(r,e)}>Seleccionar</button></td>
             </tr>
           })}
           {!visible.length&&<tr><td colSpan="9" className="v2-empty">No hay actividades listas con estos filtros.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  }
+
+  const selectedRows=useMemo(
+    ()=>[...selected].map(id=>rowMap.get(Number(id))).filter(Boolean)
+      .sort((a,b)=>Number(a.requiere_parada)-Number(b.requiere_parada)
+        ||String(a.area_codigo||'').localeCompare(String(b.area_codigo||''))
+        ||String(a.numero_ot||'').localeCompare(String(b.numero_ot||''))),
+    [selected,rowMap]
+  )
+  const selectedOperatingHH=selectedRows.filter(r=>r.requiere_parada===false).reduce((sum,r)=>sum+number(r.hh),0)
+  const selectedStoppedHH=selectedRows.filter(r=>r.requiere_parada===true).reduce((sum,r)=>sum+number(r.hh),0)
+
+  function SelectedTable(){
+    return <section className="v2-selected-section">
+      <div className="v2-selected-head">
+        <div>
+          <span className="v2-kicker">PROGRAMACIÓN EN CONSTRUCCIÓN</span>
+          <h3>Actividades seleccionadas para esta semana</h3>
+          <p>Cada actividad que selecciones arriba se mueve automáticamente a esta tabla.</p>
+        </div>
+        <div className="v2-selected-totals">
+          <span><b>{selectedRows.length}</b> actividades</span>
+          <span><b>{fmt(selectedOperatingHH,1)}</b> H-H operando</span>
+          <span><b>{fmt(selectedStoppedHH,1)}</b> H-H detenido</span>
+          <span className="total"><b>{fmt(selectedHH,1)}</b> H-H total</span>
+        </div>
+      </div>
+      <div className="v2-table-wrap v2-selected-table">
+        <table>
+          <thead><tr><th>Condición</th><th>OT</th><th>Área</th><th>Equipo</th><th>Plan de trabajo</th><th>Personas</th><th>Tiempo</th><th>H-H</th><th>Acción</th></tr></thead>
+          <tbody>
+          {selectedRows.map(r=><tr key={r.orden_mantenimiento_id}>
+            <td>{r.requiere_parada?<Badge tone="stop">Equipo detenido</Badge>:<Badge tone="ok">Equipo funcionando</Badge>}</td>
+            <td><b>{r.numero_ot||'SIN ASIGNAR'}</b></td>
+            <td><Badge>{r.area_codigo||'—'}</Badge><small>{r.area_nombre||''}</small></td>
+            <td><b>{r.activo_codigo}</b><small>{r.activo_descripcion}</small></td>
+            <td><span className="v2-plan">{r.plan_trabajo}</span><small>{r.descripcion_grupo||''}</small></td>
+            <td><b>{r.numero_personas_efectivo}</b></td>
+            <td>{fmt(r.tiempo_min,0)} min</td>
+            <td><b>{fmt(r.hh,1)}</b></td>
+            <td><button type="button" className="v2-unselect" onClick={e=>toggle(r,e)}>Quitar</button></td>
+          </tr>)}
+          {!selectedRows.length&&<tr><td colSpan="9" className="v2-empty">Todavía no has seleccionado actividades para esta semana.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -371,10 +431,10 @@ function WeeklyProgramming({year,month,dashboard}){
 
       <div className="v2-week-selector">
         <div className="v2-week-buttons">
-          {weeks.map((w,i)=><button key={w.from} className={weekIndex===i?'active':''} onClick={()=>setWeekIndex(i)}><b>Semana {i+1}</b><span>{w.label}</span></button>)}
+          {weeks.map((w,i)=><button type="button" key={w.from} className={weekIndex===i?'active':''} onClick={()=>setWeekIndex(i)}><b>Semana {i+1}</b><span>{w.label}</span></button>)}
         </div>
         <div className="v2-specialty-buttons">
-          {SPECS.map(s=><button key={s} className={specialty===s?'active':''} onClick={()=>setSpecialty(s)}><b>{s}</b><span>{SPEC_NAMES[s]}</span></button>)}
+          {SPECS.map(s=><button type="button" key={s} className={specialty===s?'active':''} onClick={()=>setSpecialty(s)}><b>{s}</b><span>{SPEC_NAMES[s]}</span></button>)}
         </div>
       </div>
     </section>
@@ -413,6 +473,8 @@ function WeeklyProgramming({year,month,dashboard}){
       <ActivityTable rows={data?.stopped||[]} title="Requiere equipo detenido" stopped={true}/>
     </section>
 
+    <SelectedTable/>
+
     <section className="v2-save-program">
       <div className="v2-save-program-copy">
         <span className="v2-kicker">CIERRE DE PROGRAMACIÓN</span>
@@ -427,9 +489,9 @@ function WeeklyProgramming({year,month,dashboard}){
         {message&&<div className="v2-success v2-success-bottom">{message}</div>}
       </div>
       <div className="v2-report-actions">
-        <button className="v2-primary" disabled={saving||!selected.size||selectedHH>target+.001} onClick={save}>{saving?'Guardando...':'Guardar programación'}</button>
-        <button disabled={!programmingId||dirty} onClick={()=>report('xlsx')}>Reporte Excel</button>
-        <button disabled={!programmingId||dirty} onClick={()=>report('pdf')}>Reporte PDF</button>
+        <button type="button" className="v2-primary" disabled={saving||!selected.size||selectedHH>target+.001} onClick={save}>{saving?'Guardando...':'Guardar programación'}</button>
+        <button type="button" disabled={!programmingId||dirty} onClick={()=>report('xlsx')}>Reporte Excel</button>
+        <button type="button" disabled={!programmingId||dirty} onClick={()=>report('pdf')}>Reporte PDF</button>
       </div>
     </section>
   </div>
