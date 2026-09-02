@@ -73,7 +73,15 @@ def parse_team_food(content:bytes)->dict[str,ParsedWorkbook]:
             persons=optional_float(cell_by_header(row,m,"NumeroPersonas","Número de Personas"))
             execution=optional_float(cell_by_header(row,m,"TiempoEjecucion"))
             stop=optional_float(cell_by_header(row,m,"TiempoParada"))
-            condition="SIN CLASIFICAR"
+            equipment_stopped=normalize_text(cell_by_header(
+                row,m,"EquipoDetenido","Equipo Detenido","RequiereEquipoDetenido"
+            ))
+            if equipment_stopped in {"SI","SÍ","YES","TRUE","1"}:
+                condition="EQUIPO DETENIDO"
+            elif equipment_stopped in {"NO","FALSE","0"}:
+                condition="OPERANDO"
+            else:
+                condition="SIN CLASIFICAR"
             description=str(cell_by_header(row,m,"DescripcionPlanTrabaj","DescripcionPlanTrabajo") or plan).strip()
             out["plans"].rows.append({
                 "excel_row":n,"specialty":spec,"group_code":scalar_text(group),
