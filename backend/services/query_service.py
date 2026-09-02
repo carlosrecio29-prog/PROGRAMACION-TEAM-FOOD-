@@ -98,10 +98,10 @@ def get_master_status():
           (SELECT count(*) FROM mantenimiento.activo WHERE activo=true) activos,
           (SELECT count(*) FROM mantenimiento.plan_trabajo WHERE activo=true) planes,
           (SELECT count(*) FROM mantenimiento.actividad_maestra WHERE activo=true) actividades,
-          (SELECT count(*) FROM mantenimiento.plan_trabajo p LEFT JOIN mantenimiento.clasificacion_plan cp ON cp.plan_trabajo_id=p.id
-            WHERE p.activo=true AND COALESCE(cp.personas_usar,p.personas_defecto) IS NULL) planes_sin_personas,
-          (SELECT count(*) FROM mantenimiento.plan_trabajo p LEFT JOIN mantenimiento.clasificacion_plan cp ON cp.plan_trabajo_id=p.id
-            WHERE p.activo=true AND COALESCE(cp.condicion,'SIN CLASIFICAR')='SIN CLASIFICAR') planes_sin_condicion""")).mappings().one()
+          (SELECT count(*) FROM mantenimiento.plan_trabajo p
+            WHERE p.activo=true AND p.numero_personas IS NULL) planes_sin_personas,
+          (SELECT count(*) FROM mantenimiento.plan_trabajo p
+            WHERE p.activo=true AND p.equipo_detenido IS NULL) planes_sin_condicion""")).mappings().one()
         last=conn.execute(text("""SELECT estado,anio,mes,filas_leidas,filas_procesadas,mensaje,iniciado_en,finalizado_en
           FROM mantenimiento.sincronizacion_fuente_maestra ORDER BY iniciado_en DESC LIMIT 1""")).mappings().one_or_none()
     return {"latest_period":dict(period) if period else None,"counts":dict(counts),"last_sync":dict(last) if last else None}
