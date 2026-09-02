@@ -90,3 +90,35 @@ export async function getV2Pmp({year=2026,month=9,specialty='',area='',search=''
  if(search)qs.set('search',search)
  return check(await fetch(`/api/v2/pmp?${qs}`))
 }
+
+
+export async function getV2WeekProgramming(dateFrom,dateTo,specialty){
+ const qs=new URLSearchParams({date_from:dateFrom,date_to:dateTo,specialty})
+ return check(await fetch(`/api/v2/programming/week?${qs}`))
+}
+
+export async function saveV2WeekProgramming(payload){
+ return check(await fetch('/api/v2/programming',{
+  method:'POST',
+  headers:{'Content-Type':'application/json'},
+  body:JSON.stringify(payload)
+ }))
+}
+
+export async function downloadV2WeeklyReport(programmingId,format='pdf'){
+ const res=await fetch(`/api/v2/programming/${programmingId}/export.${format}`)
+ if(!res.ok){
+  let detail=`HTTP ${res.status}`
+  try{const b=await res.json();detail=b.detail||JSON.stringify(b)}catch{}
+  throw new Error(detail)
+ }
+ const blob=await res.blob()
+ const disposition=res.headers.get('content-disposition')||''
+ const match=disposition.match(/filename="?([^";]+)"?/i)
+ const filename=match?.[1]||`programacion_semanal.${format}`
+ const url=URL.createObjectURL(blob)
+ const a=document.createElement('a')
+ a.href=url;a.download=filename
+ document.body.appendChild(a);a.click();a.remove()
+ URL.revokeObjectURL(url)
+}
