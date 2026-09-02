@@ -77,9 +77,11 @@ def import_master_plans(filename,content):
             gid=conn.execute(text("""INSERT INTO mantenimiento.grupo_plan_trabajo(especialidad_id,nombre)
               VALUES(:s,:n) ON CONFLICT(especialidad_id,nombre) DO UPDATE SET activo=TRUE RETURNING id"""),{"s":sid,"n":r["group"]}).scalar_one()
             exists=_plan_id(conn,r["specialty"],r["plan_canonical"])
-            pid=conn.execute(text("""INSERT INTO mantenimiento.plan_trabajo(especialidad_id,grupo_id,nombre,nombre_canonico,personas_defecto)
+            pid=conn.execute(text("""INSERT INTO mantenimiento.plan_trabajo(especialidad_id,grupo_id,nombre,nombre_canonico,numero_personas)
               VALUES(:s,:g,:n,:c,:p) ON CONFLICT(especialidad_id,nombre_canonico) DO UPDATE SET
-              grupo_id=EXCLUDED.grupo_id,nombre=EXCLUDED.nombre,personas_defecto=EXCLUDED.personas_defecto,activo=TRUE RETURNING id"""),
+              grupo_id=EXCLUDED.grupo_id,nombre=EXCLUDED.nombre,
+              numero_personas=COALESCE(EXCLUDED.numero_personas,mantenimiento.plan_trabajo.numero_personas),
+              activo=TRUE RETURNING id"""),
               {"s":sid,"g":gid,"n":r["plan_raw"],"c":r["plan_canonical"],"p":r["persons"]}).scalar_one()
             conn.execute(text("""INSERT INTO mantenimiento.plan_trabajo_alias(plan_trabajo_id,alias_normalizado)
               VALUES(:p,:a) ON CONFLICT(alias_normalizado) DO UPDATE SET plan_trabajo_id=EXCLUDED.plan_trabajo_id"""),
@@ -94,13 +96,16 @@ def import_master_classification(filename,content):
         for r in parsed.rows:
             pid=_plan_id(conn,r["specialty"],r["plan_canonical"])
             if not pid:
-                rej+=1; _error(conn,iid,r["excel_row"],"clasificacion_plan",r["plan_raw"],"Plan de Trabajo",r["plan_raw"],"Plan no existe en maestro de planes"); continue
-            exists=conn.execute(text("SELECT id FROM mantenimiento.clasificacion_plan WHERE plan_trabajo_id=:p"),{"p":pid}).scalar_one_or_none()
-            conn.execute(text("""INSERT INTO mantenimiento.clasificacion_plan(plan_trabajo_id,condicion,personas_usar,observacion)
-              VALUES(:p,:c,:per,:o) ON CONFLICT(plan_trabajo_id) DO UPDATE SET condicion=EXCLUDED.condicion,
-              personas_usar=EXCLUDED.personas_usar,observacion=EXCLUDED.observacion,actualizado_en=NOW()"""),
-              {"p":pid,"c":r["condition"],"per":r["persons"],"o":r["observation"]})
-            upd += 1 if exists else 0; ins += 0 if exists else 1
+                rej+=1; _error(conn,iid,r["excel_row"],"plan_trabajo",r["plan_raw"],"Plan de Trabajo",r["plan_raw"],"Plan no existe en maestro de planes"); continue
+            exists=conn.execute(text("SELECT id FROM mantenimiento.plan_trabajo WHERE id=:p"),{"p":pid}).scalar_one_or_none()
+            stopped=True if r["condition"]=="EQUIPO DETENIDO" else False if r["condition"]=="OPERANDO" else None
+            conn.execute(text("""UPDATE mantenimiento.plan_trabajo
+              SET numero_personas=COALESCE(:per,numero_personas),
+                  equipo_detenido=COALESCE(:stopped,equipo_detenido),
+                  actualizado_por='IMPORTACION_MAESTRO'
+              WHERE id=:p"""),
+              {"p":pid,"per":r["persons"],"stopped":stopped})
+            upd += 1 if exists else 0
         return _finish(conn,iid,len(parsed.rows),ins,upd,rej,parsed.warnings)
 
 def import_master_personnel_turns(filename,content):
