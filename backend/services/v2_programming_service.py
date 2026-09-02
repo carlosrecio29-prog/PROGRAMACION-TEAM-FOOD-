@@ -101,14 +101,17 @@ def get_week_programming(*,date_from:date,date_to:date,specialty:str)->dict[str,
             FROM candidate c
             LEFT JOIN programacion.programacion_item_v2 current_item
               ON current_item.orden_mantenimiento_id=c.orden_mantenimiento_id
-             AND current_item.programacion_id=:programming_id
+             AND current_item.programacion_id=CAST(:programming_id AS bigint)
             WHERE NOT EXISTS (
               SELECT 1
               FROM programacion.programacion_item_v2 other_item
               JOIN programacion.programacion_semanal_v2 other_program
                 ON other_program.id=other_item.programacion_id
               WHERE other_item.orden_mantenimiento_id=c.orden_mantenimiento_id
-                AND (:programming_id IS NULL OR other_program.id<>:programming_id)
+                AND (
+                  CAST(:programming_id AS bigint) IS NULL
+                  OR other_program.id<>CAST(:programming_id AS bigint)
+                )
             )
             ORDER BY c.area_codigo,c.numero_ot NULLS LAST,c.activo_codigo,c.plan_trabajo
         """),{
@@ -169,7 +172,7 @@ def save_week_programming(
               ,2) AS hh
             FROM programacion.orden_mantenimiento o
             JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
-            WHERE o.id=ANY(:ids)
+            WHERE o.id=ANY(CAST(:ids AS bigint[]))
               AND o.periodo=date_trunc('month',CAST(:date_from AS date))::date
               AND o.especialidad=:specialty
               AND upper(COALESCE(o.estado,''))<>'FINALIZADO'
@@ -187,8 +190,11 @@ def save_week_programming(
             FROM programacion.programacion_item_v2 pi
             JOIN programacion.programacion_semanal_v2 ps ON ps.id=pi.programacion_id
             JOIN programacion.orden_mantenimiento o ON o.id=pi.orden_mantenimiento_id
-            WHERE pi.orden_mantenimiento_id=ANY(:ids)
-              AND (:current_id IS NULL OR ps.id<>:current_id)
+            WHERE pi.orden_mantenimiento_id=ANY(CAST(:ids AS bigint[]))
+              AND (
+                CAST(:current_id AS bigint) IS NULL
+                OR ps.id<>CAST(:current_id AS bigint)
+              )
             LIMIT 10
         """),{"ids":unique_ids,"current_id":current_id}).mappings().all()
         if conflicts:
