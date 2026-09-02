@@ -166,3 +166,9 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
   .v2-week-buttons,.v2-specialty-buttons,.v2-capacity-cards,.v2-program-toolbar>div:last-child{grid-template-columns:1fr}
   .v2-report-actions{flex-direction:column;align-items:stretch}.v2-report-actions button{width:100%}
 }
+
+.v2-save-program-copy{min-width:0;flex:1}
+.v2-save-summary{display:flex;gap:8px;flex-wrap:wrap;margin-top:9px}
+.v2-save-summary span{border:1px solid var(--line);background:#f8fafc;border-radius:999px;padding:5px 8px;font-size:8px;color:var(--muted)}
+.v2-save-summary b{color:var(--ink)}
+.v2-error-bottom,.v2-success-bottom{margin-bottom:0}
