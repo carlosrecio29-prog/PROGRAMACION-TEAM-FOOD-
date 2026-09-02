@@ -83,9 +83,6 @@ def import_master_plans(filename,content):
               numero_personas=COALESCE(EXCLUDED.numero_personas,mantenimiento.plan_trabajo.numero_personas),
               activo=TRUE RETURNING id"""),
               {"s":sid,"g":gid,"n":r["plan_raw"],"c":r["plan_canonical"],"p":r["persons"]}).scalar_one()
-            conn.execute(text("""INSERT INTO mantenimiento.plan_trabajo_alias(plan_trabajo_id,alias_normalizado)
-              VALUES(:p,:a) ON CONFLICT(alias_normalizado) DO UPDATE SET plan_trabajo_id=EXCLUDED.plan_trabajo_id"""),
-              {"p":pid,"a":r["plan_canonical"]})
             upd += 1 if exists else 0; ins += 0 if exists else 1
         return _finish(conn,iid,len(parsed.rows),ins,upd,rej,parsed.warnings)
 
