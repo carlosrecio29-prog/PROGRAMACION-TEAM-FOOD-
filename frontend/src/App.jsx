@@ -271,9 +271,14 @@ function WeeklyProgramming({year,month,dashboard}){
         setDirty(true)
         return next
       }
-      const nextHH=selectedHH+number(row.hh)
+
+      // Calcular contra el estado real de la selección, no contra un valor
+      // de un render anterior. Esto evita superar el 80% al seleccionar rápido.
+      const currentHH=[...prev].reduce((sum,selectedId)=>sum+number(rowMap.get(selectedId)?.hh),0)
+      const nextHH=currentHH+number(row.hh)
+
       if(nextHH>target+.001){
-        setError(`No se puede seleccionar: llegarías a ${fmt(nextHH,1)} H-H y la meta del 80% es ${fmt(target,1)} H-H.`)
+        setError(`No se puede seleccionar esta actividad: llegarías a ${fmt(nextHH,1)} H-H y la meta máxima es ${fmt(target,1)} H-H.`)
         return prev
       }
       next.add(id)
@@ -409,13 +414,20 @@ function WeeklyProgramming({year,month,dashboard}){
     </section>
 
     <section className="v2-save-program">
-      <div>
+      <div className="v2-save-program-copy">
         <span className="v2-kicker">CIERRE DE PROGRAMACIÓN</span>
         <h3>{dirty?'Hay cambios sin guardar':programmingId?'Semana guardada':'Guarda la selección de esta semana'}</h3>
         <p>El reporte mostrará la capacidad, la meta del 80%, la reserva del 20% y las órdenes que el ingeniero debe responder.</p>
+        <div className="v2-save-summary">
+          <span><b>{fmt(selectedHH,1)}</b> H-H seleccionadas</span>
+          <span><b>{fmt(target,1)}</b> H-H meta</span>
+          <span><b>{fmt(remaining,1)}</b> H-H faltantes</span>
+        </div>
+        {error&&<div className="v2-error v2-error-bottom">{error}</div>}
+        {message&&<div className="v2-success v2-success-bottom">{message}</div>}
       </div>
       <div className="v2-report-actions">
-        <button className="v2-primary" disabled={saving||!selected.size} onClick={save}>{saving?'Guardando...':'Guardar programación'}</button>
+        <button className="v2-primary" disabled={saving||!selected.size||selectedHH>target+.001} onClick={save}>{saving?'Guardando...':'Guardar programación'}</button>
         <button disabled={!programmingId||dirty} onClick={()=>report('xlsx')}>Reporte Excel</button>
         <button disabled={!programmingId||dirty} onClick={()=>report('pdf')}>Reporte PDF</button>
       </div>
