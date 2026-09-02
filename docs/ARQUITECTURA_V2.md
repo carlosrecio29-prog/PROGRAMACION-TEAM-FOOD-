@@ -113,6 +113,16 @@ Turnos base:
 
 También existen códigos adicionales y ausencias (VA, IN, DE, COMP, PERM).
 
+## Regla de área de equipos
+
+En los códigos de activos de Barranquilla, el segundo segmento identifica el área:
+
+`BA-<AREA>-...`
+
+Ejemplo: `BA-EM-X-X-X` → `area_codigo = EM`.
+
+Este dato se calcula automáticamente y NO reemplaza `ubicacion`, porque `ubicacion` representa una referencia física más específica del equipo.
+
 ## Principio de diseño V2
 
 La nueva base debe ser mínima y comprensible.
