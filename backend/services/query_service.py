@@ -10,9 +10,9 @@ def get_capacity(date_from: date, date_to: date) -> dict[str, Any]:
         rows=conn.execute(text("""SELECT e.codigo AS especialidad,
         COUNT(DISTINCT t.id)::int AS tecnicos,
         COALESCE(SUM(tu.horas_disponibles),0)::float AS hh_disponibles
-        FROM mantenimiento.especialidad e LEFT JOIN mantenimiento.tecnico t ON t.especialidad_id=e.id AND t.activo=TRUE
-        LEFT JOIN mantenimiento.programacion_tecnico pt ON pt.tecnico_id=t.id AND pt.fecha BETWEEN :desde AND :hasta
-        LEFT JOIN mantenimiento.turno tu ON tu.id=pt.turno_id WHERE e.codigo IN ('MEC','ELE','MET','SER')
+        FROM especialidad e LEFT JOIN tecnico t ON t.especialidad_id=e.id AND t.activo=TRUE
+        LEFT JOIN programacion_tecnico pt ON pt.tecnico_id=t.id AND pt.fecha BETWEEN :desde AND :hasta
+        LEFT JOIN turno tu ON tu.id=pt.turno_id WHERE e.codigo IN ('MEC','ELE','MET','SER')
         GROUP BY e.codigo ORDER BY e.codigo"""),{"desde":date_from,"hasta":date_to}).mappings().all()
     return {r["especialidad"]:{"technicians":int(r["tecnicos"] or 0),"available":float(r["hh_disponibles"] or 0),"target":float(r["hh_disponibles"] or 0)*.8,"standby":float(r["hh_disponibles"] or 0)*.2} for r in rows}
 
@@ -24,22 +24,22 @@ def get_candidates(*,specialty:str,year:int|None=None,month:int|None=None,area:s
     if year is not None:filters.append("v.anio=:anio");params["anio"]=year
     if month is not None:filters.append("v.mes=:mes");params["mes"]=month
     if year is None and month is None:
-        filters.append("(b.pmp_id is not null or (v.anio,v.mes)=(select pm.anio,pm.mes from mantenimiento.periodo_mensual pm order by pm.anio desc,pm.mes desc limit 1))")
+        filters.append("(b.pmp_id is not null or (v.anio,v.mes)=(select pm.anio,pm.mes from periodo_mensual pm order by pm.anio desc,pm.mes desc limit 1))")
     if area:filters.append("LOWER(COALESCE(v.area_nombre,''))=LOWER(:area)");params["area"]=area
     if criticality:filters.append("v.criticidad=:criticidad");params["criticidad"]=criticality.upper()
     if condition:filters.append("v.condicion=:condicion");params["condicion"]=condition.upper()
     if plan_search:filters.append("LOWER(v.plan_trabajo) LIKE LOWER(:plan_search)");params["plan_search"]=f"%{plan_search}%"
-    used="""not exists(select 1 from mantenimiento.programacion_item ux
-      join mantenimiento.programacion_version uv on uv.id=ux.programacion_version_id and uv.es_actual=true
+    used="""not exists(select 1 from programacion_item ux
+      join programacion_version uv on uv.id=ux.programacion_version_id and uv.es_actual=true
       where ux.pmp_id=v.pmp_id)"""
     if origin=="MES":filters.extend(["b.pmp_id is null",used])
     elif origin=="BACKLOG":filters.append("b.pmp_id is not null")
     else:filters.append(f"(b.pmp_id is not null or {used})")
     sql=f"""SELECT v.*,p.titulo AS actividad,
       CASE WHEN b.pmp_id IS NOT NULL THEN 'BACKLOG' ELSE 'MES' END AS origen
-    FROM mantenimiento.vw_pmp_calculado v
-    JOIN mantenimiento.pmp p ON p.id=v.pmp_id
-    LEFT JOIN mantenimiento.vw_backlog b ON b.pmp_id=v.pmp_id
+    FROM vw_pmp_calculado v
+    JOIN pmp p ON p.id=v.pmp_id
+    LEFT JOIN vw_backlog b ON b.pmp_id=v.pmp_id
     WHERE {' AND '.join(filters)}
     ORDER BY CASE WHEN b.pmp_id IS NOT NULL THEN 0 ELSE 1 END,
       CASE v.criticidad WHEN 'A' THEN 1 WHEN 'B' THEN 2 WHEN 'C' THEN 3 ELSE 4 END,
@@ -50,19 +50,19 @@ def get_candidates(*,specialty:str,year:int|None=None,month:int|None=None,area:s
 def get_month_reconciliation(*,year:int,month:int)->dict[str,Any]:
     with get_engine().connect() as conn:
         stored=conn.execute(text("""SELECT resumen_especialidad
-          FROM mantenimiento.sincronizacion_fuente_maestra
+          FROM sincronizacion_fuente_maestra
           WHERE anio=:y AND mes=:m
           ORDER BY iniciado_en DESC LIMIT 1"""),{"y":year,"m":month}).scalar_one_or_none() or {}
 
         current_rows=conn.execute(text("""SELECT v.especialidad,COUNT(*)::int AS disponibles
-          FROM mantenimiento.vw_pmp_calculado v
-          LEFT JOIN mantenimiento.vw_backlog b ON b.pmp_id=v.pmp_id
+          FROM vw_pmp_calculado v
+          LEFT JOIN vw_backlog b ON b.pmp_id=v.pmp_id
           WHERE v.anio=:y AND v.mes=:m
             AND v.estado_orden<>'FINALIZADA'
             AND b.pmp_id IS NULL
             AND NOT EXISTS(
-              SELECT 1 FROM mantenimiento.programacion_item ux
-              JOIN mantenimiento.programacion_version uv
+              SELECT 1 FROM programacion_item ux
+              JOIN programacion_version uv
                 ON uv.id=ux.programacion_version_id AND uv.es_actual=true
               WHERE ux.pmp_id=v.pmp_id
             )
@@ -89,21 +89,21 @@ def get_import_history(limit:int=30):
     with get_engine().connect() as conn:
         return [dict(r) for r in conn.execute(text("""SELECT id,tipo,nombre_archivo,fecha_importacion,estado,
         filas_leidas,filas_insertadas,filas_actualizadas,filas_rechazadas,mensaje
-        FROM mantenimiento.importacion ORDER BY fecha_importacion DESC LIMIT :limit"""),{"limit":limit}).mappings().all()]
+        FROM importacion ORDER BY fecha_importacion DESC LIMIT :limit"""),{"limit":limit}).mappings().all()]
 
 def get_master_status():
     with get_engine().connect() as conn:
-        period=conn.execute(text("SELECT anio,mes FROM mantenimiento.periodo_mensual ORDER BY anio DESC,mes DESC LIMIT 1")).mappings().one_or_none()
+        period=conn.execute(text("SELECT anio,mes FROM periodo_mensual ORDER BY anio DESC,mes DESC LIMIT 1")).mappings().one_or_none()
         counts=conn.execute(text("""SELECT
-          (SELECT count(*) FROM mantenimiento.activo WHERE activo=true) activos,
-          (SELECT count(*) FROM mantenimiento.plan_trabajo WHERE activo=true) planes,
-          (SELECT count(*) FROM mantenimiento.actividad_maestra WHERE activo=true) actividades,
-          (SELECT count(*) FROM mantenimiento.plan_trabajo p
+          (SELECT count(*) FROM activo WHERE activo=true) activos,
+          (SELECT count(*) FROM plan_trabajo WHERE activo=true) planes,
+          (SELECT count(*) FROM actividad_maestra WHERE activo=true) actividades,
+          (SELECT count(*) FROM plan_trabajo p
             WHERE p.activo=true AND p.numero_personas IS NULL) planes_sin_personas,
-          (SELECT count(*) FROM mantenimiento.plan_trabajo p
+          (SELECT count(*) FROM plan_trabajo p
             WHERE p.activo=true AND p.equipo_detenido IS NULL) planes_sin_condicion""")).mappings().one()
         last=conn.execute(text("""SELECT estado,anio,mes,filas_leidas,filas_procesadas,mensaje,iniciado_en,finalizado_en
-          FROM mantenimiento.sincronizacion_fuente_maestra ORDER BY iniciado_en DESC LIMIT 1""")).mappings().one_or_none()
+          FROM sincronizacion_fuente_maestra ORDER BY iniciado_en DESC LIMIT 1""")).mappings().one_or_none()
     return {"latest_period":dict(period) if period else None,"counts":dict(counts),"last_sync":dict(last) if last else None}
 
 
@@ -117,7 +117,7 @@ def get_month_summary(*,year:int,month:int)->dict[str,Any]:
             COUNT(*) FILTER (WHERE v.estado_orden<>'FINALIZADA')::int AS pending,
             COALESCE(SUM(v.hh_pmp) FILTER (WHERE v.hh_pmp IS NOT NULL),0)::float AS hh_total,
             COUNT(*) FILTER (WHERE v.hh_pmp IS NULL)::int AS hh_pending
-          FROM mantenimiento.vw_pmp_calculado v
+          FROM vw_pmp_calculado v
           WHERE v.anio=:y AND v.mes=:m
           GROUP BY v.especialidad
         """),{"y":year,"m":month}).mappings().all()
