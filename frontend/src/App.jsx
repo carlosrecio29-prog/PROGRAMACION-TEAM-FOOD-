@@ -1,7 +1,8 @@
 import {useEffect,useMemo,useState} from 'react'
 import {
   getHealth,getV2Dashboard,getV2PendingPlans,saveV2PlanComplement,
-  getV2Technicians,saveV2TechnicianComplement,getV2Pmp
+  getV2Technicians,saveV2TechnicianComplement,getV2Pmp,
+  getV2WeekProgramming,saveV2WeekProgramming,downloadV2WeeklyReport
 } from './api'
 import './styles.css'
 
@@ -205,6 +206,223 @@ function Technicians({year,month,onChanged}){
   </section>
 }
 
+
+function monthWeeks(year,month){
+  const days=new Date(year,month,0).getDate()
+  const weeks=[]
+  for(let start=1;start<=days;start+=7){
+    const end=Math.min(start+6,days)
+    const from=`${year}-${String(month).padStart(2,'0')}-${String(start).padStart(2,'0')}`
+    const to=`${year}-${String(month).padStart(2,'0')}-${String(end).padStart(2,'0')}`
+    weeks.push({from,to,label:`${start}–${end} ${MONTHS[month-1]}`})
+  }
+  return weeks
+}
+
+function WeeklyProgramming({year,month,dashboard}){
+  const weeks=useMemo(()=>monthWeeks(year,month),[year,month])
+  const [weekIndex,setWeekIndex]=useState(0)
+  const [specialty,setSpecialty]=useState('MEC')
+  const [data,setData]=useState(null)
+  const [selected,setSelected]=useState(new Set())
+  const [search,setSearch]=useState('')
+  const [area,setArea]=useState('')
+  const [loading,setLoading]=useState(false)
+  const [saving,setSaving]=useState(false)
+  const [error,setError]=useState('')
+  const [message,setMessage]=useState('')
+  const [dirty,setDirty]=useState(false)
+  const [programmingId,setProgrammingId]=useState(null)
+
+  const week=weeks[Math.min(weekIndex,weeks.length-1)]||weeks[0]
+
+  async function load(){
+    if(!week)return
+    try{
+      setLoading(true);setError('');setMessage('')
+      const r=await getV2WeekProgramming(week.from,week.to,specialty)
+      setData(r)
+      setSelected(new Set((r.selected_ids||[]).map(Number)))
+      setProgrammingId(r.programming?.id||null)
+      setDirty(false)
+    }catch(e){setError(e.message)}
+    finally{setLoading(false)}
+  }
+
+  useEffect(()=>{setWeekIndex(0)},[month])
+  useEffect(()=>{load()},[week?.from,week?.to,specialty])
+
+  const allRows=useMemo(()=>[...(data?.operating||[]),...(data?.stopped||[])],[data])
+  const rowMap=useMemo(()=>new Map(allRows.map(r=>[Number(r.orden_mantenimiento_id),r])),[allRows])
+  const selectedHH=useMemo(()=>[...selected].reduce((sum,id)=>sum+number(rowMap.get(id)?.hh),0),[selected,rowMap])
+  const target=number(data?.capacity?.target)
+  const available=number(data?.capacity?.available)
+  const reserve=number(data?.capacity?.reserve)
+  const remaining=Math.max(0,target-selectedHH)
+  const progress=target>0?Math.min(100,selectedHH/target*100):0
+
+  function toggle(row){
+    const id=Number(row.orden_mantenimiento_id)
+    setError('');setMessage('')
+    setSelected(prev=>{
+      const next=new Set(prev)
+      if(next.has(id)){
+        next.delete(id)
+        setDirty(true)
+        return next
+      }
+      const nextHH=selectedHH+number(row.hh)
+      if(nextHH>target+.001){
+        setError(`No se puede seleccionar: llegarías a ${fmt(nextHH,1)} H-H y la meta del 80% es ${fmt(target,1)} H-H.`)
+        return prev
+      }
+      next.add(id)
+      setDirty(true)
+      return next
+    })
+  }
+
+  function filtered(rows){
+    const q=search.trim().toLowerCase()
+    return rows.filter(r=>{
+      if(area&&r.area_codigo!==area)return false
+      if(!q)return true
+      return String(r.numero_ot||'').toLowerCase().includes(q)||
+        String(r.activo_codigo||'').toLowerCase().includes(q)||
+        String(r.activo_descripcion||'').toLowerCase().includes(q)||
+        String(r.plan_trabajo||'').toLowerCase().includes(q)
+    })
+  }
+
+  async function save(){
+    if(!selected.size){setError('Selecciona al menos una orden para guardar la semana.');return}
+    try{
+      setSaving(true);setError('');setMessage('')
+      const r=await saveV2WeekProgramming({
+        date_from:week.from,date_to:week.to,specialty,
+        order_ids:[...selected],
+        created_by:'CARLOS ANDRÉS RECIO MUÑOZ'
+      })
+      setProgrammingId(r.programming_id)
+      setDirty(false)
+      setMessage(`Programación guardada: ${fmt(r.hh_programmed,1)} H-H de ${fmt(r.hh_target,1)} H-H objetivo.`)
+      await load()
+    }catch(e){setError(e.message)}
+    finally{setSaving(false)}
+  }
+
+  async function report(format){
+    if(!programmingId||dirty){
+      setError('Guarda la programación antes de generar el reporte.')
+      return
+    }
+    try{setError('');await downloadV2WeeklyReport(programmingId,format)}
+    catch(e){setError(e.message)}
+  }
+
+  function ActivityTable({rows,title,stopped}){
+    const visible=filtered(rows)
+    return <section className={'v2-activity-section '+(stopped?'stopped':'operating')}>
+      <div className="v2-activity-head">
+        <div>
+          <span className="v2-kicker">{stopped?'PARADA REQUERIDA':'EQUIPO OPERANDO'}</span>
+          <h3>{title}</h3>
+          <p>{stopped?'Actividades que necesitan el equipo detenido.':'Actividades que pueden ejecutarse con el equipo funcionando.'}</p>
+        </div>
+        <Badge tone={stopped?'stop':'ok'}>{visible.length} disponibles</Badge>
+      </div>
+      <div className="v2-table-wrap v2-program-table">
+        <table>
+          <thead><tr><th>Semana</th><th>OT</th><th>Área</th><th>Equipo</th><th>Plan de trabajo</th><th>Personas</th><th>Tiempo</th><th>H-H</th><th>Seleccionar</th></tr></thead>
+          <tbody>
+          {visible.map(r=>{
+            const id=Number(r.orden_mantenimiento_id)
+            const isSelected=selected.has(id)
+            return <tr key={id} className={isSelected?'v2-selected-row':''}>
+              <td>{isSelected?<Badge tone="ok">Esta semana</Badge>:<span className="v2-muted">Disponible</span>}</td>
+              <td><b>{r.numero_ot||'SIN ASIGNAR'}</b></td>
+              <td><Badge>{r.area_codigo||'—'}</Badge><small>{r.area_nombre||''}</small></td>
+              <td><b>{r.activo_codigo}</b><small>{r.activo_descripcion}</small></td>
+              <td><span className="v2-plan">{r.plan_trabajo}</span><small>{r.descripcion_grupo||''}</small></td>
+              <td><b>{r.numero_personas_efectivo}</b></td>
+              <td>{fmt(r.tiempo_min,0)} min</td>
+              <td><b>{fmt(r.hh,1)}</b></td>
+              <td><button className={isSelected?'v2-unselect':'v2-select'} onClick={()=>toggle(r)}>{isSelected?'Quitar':'Seleccionar'}</button></td>
+            </tr>
+          })}
+          {!visible.length&&<tr><td colSpan="9" className="v2-empty">No hay actividades listas con estos filtros.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  }
+
+  return <div className="v2-stack">
+    <section className="v2-panel">
+      <div className="v2-section-head">
+        <div><span className="v2-kicker">PROGRAMACIÓN SEMANAL</span><h3>Selecciona semana y especialidad</h3><p>Solo aparecen actividades con PlanTrabajo, Nº personas, TiempoParada y tiempo de ejecución listos.</p></div>
+        <Badge>{loading?'Calculando...':`${data?.capacity?.technicians||0} técnicos`}</Badge>
+      </div>
+
+      <div className="v2-week-selector">
+        <div className="v2-week-buttons">
+          {weeks.map((w,i)=><button key={w.from} className={weekIndex===i?'active':''} onClick={()=>setWeekIndex(i)}><b>Semana {i+1}</b><span>{w.label}</span></button>)}
+        </div>
+        <div className="v2-specialty-buttons">
+          {SPECS.map(s=><button key={s} className={specialty===s?'active':''} onClick={()=>setSpecialty(s)}><b>{s}</b><span>{SPEC_NAMES[s]}</span></button>)}
+        </div>
+      </div>
+    </section>
+
+    <section className="v2-capacity-panel">
+      <div className="v2-capacity-cards">
+        <div><span>H-H disponibles</span><b>{fmt(available,1)}</b><small>100% de capacidad</small></div>
+        <div className="target"><span>Meta programable</span><b>{fmt(target,1)}</b><small>80% que debes programar</small></div>
+        <div><span>Reserva</span><b>{fmt(reserve,1)}</b><small>20% correctivos, traslados e imprevistos</small></div>
+        <div className="selected"><span>H-H seleccionadas</span><b>{fmt(selectedHH,1)}</b><small>{selected.size} órdenes / actividades</small></div>
+        <div className={remaining<=.01?'complete':'remaining'}><span>{remaining<=.01?'Meta alcanzada':'Faltan para meta'}</span><b>{fmt(remaining,1)}</b><small>H-H</small></div>
+      </div>
+      <div className="v2-progress-block">
+        <div className="v2-progress-copy"><span>Avance hacia el 80%</span><b>{fmt(progress,1)}%</b></div>
+        <div className="v2-progress-track"><i style={{width:`${progress}%`}}/></div>
+        <div className="v2-progress-foot"><span>{fmt(selectedHH,1)} H-H programadas</span><span>Objetivo {fmt(target,1)} H-H</span></div>
+      </div>
+      {available===0&&<div className="v2-warning">Esta especialidad no tiene disponibilidad cargada para esta semana. Revisa la programación de técnicos.</div>}
+      {error&&<div className="v2-error">{error}</div>}
+      {message&&<div className="v2-success">{message}</div>}
+    </section>
+
+    <section className="v2-panel">
+      <div className="v2-program-toolbar">
+        <div><span className="v2-kicker">FILTROS</span><h3>Actividades listas para seleccionar</h3></div>
+        <div>
+          <select value={area} onChange={e=>setArea(e.target.value)}>
+            <option value="">Todas las áreas</option>
+            {(dashboard?.areas||[]).map(a=><option key={a.codigo} value={a.codigo}>{a.codigo} · {a.nombre||a.codigo}</option>)}
+          </select>
+          <input placeholder="Buscar OT, equipo o plan..." value={search} onChange={e=>setSearch(e.target.value)}/>
+        </div>
+      </div>
+
+      <ActivityTable rows={data?.operating||[]} title="Se puede ejecutar con el equipo funcionando" stopped={false}/>
+      <ActivityTable rows={data?.stopped||[]} title="Requiere equipo detenido" stopped={true}/>
+    </section>
+
+    <section className="v2-save-program">
+      <div>
+        <span className="v2-kicker">CIERRE DE PROGRAMACIÓN</span>
+        <h3>{dirty?'Hay cambios sin guardar':programmingId?'Semana guardada':'Guarda la selección de esta semana'}</h3>
+        <p>El reporte mostrará la capacidad, la meta del 80%, la reserva del 20% y las órdenes que el ingeniero debe responder.</p>
+      </div>
+      <div className="v2-report-actions">
+        <button className="v2-primary" disabled={saving||!selected.size} onClick={save}>{saving?'Guardando...':'Guardar programación'}</button>
+        <button disabled={!programmingId||dirty} onClick={()=>report('xlsx')}>Reporte Excel</button>
+        <button disabled={!programmingId||dirty} onClick={()=>report('pdf')}>Reporte PDF</button>
+      </div>
+    </section>
+  </div>
+}
+
 function Pmp({year,month,dashboard}){
   const [filters,setFilters]=useState({specialty:'',area:'',search:''})
   const [data,setData]=useState(null)
@@ -272,6 +490,7 @@ export default function App(){
   const titles={
     summary:['Resumen mensual','Estado de la información antes de empezar a programar.'],
     pending:['Completar datos','Solo aparecen datos que hacen falta en los planes usados este mes.'],
+    programming:['Programación semanal','Selecciona actividades por especialidad hasta completar la meta programable del 80%.'],
     pmp:['PMP del mes','Cartera preventiva exportada desde el software de mantenimiento.'],
     technicians:['Técnicos','Turnos, disponibilidad y especialidades del personal.']
   }
@@ -282,8 +501,9 @@ export default function App(){
       <nav>
         <button className={view==='summary'?'active':''} onClick={()=>setView('summary')}><span>01</span>Resumen</button>
         <button className={view==='pending'?'active':''} onClick={()=>setView('pending')}><span>02</span>Completar datos{number(dashboard?.pending?.planes_pendientes)>0&&<i>{dashboard.pending.planes_pendientes}</i>}</button>
-        <button className={view==='pmp'?'active':''} onClick={()=>setView('pmp')}><span>03</span>PMP del mes</button>
-        <button className={view==='technicians'?'active':''} onClick={()=>setView('technicians')}><span>04</span>Técnicos{number(dashboard?.summary?.tecnicos_sin_especialidad)>0&&<i>{dashboard.summary.tecnicos_sin_especialidad}</i>}</button>
+        <button className={view==='programming'?'active':''} onClick={()=>setView('programming')}><span>03</span>Programación semanal</button>
+        <button className={view==='pmp'?'active':''} onClick={()=>setView('pmp')}><span>04</span>PMP del mes</button>
+        <button className={view==='technicians'?'active':''} onClick={()=>setView('technicians')}><span>05</span>Técnicos{number(dashboard?.summary?.tecnicos_sin_especialidad)>0&&<i>{dashboard.summary.tecnicos_sin_especialidad}</i>}</button>
       </nav>
       <div className="v2-side-note"><small>Fuente principal</small><b>Software de mantenimiento</b><span>La app complementa únicamente los datos faltantes.</span></div>
       <div className="v2-profile"><span>CARLOS ANDRÉS RECIO MUÑOZ</span><small>C.E.K GLOBAL INSPECTION</small></div>
@@ -301,6 +521,7 @@ export default function App(){
       {error&&<div className="v2-error">{error}</div>}
       {view==='summary'&&<Summary data={dashboard} onGoPending={()=>setView('pending')}/>}
       {view==='pending'&&<PendingPlans year={year} month={month} onChanged={refresh}/>}
+      {view==='programming'&&<WeeklyProgramming year={year} month={month} dashboard={dashboard}/>}
       {view==='pmp'&&<Pmp year={year} month={month} dashboard={dashboard}/>}
       {view==='technicians'&&<Technicians year={year} month={month} onChanged={refresh}/>}
     </main>
