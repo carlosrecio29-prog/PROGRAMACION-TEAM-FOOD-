@@ -98,6 +98,11 @@ def define_plan(
               SET tiempo_ejecucion_min=:t,actualizado_por=:u
               WHERE id=:id"""),{"t":execution_minutes,"u":updated_by,"id":plan_id})
 
+        if people is not None:
+            conn.execute(text("""UPDATE mantenimiento.plan_trabajo
+              SET personas_defecto=:p,actualizado_por=:u
+              WHERE id=:id"""),{"p":people,"u":updated_by,"id":plan_id})
+
         if people is not None or condition is not None:
             current=conn.execute(text("""SELECT condicion,personas_usar
               FROM mantenimiento.clasificacion_plan WHERE plan_trabajo_id=:id"""),{"id":plan_id}).mappings().one_or_none()
