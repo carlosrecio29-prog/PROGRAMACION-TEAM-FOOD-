@@ -63,3 +63,22 @@ def test_team_food_deduplicates_only_repeated_ot():
     assert stats["unique_ot"]==2
     assert stats["repeated_extra_rows"]==1
     assert stats["pending_unique_ot"]==2
+
+
+def test_team_food_learns_equipo_detenido_from_master():
+    wb=Workbook()
+    ws=wb.active;ws.title="PLAN DE TRABAJO"
+    ws.append(["Grupo","DescripcionGrupo","PlanTrabajo","TiempoEjecucion","NumeroPersonas","TiempoParada","Especialidad","Estado","EquipoDetenido"])
+    ws.append([28,"BOMBA","RUTINA MECÁNICA",60,2,None,"MEC","Habilitado.","SI"])
+    b=BytesIO();wb.save(b)
+    parsed=parse_team_food(b.getvalue())
+    assert parsed["plans"].rows[0]["persons"]==2
+    assert parsed["plans"].rows[0]["condition"]=="EQUIPO DETENIDO"
+
+    wb=Workbook()
+    ws=wb.active;ws.title="PLAN DE TRABAJO"
+    ws.append(["Grupo","DescripcionGrupo","PlanTrabajo","TiempoEjecucion","NumeroPersonas","TiempoParada","Especialidad","Estado","EquipoDetenido"])
+    ws.append([28,"BOMBA","RUTINA MECÁNICA",60,1,None,"MEC","Habilitado.","NO"])
+    b=BytesIO();wb.save(b)
+    parsed=parse_team_food(b.getvalue())
+    assert parsed["plans"].rows[0]["condition"]=="OPERANDO"
