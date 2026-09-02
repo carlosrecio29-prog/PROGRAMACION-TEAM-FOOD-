@@ -13,7 +13,7 @@ from backend.services.import_service import (
     import_master_assets, import_master_classification, import_master_personnel_turns,
     import_master_plans, import_monthly_planning, import_order_states, import_technician_roster,
 )
-from backend.services.query_service import get_candidates, get_capacity, get_import_history, get_master_status, get_month_reconciliation
+from backend.services.query_service import get_candidates, get_capacity, get_import_history, get_master_status, get_month_reconciliation, get_month_summary
 from backend.services.team_food_service import import_team_food, learn_plan
 from backend.services.definition_service import (
     DefinitionError, define_plan, get_pending_definitions,
@@ -109,6 +109,10 @@ def candidates(specialty:str,year:int|None=None,month:int|None=Query(None,ge=1,l
 @app.get("/api/month-reconciliation")
 def month_reconciliation(year:int,month:int=Query(...,ge=1,le=12)):
     return get_month_reconciliation(year=year,month=month)
+
+@app.get("/api/month-summary")
+def month_summary(year:int,month:int=Query(...,ge=1,le=12)):
+    return get_month_summary(year=year,month=month)
 
 @app.get("/api/imports")
 def imports(limit:int=Query(30,ge=1,le=200)):return get_import_history(limit)
