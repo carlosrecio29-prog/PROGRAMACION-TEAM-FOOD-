@@ -32,23 +32,14 @@ def get_candidates(*,specialty:str,year:int|None=None,month:int|None=None,area:s
     used="""not exists(select 1 from mantenimiento.programacion_item ux
       join mantenimiento.programacion_version uv on uv.id=ux.programacion_version_id and uv.es_actual=true
       where ux.pmp_id=v.pmp_id)"""
-    backlog_available="""not exists(select 1 from mantenimiento.programacion_item bx
-      join mantenimiento.programacion_version bv on bv.id=bx.programacion_version_id and bv.es_actual=true
-      join mantenimiento.programacion_semanal bs on bs.id=bv.programacion_semanal_id
-      where bx.pmp_id=v.pmp_id and bs.estado<>'CERRADA')"""
     if origin=="MES":filters.extend(["b.pmp_id is null",used])
-    elif origin=="BACKLOG":filters.extend(["b.pmp_id is not null",backlog_available])
+    elif origin=="BACKLOG":filters.append("b.pmp_id is not null")
     else:filters.append(f"(b.pmp_id is not null or {used})")
     sql=f"""SELECT v.*,p.titulo AS actividad,
-      CASE WHEN b.pmp_id IS NOT NULL THEN 'BACKLOG' ELSE 'MES' END AS origen,
-      b.semana_origen_desde,b.semana_origen_hasta,
-      b.detalle AS backlog_detalle,
-      mne.codigo AS backlog_motivo_codigo,
-      mne.nombre AS backlog_motivo
+      CASE WHEN b.pmp_id IS NOT NULL THEN 'BACKLOG' ELSE 'MES' END AS origen
     FROM mantenimiento.vw_pmp_calculado v
     JOIN mantenimiento.pmp p ON p.id=v.pmp_id
     LEFT JOIN mantenimiento.vw_backlog b ON b.pmp_id=v.pmp_id
-    LEFT JOIN mantenimiento.motivo_no_ejecucion mne ON mne.id=b.motivo_no_ejecucion_id
     WHERE {' AND '.join(filters)}
     ORDER BY CASE WHEN b.pmp_id IS NOT NULL THEN 0 ELSE 1 END,
       CASE v.criticidad WHEN 'A' THEN 1 WHEN 'B' THEN 2 WHEN 'C' THEN 3 ELSE 4 END,

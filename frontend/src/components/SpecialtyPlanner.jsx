@@ -73,7 +73,6 @@ function SearchableSelect({label,value,options,onChange,placeholder,disabled=fal
 
 export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,year,month,onOpenDefinitions}){
  const [candidateRows,setCandidateRows]=useState([])
- const [backlogRows,setBacklogRows]=useState([])
  const [selected,setSelected]=useState([])
  const [area,setArea]=useState('')
  const [criticality,setCriticality]=useState('')
@@ -82,11 +81,9 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
  const [chosenActivity,setChosenActivity]=useState('')
  const [currentId,setCurrentId]=useState('')
  const [stoppedSearch,setStoppedSearch]=useState('')
- const [backlogSearch,setBacklogSearch]=useState('')
  const [message,setMessage]=useState('')
  const [refresh,setRefresh]=useState(0)
  const [loading,setLoading]=useState(false)
- const [backlogLoading,setBacklogLoading]=useState(false)
  const [reconciliation,setReconciliation]=useState({})
  const [lastSaved,setLastSaved]=useState(null)
  const [exporting,setExporting]=useState('')
@@ -97,7 +94,6 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
   setChosenActivity('')
   setCurrentId('')
   setStoppedSearch('')
-  setBacklogSearch('')
   setMessage('')
   setLastSaved(null)
  },[specialty,week?.from,week?.to])
@@ -123,26 +119,6 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
   },120)
   return()=>{active=false;clearTimeout(timer)}
  },[specialty,year,month,area,criticality,origin,refresh])
-
- useEffect(()=>{
-  let active=true
-  const timer=setTimeout(async()=>{
-   try{
-    setBacklogLoading(true)
-    const rows=await getCandidates({
-     specialty,
-     origin:'BACKLOG',
-     limit:2000
-    })
-    if(active)setBacklogRows(rows)
-   }catch(e){
-    if(active)setMessage(e.message)
-   }finally{
-    if(active)setBacklogLoading(false)
-   }
-  },120)
-  return()=>{active=false;clearTimeout(timer)}
- },[specialty,refresh])
 
  useEffect(()=>{
   let active=true
@@ -196,20 +172,6 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
    x.actividad,x.plan_trabajo,x.criticidad,x.condicion
   ].some(v=>String(v||'').toLowerCase().includes(q)))
  },[stoppedReady,stoppedSearch])
-
- const backlogReady=useMemo(
-  ()=>backlogRows.filter(x=>x.datos_completos&&!selected.some(s=>s.pmp_id===x.pmp_id)),
-  [backlogRows,selected]
- )
- const backlogFiltered=useMemo(()=>{
-  const q=backlogSearch.trim().toLowerCase()
-  if(!q)return backlogReady
-  return backlogReady.filter(x=>[
-   x.numero_orden,x.area_nombre,x.activo_codigo,x.activo_descripcion,
-   x.actividad,x.plan_trabajo,x.criticidad,x.condicion,
-   x.backlog_motivo,x.backlog_detalle
-  ].some(v=>String(v||'').toLowerCase().includes(q)))
- },[backlogReady,backlogSearch])
 
  const stats=reconciliation[specialty]||{}
  const target=Number(capacity?.target||0)
@@ -316,11 +278,6 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
     <span>EN ESTA PROGRAMACIÓN</span>
     <b>{selected.length}</b>
     <small>{used.toFixed(1)} H-H seleccionadas</small>
-   </div>
-   <div className="programming-group-card backlog">
-    <span>BACKLOG DISPONIBLE</span>
-    <b>{backlogReady.length}</b>
-    <small>PMP pendientes de semanas cerradas</small>
    </div>
   </div>
 
@@ -448,45 +405,6 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
    {stoppedFiltered.length>300&&<small className="stopped-limit">Mostrando 300 de {stoppedFiltered.length}. Usa el buscador para reducir la lista.</small>}
   </section>
 
-  <section className="backlog-section">
-   <div className="backlog-head">
-    <div>
-     <span className="backlog-kicker">4C · BACKLOG DE CIERRES</span>
-     <h3>PMP pendientes de semanas cerradas</h3>
-     <p>Estas OT no se ejecutaron en una programación anterior. Puedes agregarlas nuevamente a la semana actual.</p>
-    </div>
-    <div className="backlog-tools">
-     <input value={backlogSearch} onChange={e=>setBacklogSearch(e.target.value)}
-      placeholder="Buscar OT, equipo, actividad o motivo..."/>
-     <span>{backlogFiltered.length} PMP</span>
-    </div>
-   </div>
-
-   <div className="table-wrap backlog-table">
-    <table>
-     <thead><tr><th>Semana origen</th><th>OT</th><th>Área</th><th>Equipo</th><th>Actividad</th><th>Condición</th><th>Crit.</th><th>Personas</th><th>H-H</th><th>Motivo</th><th></th></tr></thead>
-     <tbody>
-      {backlogLoading&&<tr><td colSpan="11" className="empty">Cargando backlog...</td></tr>}
-      {!backlogLoading&&!backlogFiltered.length&&<tr><td colSpan="11" className="empty">No hay backlog disponible para {specialtyName}.</td></tr>}
-      {!backlogLoading&&backlogFiltered.slice(0,300).map(x=><tr key={x.pmp_id}>
-       <td><b>{x.semana_origen_desde?String(x.semana_origen_desde).slice(0,10):'—'}</b><small className="asset-name">{x.semana_origen_hasta?' al '+String(x.semana_origen_hasta).slice(0,10):''}</small></td>
-       <td><b>{x.numero_orden||'—'}</b></td>
-       <td>{x.area_nombre||'—'}</td>
-       <td><span className="asset-code">{x.activo_codigo}</span><small className="asset-name">{x.activo_descripcion}</small></td>
-       <td>{x.actividad||'—'}</td>
-       <td>{x.condicion}</td>
-       <td><span className={'criticality crit-'+(x.criticidad||'x')}>{x.criticidad||'—'}</span></td>
-       <td>{x.personas_usar??'—'}</td>
-       <td><b>{hh(x.hh_pmp)}</b></td>
-       <td><b>{x.backlog_motivo||'Pendiente'}</b><small className="asset-name">{x.backlog_detalle||''}</small></td>
-       <td><button className="add-btn backlog-add" onClick={()=>addItem(x)}>Agregar</button></td>
-      </tr>)}
-     </tbody>
-    </table>
-   </div>
-   {backlogFiltered.length>300&&<small className="stopped-limit">Mostrando 300 de {backlogFiltered.length}. Usa el buscador para reducir la lista.</small>}
-  </section>
-
   <div className={'message '+(message.includes('agregado')||message.includes('guardada')?'success':'')}>{message}</div>
 
   <div className="programmed-head">
@@ -507,7 +425,7 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
    <table>
     <thead><tr><th></th><th>OT</th><th>Área</th><th>Activo</th><th>Actividad</th><th>Plan</th><th>Condición</th><th>Crit.</th><th>Personas</th><th>H-H</th><th>Origen</th></tr></thead>
     <tbody>
-     {!selected.length&&<tr><td colSpan="11" className="empty">La programación está vacía. Agrega PMP desde la selección normal, detención o backlog.</td></tr>}
+     {!selected.length&&<tr><td colSpan="11" className="empty">La programación está vacía. Agrega PMP desde OPERANDO o desde DETENCIÓN.</td></tr>}
      {selected.map(x=><tr key={x.pmp_id}>
       <td><button className="remove-btn" onClick={()=>setSelected(p=>p.filter(i=>i.pmp_id!==x.pmp_id))}>×</button></td>
       <td><b>{x.numero_orden||'—'}</b></td>

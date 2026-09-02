@@ -20,8 +20,7 @@ from backend.services.definition_service import (
 )
 from backend.services.programming_service import (
     ProgrammingError, close_programming, programming_detail, programming_history, save_programming,
-    export_programming_excel, export_programming_pdf, reset_test_data, analyze_programming_closure,
-    analyze_programming_closure_from_db,
+    export_programming_excel, export_programming_pdf, reset_test_data,
 )
 
 app=FastAPI(title="Programador de Mantenimiento API",version="1.1.0")
@@ -178,20 +177,6 @@ def list_programming_history(limit:int=Query(50,ge=1,le=200)):return programming
 
 @app.get("/api/programming/version/{version_id}")
 def get_programming_version(version_id:int):return programming_detail(version_id)
-
-@app.post("/api/programming/version/{version_id}/analyze-close")
-def analyze_programming_close(version_id:int):
-    try:
-        return analyze_programming_closure_db(version_id=version_id)
-    except ProgrammingError as exc:
-        raise HTTPException(422,str(exc)) from exc
-
-@app.post("/api/programming/version/{version_id}/analyze-close-live")
-def analyze_programming_close_live(version_id:int):
-    try:
-        return analyze_programming_closure_from_db(version_id=version_id)
-    except ProgrammingError as exc:
-        raise HTTPException(422,str(exc)) from exc
 
 @app.get("/api/programming/version/{version_id}/export.xlsx")
 def export_programming_xlsx(version_id:int):

@@ -3,7 +3,6 @@ export async function uploadFile(path,file,params={}){const qs=new URLSearchPara
 export async function getCapacity(dateFrom,dateTo){return check(await fetch(`/api/capacity?${new URLSearchParams({date_from:dateFrom,date_to:dateTo})}`))}
 export async function getCandidates(filters){const qs=new URLSearchParams();Object.entries(filters).forEach(([k,v])=>{if(v!==undefined&&v!==null&&v!=='')qs.set(k,v)});return check(await fetch(`/api/candidates?${qs}`))}
 export async function getMasterStatus(){return check(await fetch('/api/master-status'))}
-export async function getImportHistory(limit=10){return check(await fetch(`/api/imports?limit=${limit}`))}
 export async function learnPlan(planId,payload){return check(await fetch(`/api/plans/${planId}/learn`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}))}
 export async function saveProgramming(payload){return check(await fetch('/api/programming',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}))}
 export async function getProgrammingHistory(limit=50){return check(await fetch(`/api/programming/history?limit=${limit}`))}
@@ -54,19 +53,5 @@ export async function savePlanDefinition(planId,payload){
   method:'POST',
   headers:{'Content-Type':'application/json'},
   body:JSON.stringify(payload)
- }))
-}
-
-
-export async function analyzeProgrammingClose(versionId){
- return check(await fetch(`/api/programming/version/${versionId}/analyze-close`,{
-  method:'POST'
- }))
-}
-
-
-export async function analyzeProgrammingCloseLive(versionId){
- return check(await fetch(`/api/programming/version/${versionId}/analyze-close-live`,{
-  method:'POST'
  }))
 }

@@ -1,5 +1,5 @@
 import {useEffect,useMemo,useState} from 'react'
-import {analyzeProgrammingCloseLive,downloadProgrammingExport,getProgrammingHistory,getProgrammingVersion} from '../api'
+import {downloadProgrammingExport,getProgrammingHistory,getProgrammingVersion} from '../api'
 
 const SPECS=['MEC','ELE','SER','MET']
 const NAMES={MEC:'Mecánica',ELE:'Eléctrica',SER:'Servicios',MET:'Metrología'}
@@ -10,11 +10,6 @@ function fmtDate(v){
  return `${d}/${m}/${y}`
 }
 function hh(v){return Number(v||0).toFixed(1)}
-function fmtDateTime(v){
- if(!v)return '—'
- const d=new Date(v)
- return Number.isNaN(d.getTime())?'—':d.toLocaleString('es-CO',{dateStyle:'short',timeStyle:'short'})
-}
 
 export default function SavedProgramming(){
  const [history,setHistory]=useState([])
@@ -24,8 +19,6 @@ export default function SavedProgramming(){
  const [loading,setLoading]=useState(true)
  const [message,setMessage]=useState('')
  const [exporting,setExporting]=useState('')
- const [analyzing,setAnalyzing]=useState(false)
- const [closeAnalysis,setCloseAnalysis]=useState(null)
 
  async function loadHistory(){
   try{
@@ -54,7 +47,6 @@ export default function SavedProgramming(){
  )
 
  useEffect(()=>{
-  setCloseAnalysis(null)
   if(!selectedVersion){setDetail([]);return}
   let active=true
   getProgrammingVersion(selectedVersion)
@@ -70,21 +62,6 @@ export default function SavedProgramming(){
    await downloadProgrammingExport(selectedVersion,format)
   }catch(e){setMessage(e.message)}
   finally{setExporting('')}
- }
-
- async function analyzeClose(){
-  if(!selectedVersion)return
-  try{
-   setAnalyzing(true)
-   setMessage('')
-   const result=await analyzeProgrammingCloseLive(selectedVersion)
-   setCloseAnalysis(result)
-  }catch(e){
-   setCloseAnalysis(null)
-   setMessage(e.message)
-  }finally{
-   setAnalyzing(false)
-  }
  }
 
  return <section className="saved-page">
@@ -132,10 +109,6 @@ export default function SavedProgramming(){
     </div>}
 
     <div className="saved-actions">
-     <span className="auto-sync-note">Estados sincronizados automáticamente desde TEAM FOOD</span>
-     <button className="analyze-close-btn" disabled={!selectedVersion||analyzing} onClick={analyzeClose}>
-      {analyzing?'Consultando maestro...':'Analizar cierre'}
-     </button>
      <button className="export-excel" disabled={!selectedVersion||!!exporting} onClick={()=>exportFile('xlsx')}>
       {exporting==='xlsx'?'Generando...':'Exportar Excel'}
      </button>
@@ -144,49 +117,6 @@ export default function SavedProgramming(){
      </button>
     </div>
    </section>
-
-   {closeAnalysis&&<section className="panel close-analysis-panel">
-    <div className="section-head">
-     <div>
-      <span className="section-kicker">ANÁLISIS DE CIERRE · SOLO LECTURA</span>
-      <h2>Resultado contra el último Excel maestro</h2>
-      <p>Se comparan las OT de esta programación contra los estados almacenados en Supabase durante la última carga del Excel maestro TEAM FOOD.</p>
-      <small className="sync-stamp">Última carga del maestro: <b>{fmtDateTime(closeAnalysis.last_master_upload)}</b>{closeAnalysis.master_file?<> · {closeAnalysis.master_file}</>:null}</small>
-      <small className="sync-stamp">Última actualización de estados en base: <b>{fmtDateTime(closeAnalysis.last_status_sync)}</b></small>
-     </div>
-     <span className="week-badge">{Number(closeAnalysis.compliance_pct||0).toFixed(1)}% cumplimiento</span>
-    </div>
-
-    <div className="close-analysis-metrics">
-     <div><span>Programadas</span><b>{closeAnalysis.total_programmed}</b><small>OT de esta semana</small></div>
-     <div className="metric-finalized"><span>Finalizadas</span><b>{closeAnalysis.finalized}</b><small>{hh(closeAnalysis.hh_finalized)} H-H</small></div>
-     <div className="metric-pending"><span>Pendientes</span><b>{closeAnalysis.pending}</b><small>{hh(closeAnalysis.hh_pending)} H-H pendientes</small></div>
-     <div className="metric-review"><span>Por revisar</span><b>{closeAnalysis.review}</b><small>No encontrada/estado distinto</small></div>
-    </div>
-
-    <div className="close-analysis-note">
-     <b>Resultado preliminar.</b>
-     <span>Última sincronización del maestro: {closeAnalysis.master_synced_at?new Date(closeAnalysis.master_synced_at).toLocaleString('es-CO'):'sin registro'}. Cuando confirmemos el cierre definitivo, las FINALIZADAS quedarán como ejecutadas y las PENDIENTES requerirán motivo de no ejecución antes de pasar a backlog.</span>
-    </div>
-
-    <div className="table-wrap close-analysis-table">
-     <table>
-      <thead><tr><th>OT</th><th>Área</th><th>Equipo</th><th>Actividad</th><th>Plan</th><th>H-H</th><th>Estado TEAM FOOD</th><th>Resultado</th></tr></thead>
-      <tbody>
-       {closeAnalysis.items.map(x=><tr key={x.program_item_id}>
-        <td><b>{x.numero_orden||'—'}</b></td>
-        <td>{x.area_nombre||'—'}</td>
-        <td><span className="asset-code">{x.activo_codigo}</span><small className="asset-name">{x.activo_descripcion}</small></td>
-        <td>{x.actividad||'—'}</td>
-        <td>{x.plan_trabajo||'—'}</td>
-        <td><b>{hh(x.hh_programadas)}</b></td>
-        <td><span className={'close-state state-'+String(x.estado_maestro||'').toLowerCase().replaceAll(' ','-')}>{x.estado_maestro}</span></td>
-        <td><span className={'close-result result-'+String(x.resultado_cierre||'').toLowerCase()}>{x.resultado_cierre}</span></td>
-       </tr>)}
-      </tbody>
-     </table>
-    </div>
-   </section>}
 
    <section className="panel saved-detail-panel">
     <div className="section-head">

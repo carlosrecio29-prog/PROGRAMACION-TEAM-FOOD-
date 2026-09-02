@@ -401,7 +401,7 @@ tbody tr:hover{background:#f9fbfd}
 .definition-destination b{display:block;margin-top:4px;font-size:10px;color:var(--blue-dark)}
 .definition-save{width:100%;margin-top:12px}
 
-.programming-groups{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin:14px 0 18px}
+.programming-groups{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin:14px 0 18px}
 .programming-group-card{border:1px solid var(--border);border-radius:11px;padding:12px;background:#fff}
 .programming-group-card span{display:block;font-size:8px;text-transform:uppercase;font-weight:900;letter-spacing:.45px;color:var(--muted)}
 .programming-group-card b{display:block;font-size:22px;margin:5px 0 1px}
@@ -439,66 +439,3 @@ tbody tr:hover{background:#f9fbfd}
 .operating-empty p{margin:0;color:var(--muted);font-size:9px;line-height:1.4;max-width:720px}
 .operating-empty button{white-space:nowrap;font-size:10px;font-weight:800}
 @media(max-width:700px){.operating-empty{flex-direction:column;align-items:flex-start}.operating-empty button{width:100%}}
-
-.hidden-close-file{display:none}
-.analyze-close-btn{background:#17365d;color:#fff;border:1px solid #17365d;font-weight:800}
-.analyze-close-btn:hover{background:#244d79}
-.analyze-close-btn:disabled{opacity:.55;cursor:not-allowed}
-.close-analysis-panel{margin-top:12px;border:1px solid #cddceb;background:#fbfdff}
-.close-analysis-metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin:13px 0}
-.close-analysis-metrics>div{background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px}
-.close-analysis-metrics span{display:block;color:var(--muted);font-size:8px;text-transform:uppercase;font-weight:900;letter-spacing:.45px}
-.close-analysis-metrics b{display:block;font-size:23px;margin:4px 0 1px}
-.close-analysis-metrics small{display:block;color:var(--muted);font-size:8px}
-.close-analysis-metrics .metric-finalized{background:#f3faf7;border-color:#cfe6d9}
-.close-analysis-metrics .metric-finalized b{color:#1e7a52}
-.close-analysis-metrics .metric-pending{background:#fff8ee;border-color:#ead9b9}
-.close-analysis-metrics .metric-pending b{color:#a56f19}
-.close-analysis-metrics .metric-review{background:#fff5f5;border-color:#eccfcf}
-.close-analysis-metrics .metric-review b{color:#a14444}
-.close-analysis-note{display:flex;gap:6px;align-items:flex-start;padding:10px 12px;background:#eef5fc;border:1px solid #d6e4f1;border-radius:9px;font-size:9px;color:#40576e;margin-bottom:12px}
-.close-analysis-note b{white-space:nowrap;color:#17365d}
-.close-analysis-table{max-height:520px;border:1px solid var(--border);border-radius:9px}
-.close-state,.close-result{display:inline-block;padding:4px 7px;border-radius:999px;font-size:8px;font-weight:900;white-space:nowrap}
-.state-finalizada,.result-finalizada{background:#e9f7ef;color:#1e7a52;border:1px solid #c9e6d5}
-.state-pendiente,.result-pendiente{background:#fff5df;color:#9a6a17;border:1px solid #ead49c}
-.state-no-encontrada,.result-revisar{background:#fdeeee;color:#9b3e3e;border:1px solid #ebcaca}
-@media(max-width:900px){.close-analysis-metrics{grid-template-columns:1fr 1fr}}
-@media(max-width:600px){.close-analysis-metrics{grid-template-columns:1fr}.close-analysis-note{flex-direction:column}}
-
-.programming-group-card.backlog{background:#fff9ed;border-color:#ead9ad}
-.programming-group-card.backlog b{color:#9b6b16}
-.backlog-section{margin-top:14px;border:1px solid #e5d7b9;background:#fffdf8;border-radius:12px;padding:13px}
-.backlog-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
-.backlog-head h3{margin:3px 0 4px;font-size:14px}
-.backlog-head p{margin:0;color:var(--muted);font-size:9px}
-.backlog-kicker{font-size:8px;font-weight:900;letter-spacing:.5px;color:#9b6b16}
-.backlog-tools{display:flex;align-items:center;gap:8px}
-.backlog-tools input{min-width:280px}
-.backlog-tools span{white-space:nowrap;font-size:9px;font-weight:900;color:#7d5b1c;background:#fff4d8;border:1px solid #ead6a5;border-radius:999px;padding:6px 9px}
-.backlog-table{margin-top:12px;max-height:520px;border:1px solid #e7dcc2;border-radius:9px}
-.backlog-add{background:#fff4d8;border-color:#d9bf82;color:#7d5b1c}
-.backlog-add:hover{background:#f9e9bf}
-@media(max-width:1200px){.programming-groups{grid-template-columns:1fr 1fr}}
-@media(max-width:800px){.backlog-head{flex-direction:column}.backlog-tools{width:100%;flex-direction:column;align-items:stretch}.backlog-tools input{min-width:0;width:100%}}
-
-
-.master-page{display:grid;gap:12px}
-.master-info-note{display:flex;gap:10px;align-items:flex-start;margin:14px 0;padding:11px 12px;border:1px solid #d5e5f5;background:#f5f9fd;border-radius:10px;font-size:10px;color:#526579}
-.master-info-note b{color:var(--blue-dark);white-space:nowrap}
-.master-upload-card{display:grid;grid-template-columns:1fr minmax(320px,430px);gap:18px;align-items:center;margin-top:16px;padding:15px;border:1px solid var(--border);background:#fbfcfe;border-radius:12px}
-.master-upload-copy h3{margin:4px 0 4px;font-size:15px}
-.master-upload-copy p{margin:0 0 8px;color:var(--muted);font-size:10px;line-height:1.45}
-.master-upload-copy small{color:var(--muted);font-size:9px}
-.master-upload{display:flex;flex-direction:column;gap:8px}
-.master-upload input{width:100%}
-.selected-master-file{font-size:9px;color:var(--blue-dark);font-weight:800;word-break:break-all}
-.master-message{margin-top:12px;padding:9px 11px;border-radius:8px;background:#eef8f3;border:1px solid #cfe6da;color:#276b4c;font-size:10px;font-weight:700}
-.master-message.error{background:#fff2f2;border-color:#edcccc;color:#9b3e3e}
-.master-history-panel{margin-top:0}
-.master-history-table{margin-top:12px;border:1px solid var(--border);border-radius:10px}
-.import-state{display:inline-block;padding:4px 7px;border-radius:999px;font-size:8px;font-weight:900;background:#eef3f7;color:#526579}
-.import-state.completada{background:#eaf7f0;color:#29704f}
-.import-state.con_advertencias{background:#fff4d8;color:#8b651d}
-.import-state.error,.import-state.fallida{background:#fdeeee;color:#9b3e3e}
-@media(max-width:850px){.master-upload-card{grid-template-columns:1fr}.master-info-note{flex-direction:column}}
