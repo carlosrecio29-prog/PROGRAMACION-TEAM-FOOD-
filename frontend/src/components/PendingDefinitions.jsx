@@ -17,7 +17,6 @@ export default function PendingDefinitions({year=2026,month=9}){
  const [specialty,setSpecialty]=useState('ALL')
  const [search,setSearch]=useState('')
  const [selectedId,setSelectedId]=useState('')
- const [minutes,setMinutes]=useState('')
  const [people,setPeople]=useState('')
  const [condition,setCondition]=useState('')
  const [loading,setLoading]=useState(true)
@@ -41,7 +40,7 @@ export default function PendingDefinitions({year=2026,month=9}){
    if(specialty!=='ALL'&&r.especialidad!==specialty)return false
    if(!q)return true
    return [
-    r.plan_trabajo,r.especialidad,r.area_ejemplo,r.equipo_ejemplo
+    r.descripcion_grupo,r.plan_trabajo,r.especialidad,r.area_ejemplo,r.equipo_ejemplo
    ].some(v=>String(v||'').toLowerCase().includes(q))
   })
  },[rows,specialty,search])
@@ -58,14 +57,12 @@ export default function PendingDefinitions({year=2026,month=9}){
  },[rows])
 
  const missingCounts=useMemo(()=>({
-  tiempo:rows.filter(r=>r.falta_tiempo).length,
   personas:rows.filter(r=>r.falta_personas).length,
   condicion:rows.filter(r=>r.falta_condicion).length,
  }),[rows])
 
  function choose(row){
   setSelectedId(String(row.plan_trabajo_id))
-  setMinutes(row.tiempo_ejecucion_min??'')
   setPeople(row.personas_usar??'')
   setCondition(row.condicion==='SIN CLASIFICAR'?'':row.condicion||'')
   setMessage('')
@@ -73,12 +70,10 @@ export default function PendingDefinitions({year=2026,month=9}){
 
  async function save(){
   if(!selected)return
-  if(selected.falta_tiempo&&(!minutes||Number(minutes)<=0))return setMessage('Debes definir el tiempo de ejecución.')
   if(selected.falta_personas&&(!people||Number(people)<=0))return setMessage('Debes definir el número de personas.')
   if(selected.falta_condicion&&!condition)return setMessage('Debes definir si el plan se atiende operando o con detención.')
 
   const payload={updated_by:'PRUEBA_WEB'}
-  if(selected.falta_tiempo)payload.execution_minutes=Number(minutes)
   if(selected.falta_personas)payload.people=Number(people)
   if(selected.falta_condicion)payload.condition=condition
 
@@ -104,8 +99,7 @@ export default function PendingDefinitions({year=2026,month=9}){
 
   <div className="definition-summary">
    <div><span>Planes pendientes</span><b>{rows.length}</b><small>del periodo {String(month).padStart(2,'0')}/{year}</small></div>
-   <div><span>Sin tiempo</span><b>{missingCounts.tiempo}</b><small>requieren minutos de ejecución</small></div>
-   <div><span>Sin personas</span><b>{missingCounts.personas}</b><small>requieren cuadrilla</small></div>
+   <div><span>Sin personas</span><b>{missingCounts.personas}</b><small>requieren definir NumeroPersonas</small></div>
    <div><span>Sin condición</span><b>{missingCounts.condicion}</b><small>operando o con detención</small></div>
   </div>
 
@@ -115,7 +109,7 @@ export default function PendingDefinitions({year=2026,month=9}){
      {NAMES[s]} <span>{counts[s]}</span>
     </button>)}
    </div>
-   <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar plan, área o equipo..."/>
+   <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar grupo, plan, área o equipo..."/>
   </div>
 
   <div className="definition-layout">
@@ -125,17 +119,16 @@ export default function PendingDefinitions({year=2026,month=9}){
     </div>
     <div className="table-wrap definition-table">
      <table>
-      <thead><tr><th>Esp.</th><th>Plan</th><th>PMP afectados</th><th>Equipos</th><th>Falta definir</th><th></th></tr></thead>
+      <thead><tr><th>Esp.</th><th>DescripcionGrupo / PlanTrabajo</th><th>PMP afectados</th><th>Equipos</th><th>Falta definir</th><th></th></tr></thead>
       <tbody>
        {loading&&<tr><td colSpan="6" className="empty">Cargando pendientes...</td></tr>}
        {!loading&&!filtered.length&&<tr><td colSpan="6" className="empty">No hay planes pendientes con estos filtros.</td></tr>}
        {!loading&&filtered.map(r=><tr key={r.plan_trabajo_id} className={String(r.plan_trabajo_id)===String(selectedId)?'row-active':''}>
         <td><b>{r.especialidad}</b></td>
-        <td><b>{r.plan_trabajo}</b><small className="asset-name">{r.area_ejemplo||'—'} · {r.equipo_ejemplo||'—'}</small></td>
+        <td><b>{r.descripcion_grupo||'SIN GRUPO'}</b><small className="asset-name">{r.plan_trabajo}</small><small className="asset-name">{r.area_ejemplo||'—'} · {r.equipo_ejemplo||'—'}</small></td>
         <td>{r.pmp_afectados}</td>
         <td>{r.equipos_afectados}</td>
         <td><div className="definition-badges">
-         {r.falta_tiempo&&<MissingBadge>TIEMPO</MissingBadge>}
          {r.falta_personas&&<MissingBadge>PERSONAS</MissingBadge>}
          {r.falta_condicion&&<MissingBadge>CONDICIÓN</MissingBadge>}
         </div></td>
@@ -163,25 +156,19 @@ export default function PendingDefinitions({year=2026,month=9}){
      <p>Completa todos los campos marcados como pendientes.</p>
 
      <div className="definition-fields">
-      <label className={!selected.falta_tiempo?'field-complete':''}>
-       Tiempo de ejecución (min)
-       <input type="number" min="1" step="1" value={minutes} disabled={!selected.falta_tiempo} onChange={e=>setMinutes(e.target.value)} placeholder="Ej. 60"/>
-       <small>{selected.falta_tiempo?'Pendiente por definir':'Ya definido en el maestro'}</small>
-      </label>
-
       <label className={!selected.falta_personas?'field-complete':''}>
-       Número de personas
+       NumeroPersonas
        <input type="number" min="1" step="1" value={people} disabled={!selected.falta_personas} onChange={e=>setPeople(e.target.value)} placeholder="Ej. 2"/>
        <small>{selected.falta_personas?'Pendiente por definir':'Ya definido en el maestro'}</small>
       </label>
 
       <label className={!selected.falta_condicion?'field-complete':''}>
-       ¿Necesita detener el equipo?
+       EquipoDetenido
        <select value={condition} disabled={!selected.falta_condicion} onChange={e=>setCondition(e.target.value)}>
-        <option value="">Seleccionar respuesta...</option>
+        <option value="">Seleccionar SI / NO...</option>
         {CONDITIONS.map(x=><option key={x.value} value={x.value}>{x.label}</option>)}
        </select>
-       <small>{selected.falta_condicion?'Esta respuesta la define el usuario; no se deduce de TiempoParada.':'Ya definido manualmente'}</small>
+       <small>{selected.falta_condicion?'SI = requiere detener el equipo · NO = puede ejecutarse operando.':'Ya definido en el historial maestro'}</small>
       </label>
      </div>
 
