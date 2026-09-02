@@ -9,7 +9,7 @@ from sqlalchemy.pool import NullPool
 from backend.config import require_database_url
 
 
-SEARCH_PATH="maestro,programacion,sistema,reportes,mantenimiento,public"
+SEARCH_PATH="programacion,sistema,public"
 
 
 @lru_cache(maxsize=1)
