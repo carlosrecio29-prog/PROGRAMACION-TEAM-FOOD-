@@ -56,3 +56,37 @@ export async function savePlanDefinition(planId,payload){
   body:JSON.stringify(payload)
  }))
 }
+
+
+export async function getV2Dashboard(year=2026,month=9){
+ return check(await fetch(`/api/v2/dashboard?${new URLSearchParams({year,month})}`))
+}
+export async function getV2PendingPlans(year=2026,month=9,specialty=''){
+ const qs=new URLSearchParams({year,month})
+ if(specialty)qs.set('specialty',specialty)
+ return check(await fetch(`/api/v2/pending-plans?${qs}`))
+}
+export async function saveV2PlanComplement(planId,payload){
+ return check(await fetch(`/api/v2/plans/${planId}`,{
+  method:'PATCH',
+  headers:{'Content-Type':'application/json'},
+  body:JSON.stringify(payload)
+ }))
+}
+export async function getV2Technicians(year=2026,month=9){
+ return check(await fetch(`/api/v2/technicians?${new URLSearchParams({year,month})}`))
+}
+export async function saveV2TechnicianComplement(technicianId,specialty){
+ return check(await fetch(`/api/v2/technicians/${technicianId}`,{
+  method:'PATCH',
+  headers:{'Content-Type':'application/json'},
+  body:JSON.stringify({specialty})
+ }))
+}
+export async function getV2Pmp({year=2026,month=9,specialty='',area='',search='',limit=300}={}){
+ const qs=new URLSearchParams({year,month,limit})
+ if(specialty)qs.set('specialty',specialty)
+ if(area)qs.set('area',area)
+ if(search)qs.set('search',search)
+ return check(await fetch(`/api/v2/pmp?${qs}`))
+}
