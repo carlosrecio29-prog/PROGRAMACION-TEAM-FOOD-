@@ -19,6 +19,10 @@ from backend.services.definition_service import (
     DefinitionError, define_plan, get_pending_definitions,
 )
 from backend.services.v2_import_service import import_software_base, get_v2_status
+from backend.services.v2_query_service import (
+    get_dashboard, get_pending_plans, save_plan_complement,
+    get_technicians, save_technician_complement, get_pmp,
+)
 from backend.services.programming_service import (
     ProgrammingError, close_programming, programming_detail, programming_history, save_programming,
     export_programming_excel, export_programming_pdf, reset_test_data,
@@ -107,6 +111,51 @@ def v2_status():
         return get_v2_status()
     except Exception as exc:
         raise HTTPException(500,f"Error consultando base V2: {exc}") from exc
+
+
+@app.get("/api/v2/dashboard")
+def v2_dashboard(year:int=2026,month:int=Query(9,ge=1,le=12)):
+    try:return get_dashboard(year,month)
+    except ValueError as exc:raise HTTPException(422,str(exc)) from exc
+
+@app.get("/api/v2/pending-plans")
+def v2_pending_plans(year:int=2026,month:int=Query(9,ge=1,le=12),specialty:str|None=None):
+    try:return get_pending_plans(year,month,specialty)
+    except ValueError as exc:raise HTTPException(422,str(exc)) from exc
+
+class V2PlanComplement(BaseModel):
+    people:float|None=Field(default=None,gt=0)
+    stop_minutes:float|None=Field(default=None,ge=0)
+
+@app.patch("/api/v2/plans/{plan_id}")
+def v2_save_plan(plan_id:int,body:V2PlanComplement):
+    try:return save_plan_complement(plan_id,people=body.people,stop_minutes=body.stop_minutes)
+    except ValueError as exc:raise HTTPException(422,str(exc)) from exc
+
+@app.get("/api/v2/technicians")
+def v2_technicians(year:int=2026,month:int=Query(9,ge=1,le=12)):
+    try:return get_technicians(year,month)
+    except ValueError as exc:raise HTTPException(422,str(exc)) from exc
+
+class V2TechnicianComplement(BaseModel):
+    specialty:str
+
+@app.patch("/api/v2/technicians/{technician_id}")
+def v2_save_technician(technician_id:int,body:V2TechnicianComplement):
+    try:return save_technician_complement(technician_id,body.specialty)
+    except ValueError as exc:raise HTTPException(422,str(exc)) from exc
+
+@app.get("/api/v2/pmp")
+def v2_pmp(
+    year:int=2026,
+    month:int=Query(9,ge=1,le=12),
+    specialty:str|None=None,
+    area:str|None=None,
+    search:str|None=None,
+    limit:int=Query(300,ge=1,le=1000),
+):
+    try:return get_pmp(year,month,specialty=specialty,area=area,search=search,limit=limit)
+    except ValueError as exc:raise HTTPException(422,str(exc)) from exc
 
 
 @app.get("/api/master-status")
