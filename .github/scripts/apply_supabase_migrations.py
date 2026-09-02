@@ -45,6 +45,11 @@ def main() -> int:
         print("No existe supabase/migrations_v2; no hay migraciones V2 que aplicar.")
         return 0
 
+    files = sorted(MIGRATIONS_DIR.glob("*.sql"))
+    if not files:
+        print("No hay archivos .sql en supabase/migrations_v2.")
+        return 0
+
     api_query("""
     CREATE SCHEMA IF NOT EXISTS sistema;
     DO $$
@@ -86,11 +91,6 @@ def main() -> int:
         for row in native_rows
         if isinstance(row, dict) and "version" in row
     }
-
-    files = sorted(MIGRATIONS_DIR.glob("*.sql"))
-    if not files:
-        print("No hay archivos .sql en supabase/migrations_v2.")
-        return 0
 
     applied = 0
     for path in files:
