@@ -11,7 +11,7 @@ import urllib.request
 PROJECT_REF = os.environ["SUPABASE_PROJECT_ID"]
 ACCESS_TOKEN = os.environ["SUPABASE_ACCESS_TOKEN"]
 BASE_URL = f"https://api.supabase.com/v1/projects/{PROJECT_REF}/database/query"
-MIGRATIONS_DIR = pathlib.Path("supabase/migrations")
+MIGRATIONS_DIR = pathlib.Path("supabase/migrations_v2")
 
 
 def api_query(sql: str):
@@ -42,7 +42,7 @@ def sql_literal(value: str) -> str:
 
 def main() -> int:
     if not MIGRATIONS_DIR.exists():
-        print("No existe supabase/migrations; no hay migraciones que aplicar.")
+        print("No existe supabase/migrations_v2; no hay migraciones V2 que aplicar.")
         return 0
 
     api_query("""
@@ -89,7 +89,7 @@ def main() -> int:
 
     files = sorted(MIGRATIONS_DIR.glob("*.sql"))
     if not files:
-        print("No hay archivos .sql en supabase/migrations.")
+        print("No hay archivos .sql en supabase/migrations_v2.")
         return 0
 
     applied = 0
