@@ -46,8 +46,23 @@ def main() -> int:
         return 0
 
     api_query("""
-    CREATE SCHEMA IF NOT EXISTS mantenimiento;
-    CREATE TABLE IF NOT EXISTS mantenimiento.app_migration_history (
+    CREATE SCHEMA IF NOT EXISTS sistema;
+    DO $
+    BEGIN
+      IF to_regclass('sistema.app_migration_history') IS NULL
+         AND EXISTS (
+           SELECT 1
+           FROM pg_class c
+           JOIN pg_namespace n ON n.oid=c.relnamespace
+           WHERE n.nspname='mantenimiento'
+             AND c.relname='app_migration_history'
+             AND c.relkind='r'
+         )
+      THEN
+        ALTER TABLE mantenimiento.app_migration_history SET SCHEMA sistema;
+      END IF;
+    END $;
+    CREATE TABLE IF NOT EXISTS sistema.app_migration_history (
         version text PRIMARY KEY,
         name text NOT NULL,
         checksum char(64) NOT NULL,
@@ -56,7 +71,7 @@ def main() -> int:
     """)
 
     existing_rows = api_query(
-        "SELECT version, checksum FROM mantenimiento.app_migration_history ORDER BY version;"
+        "SELECT version, checksum FROM sistema.app_migration_history ORDER BY version;"
     ) or []
     existing = {
         str(row["version"]): str(row["checksum"])
@@ -101,7 +116,7 @@ def main() -> int:
         wrapped = f"""
         BEGIN;
         {sql}
-        INSERT INTO mantenimiento.app_migration_history(version, name, checksum)
+        INSERT INTO sistema.app_migration_history(version, name, checksum)
         VALUES (
             {sql_literal(version)},
             {sql_literal(name or stem)},
