@@ -5,6 +5,7 @@ from typing import Any
 from sqlalchemy import text
 
 from backend.database import get_engine
+from backend.services.google_sheet_service import GoogleSheetSyncError, sync_plan_definition_to_google_sheet
 
 VALID_CONDITIONS={
     "OPERANDO",
@@ -81,8 +82,14 @@ def define_plan(
         raise DefinitionError("No se recibió ningún dato para definir")
 
     with get_engine().begin() as conn:
-        plan=conn.execute(text("""SELECT id,tiempo_ejecucion_min,personas_defecto
-          FROM mantenimiento.plan_trabajo WHERE id=:id AND activo=true"""),{"id":plan_id}).mappings().one_or_none()
+        plan=conn.execute(text("""SELECT
+            pt.id,pt.tiempo_ejecucion_min,pt.personas_defecto,pt.nombre,
+            e.codigo AS especialidad,
+            split_part(COALESCE(g.nombre,''),' - ',1) AS grupo_codigo
+          FROM mantenimiento.plan_trabajo pt
+          JOIN mantenimiento.especialidad e ON e.id=pt.especialidad_id
+          LEFT JOIN mantenimiento.grupo_plan_trabajo g ON g.id=pt.grupo_id
+          WHERE pt.id=:id AND pt.activo=true"""),{"id":plan_id}).mappings().one_or_none()
         if not plan:
             raise DefinitionError("Plan de trabajo no encontrado")
 
@@ -117,4 +124,17 @@ def define_plan(
                 actualizado_en=now()"""),
               {"id":plan_id,"c":next_condition,"p":next_people,"u":updated_by})
 
-    return {"ok":True,"plan_id":plan_id}
+    sheet_sync={"ok":False,"message":"No se intentó sincronizar"}
+    if people is not None or condition is not None:
+        try:
+            sheet_sync=sync_plan_definition_to_google_sheet(
+                group_code=str(plan["grupo_codigo"] or ""),
+                specialty=str(plan["especialidad"]),
+                plan_name=str(plan["nombre"]),
+                people=next_people,
+                condition=next_condition,
+            )
+        except GoogleSheetSyncError as exc:
+            sheet_sync={"ok":False,"message":str(exc)}
+
+    return {"ok":True,"plan_id":plan_id,"sheet_sync":sheet_sync}
