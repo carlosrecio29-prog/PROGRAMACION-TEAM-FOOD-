@@ -11,6 +11,7 @@ import requests
 from google.auth.transport.requests import Request as GoogleAuthRequest
 from google.oauth2 import service_account
 from openpyxl import load_workbook
+from openpyxl.utils import get_column_letter
 
 from backend.parsers.common import header_mapping, cell_by_header, normalize_text
 
@@ -64,31 +65,42 @@ def _sheet(wb,expected:str):
             return ws
     return None
 
-def _find_target_rows(content:bytes,*,group_code:str,specialty:str,plan_name:str)->tuple[list[int],list[int]]:
+def _find_plan_targets(
+    content:bytes,
+    *,
+    group_code:str,
+    specialty:str,
+    plan_name:str,
+)->tuple[list[int],dict[str,int]]:
     wb=load_workbook(io.BytesIO(content),read_only=True,data_only=True)
-
-    plan_rows=[]
     ws=_sheet(wb,"PLAN DE TRABAJO")
-    if ws:
-        m=header_mapping(ws,1)
-        for n,row in enumerate(ws.iter_rows(min_row=2,values_only=True),start=2):
-            group=str(cell_by_header(row,m,"Grupo") or "").strip()
-            spec=normalize_text(cell_by_header(row,m,"Especialidad"))
-            plan=normalize_text(cell_by_header(row,m,"PlanTrabajo","Plan de Trabajo"))
-            if group==str(group_code).strip() and spec==normalize_text(specialty) and plan==normalize_text(plan_name):
-                plan_rows.append(n)
+    if ws is None:
+        raise GoogleSheetSyncError("No se encontró la hoja PLAN DE TRABAJO")
 
-    planning_rows=[]
-    ws=_sheet(wb,"PLANEACION")
-    if ws:
-        m=header_mapping(ws,1)
-        expected=normalize_text(f"{group_code}-{plan_name}")
-        for n,row in enumerate(ws.iter_rows(min_row=2,values_only=True),start=2):
-            plan_ref=normalize_text(cell_by_header(row,m,"PlanTrabajo"))
-            if plan_ref==expected:
-                planning_rows.append(n)
+    header_values=next(ws.iter_rows(min_row=1,max_row=1,values_only=True))
+    columns={
+        normalize_text(value):idx
+        for idx,value in enumerate(header_values,start=1)
+        if value not in (None,"")
+    }
+    people_col=columns.get(normalize_text("NumeroPersonas"))
+    stopped_col=columns.get(normalize_text("EquipoDetenido"))
+    if people_col is None:
+        raise GoogleSheetSyncError("No existe la columna NumeroPersonas en PLAN DE TRABAJO")
+    if stopped_col is None:
+        raise GoogleSheetSyncError("No existe la columna EquipoDetenido en PLAN DE TRABAJO")
 
-    return plan_rows,planning_rows
+    m=header_mapping(ws,1)
+    rows=[]
+    for n,row in enumerate(ws.iter_rows(min_row=2,values_only=True),start=2):
+        group=str(cell_by_header(row,m,"Grupo") or "").strip()
+        spec=normalize_text(cell_by_header(row,m,"Especialidad"))
+        plan=normalize_text(cell_by_header(row,m,"PlanTrabajo","Plan de Trabajo"))
+        if group==str(group_code).strip() and spec==normalize_text(specialty) and plan==normalize_text(plan_name):
+            rows.append(n)
+
+    return rows,{"people":people_col,"stopped":stopped_col}
+
 
 def sync_plan_definition_to_google_sheet(
     *,
@@ -101,7 +113,7 @@ def sync_plan_definition_to_google_sheet(
     creds=_credentials()
     cfg=_config()
     content=_download_xlsx(creds)
-    plan_rows,planning_rows=_find_target_rows(
+    plan_rows,columns=_find_plan_targets(
         content,
         group_code=group_code,
         specialty=specialty,
@@ -111,25 +123,34 @@ def sync_plan_definition_to_google_sheet(
     if not plan_rows:
         raise GoogleSheetSyncError("No se encontró el plan exacto en PLAN DE TRABAJO")
 
-    requires_stop=""
+    equipment_stopped=None
     if condition=="EQUIPO DETENIDO":
-        requires_stop="SI"
+        equipment_stopped="SI"
     elif condition=="OPERANDO":
-        requires_stop="NO"
-
-    now=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    values=[
-        None if people is None else float(people),
-        requires_stop,
-        condition or "",
-        now,
-    ]
+        equipment_stopped="NO"
 
     data=[]
+    people_letter=get_column_letter(columns["people"])
+    stopped_letter=get_column_letter(columns["stopped"])
+
     for row in plan_rows:
-        data.append({"range":f"'PLAN DE TRABAJO '!M{row}:P{row}","values":[values]})
-    for row in planning_rows:
-        data.append({"range":f"PLANEACION!M{row}:P{row}","values":[values]})
+        if people is not None:
+            data.append({
+                "range":f"'PLAN DE TRABAJO '!{people_letter}{row}",
+                "values":[[float(people)]],
+            })
+        if equipment_stopped is not None:
+            data.append({
+                "range":f"'PLAN DE TRABAJO '!{stopped_letter}{row}",
+                "values":[[equipment_stopped]],
+            })
+
+    if not data:
+        return {
+            "ok":True,
+            "plan_rows_updated":0,
+            "sheet_id":cfg["sheet_id"],
+        }
 
     endpoint=f"https://sheets.googleapis.com/v4/spreadsheets/{quote(cfg['sheet_id'],safe='')}/values:batchUpdate"
     response=requests.post(
@@ -144,6 +165,9 @@ def sync_plan_definition_to_google_sheet(
     return {
         "ok":True,
         "plan_rows_updated":len(plan_rows),
-        "planning_rows_updated":len(planning_rows),
         "sheet_id":cfg["sheet_id"],
+        "columns":{
+            "NumeroPersonas":people_letter,
+            "EquipoDetenido":stopped_letter,
+        },
     }
