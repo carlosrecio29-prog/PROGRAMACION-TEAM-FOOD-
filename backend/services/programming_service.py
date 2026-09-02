@@ -10,7 +10,7 @@ from backend.services.query_service import get_capacity
 class ProgrammingError(ValueError): pass
 
 def _specialty_id(conn,code):
-    v=conn.execute(text("SELECT id FROM mantenimiento.especialidad WHERE codigo=:c"),{"c":code.upper()}).scalar_one_or_none()
+    v=conn.execute(text("SELECT id FROM especialidad WHERE codigo=:c"),{"c":code.upper()}).scalar_one_or_none()
     if not v: raise ProgrammingError(f"Especialidad desconocida: {code}")
     return int(v)
 
@@ -20,13 +20,13 @@ def save_programming(*,date_from:date,date_to:date,specialty:str,pmp_ids:list[in
     cap=get_capacity(date_from,date_to).get(specialty.upper(),{"available":0,"target":0,"standby":0})
     with get_engine().begin() as conn:
         sid=_specialty_id(conn,specialty)
-        period=conn.execute(text("""INSERT INTO mantenimiento.periodo_semanal(fecha_desde,fecha_hasta) VALUES(:d,:h)
+        period=conn.execute(text("""INSERT INTO periodo_semanal(fecha_desde,fecha_hasta) VALUES(:d,:h)
         ON CONFLICT(fecha_desde,fecha_hasta) DO UPDATE SET fecha_desde=EXCLUDED.fecha_desde RETURNING id"""),{"d":date_from,"h":date_to}).scalar_one()
-        pid=conn.execute(text("""INSERT INTO mantenimiento.programacion_semanal(periodo_semanal_id,especialidad_id,estado,hh_disponibles,hh_objetivo,hh_standby,creado_por)
+        pid=conn.execute(text("""INSERT INTO programacion_semanal(periodo_semanal_id,especialidad_id,estado,hh_disponibles,hh_objetivo,hh_standby,creado_por)
         VALUES(:p,:s,'GUARDADA',:a,:o,:st,:u) ON CONFLICT(periodo_semanal_id,especialidad_id) DO UPDATE SET estado='GUARDADA',
         hh_disponibles=EXCLUDED.hh_disponibles,hh_objetivo=EXCLUDED.hh_objetivo,hh_standby=EXCLUDED.hh_standby,guardado_en=NOW() RETURNING id"""),
         {"p":period,"s":sid,"a":cap["available"],"o":cap["target"],"st":cap["standby"],"u":created_by}).scalar_one()
-        rows=conn.execute(text("""SELECT * FROM mantenimiento.vw_pmp_calculado WHERE pmp_id=ANY(:ids) AND especialidad=:s AND estado_orden<>'FINALIZADA'"""),{"ids":pmp_ids,"s":specialty.upper()}).mappings().all()
+        rows=conn.execute(text("""SELECT * FROM vw_pmp_calculado WHERE pmp_id=ANY(:ids) AND especialidad=:s AND estado_orden<>'FINALIZADA'"""),{"ids":pmp_ids,"s":specialty.upper()}).mappings().all()
         if len(rows)!=len(set(pmp_ids)): raise ProgrammingError("Uno o más PMP no existen o ya están FINALIZADOS")
         incomplete=[r for r in rows if not r["datos_completos"]]
         if incomplete:
@@ -34,14 +34,14 @@ def save_programming(*,date_from:date,date_to:date,specialty:str,pmp_ids:list[in
             raise ProgrammingError(f"Hay {len(incomplete)} PMP con datos incompletos ({faltantes}). Complétalos antes de programar.")
         total=sum(float(r["hh_pmp"]) for r in rows)
         if total>float(cap["target"] or 0)+.0001: raise ProgrammingError(f"La programación ({total:.1f} HH) supera la meta ({float(cap['target']):.1f} HH)")
-        mx=conn.execute(text("SELECT COALESCE(MAX(numero_version),0) FROM mantenimiento.programacion_version WHERE programacion_semanal_id=:p"),{"p":pid}).scalar_one()
+        mx=conn.execute(text("SELECT COALESCE(MAX(numero_version),0) FROM programacion_version WHERE programacion_semanal_id=:p"),{"p":pid}).scalar_one()
         ver=int(mx)+1
-        conn.execute(text("UPDATE mantenimiento.programacion_version SET es_actual=FALSE WHERE programacion_semanal_id=:p AND es_actual=TRUE"),{"p":pid})
-        vid=conn.execute(text("""INSERT INTO mantenimiento.programacion_version(programacion_semanal_id,numero_version,tipo,motivo,es_actual)
+        conn.execute(text("UPDATE programacion_version SET es_actual=FALSE WHERE programacion_semanal_id=:p AND es_actual=TRUE"),{"p":pid})
+        vid=conn.execute(text("""INSERT INTO programacion_version(programacion_semanal_id,numero_version,tipo,motivo,es_actual)
         VALUES(:p,:v,:t,:m,TRUE) RETURNING id"""),{"p":pid,"v":ver,"t":"INICIAL" if ver==1 else "REPROGRAMACION","m":reason}).scalar_one()
         for r in rows:
-            backlog=conn.execute(text("SELECT 1 FROM mantenimiento.vw_backlog WHERE pmp_id=:p"),{"p":r["pmp_id"]}).scalar_one_or_none()
-            conn.execute(text("""INSERT INTO mantenimiento.programacion_item(programacion_version_id,pmp_id,orden_id,origen,tiempo_planeado_min,personas_usar,hh_programadas,condicion_snapshot,criticidad_snapshot)
+            backlog=conn.execute(text("SELECT 1 FROM vw_backlog WHERE pmp_id=:p"),{"p":r["pmp_id"]}).scalar_one_or_none()
+            conn.execute(text("""INSERT INTO programacion_item(programacion_version_id,pmp_id,orden_id,origen,tiempo_planeado_min,personas_usar,hh_programadas,condicion_snapshot,criticidad_snapshot)
             VALUES(:v,:p,:o,:ori,:m,:per,:hh,:c,:cr)"""),{"v":vid,"p":r["pmp_id"],"o":r["orden_id"],"ori":"BACKLOG" if backlog else "MES","m":r["tiempo_planeado_min"],"per":r["personas_usar"],"hh":r["hh_pmp"],"c":r["condicion"],"cr":r["criticidad"]})
     return {"programming_id":int(pid),"version_id":int(vid),"version":ver,"hh_programmed":total,"hh_target":cap["target"]}
 
@@ -49,44 +49,44 @@ def programming_history(limit=50):
     with get_engine().connect() as conn:
         rows=conn.execute(text("""SELECT ps.id programming_id,pv.id version_id,pv.numero_version,pv.tipo,pv.es_actual,pv.creado_en,per.fecha_desde,per.fecha_hasta,e.codigo especialidad,
         ps.estado,ps.hh_disponibles,ps.hh_objetivo,ps.hh_standby,COALESCE(SUM(pi.hh_programadas),0)::float hh_programadas,COUNT(pi.id) items
-        FROM mantenimiento.programacion_semanal ps JOIN mantenimiento.periodo_semanal per ON per.id=ps.periodo_semanal_id
-        JOIN mantenimiento.especialidad e ON e.id=ps.especialidad_id JOIN mantenimiento.programacion_version pv ON pv.programacion_semanal_id=ps.id
-        LEFT JOIN mantenimiento.programacion_item pi ON pi.programacion_version_id=pv.id GROUP BY ps.id,pv.id,per.id,e.id ORDER BY pv.creado_en DESC LIMIT :l"""),{"l":limit}).mappings().all()
+        FROM programacion_semanal ps JOIN periodo_semanal per ON per.id=ps.periodo_semanal_id
+        JOIN especialidad e ON e.id=ps.especialidad_id JOIN programacion_version pv ON pv.programacion_semanal_id=ps.id
+        LEFT JOIN programacion_item pi ON pi.programacion_version_id=pv.id GROUP BY ps.id,pv.id,per.id,e.id ORDER BY pv.creado_en DESC LIMIT :l"""),{"l":limit}).mappings().all()
     return [dict(r) for r in rows]
 
 def programming_detail(version_id:int):
     with get_engine().connect() as conn:
         rows=conn.execute(text("""SELECT pi.id program_item_id,pi.pmp_id,om.numero_orden,a.codigo activo_codigo,a.descripcion activo_descripcion,a.area_nombre,a.linea_nombre,
         p.titulo actividad,pt.nombre plan_trabajo,pi.criticidad_snapshot criticidad,pi.condicion_snapshot condicion,pi.personas_usar,pi.tiempo_planeado_min,pi.hh_programadas,pi.origen,
-        COALESCE(om.estado,'PENDIENTE') estado FROM mantenimiento.programacion_item pi JOIN mantenimiento.pmp p ON p.id=pi.pmp_id
-        JOIN mantenimiento.activo a ON a.id=p.activo_id JOIN mantenimiento.plan_trabajo pt ON pt.id=p.plan_trabajo_id
-        LEFT JOIN mantenimiento.orden_mantenimiento om ON om.id=pi.orden_id WHERE pi.programacion_version_id=:v ORDER BY a.area_nombre,pt.nombre,a.codigo"""),{"v":version_id}).mappings().all()
+        COALESCE(om.estado,'PENDIENTE') estado FROM programacion_item pi JOIN pmp p ON p.id=pi.pmp_id
+        JOIN activo a ON a.id=p.activo_id JOIN plan_trabajo pt ON pt.id=p.plan_trabajo_id
+        LEFT JOIN orden_mantenimiento om ON om.id=pi.orden_id WHERE pi.programacion_version_id=:v ORDER BY a.area_nombre,pt.nombre,a.codigo"""),{"v":version_id}).mappings().all()
     return [dict(r) for r in rows]
 
 def close_programming(*,programming_id:int,version_id:int,reasons:dict,closed_by=None):
     with get_engine().begin() as conn:
-        rows=conn.execute(text("""SELECT pi.id item_id,pi.hh_programadas,COALESCE(om.estado,'PENDIENTE') estado FROM mantenimiento.programacion_item pi
-        LEFT JOIN mantenimiento.orden_mantenimiento om ON om.id=pi.orden_id WHERE pi.programacion_version_id=:v"""),{"v":version_id}).mappings().all()
+        rows=conn.execute(text("""SELECT pi.id item_id,pi.hh_programadas,COALESCE(om.estado,'PENDIENTE') estado FROM programacion_item pi
+        LEFT JOIN orden_mantenimiento om ON om.id=pi.orden_id WHERE pi.programacion_version_id=:v"""),{"v":version_id}).mappings().all()
         if not rows: raise ProgrammingError("La versión no tiene actividades")
         total=sum(float(r["hh_programadas"] or 0) for r in rows); final=sum(float(r["hh_programadas"] or 0) for r in rows if r["estado"]=="FINALIZADA"); pending=total-final; pct=final/total*100 if total else 0
-        cid=conn.execute(text("""INSERT INTO mantenimiento.cierre_semanal(programacion_semanal_id,programacion_version_id,hh_programadas,hh_finalizadas,hh_pendientes,cumplimiento_pct,cerrado_por)
+        cid=conn.execute(text("""INSERT INTO cierre_semanal(programacion_semanal_id,programacion_version_id,hh_programadas,hh_finalizadas,hh_pendientes,cumplimiento_pct,cerrado_por)
         VALUES(:p,:v,:t,:f,:pe,:pct,:u) ON CONFLICT(programacion_semanal_id,programacion_version_id) DO UPDATE SET hh_programadas=EXCLUDED.hh_programadas,
         hh_finalizadas=EXCLUDED.hh_finalizadas,hh_pendientes=EXCLUDED.hh_pendientes,cumplimiento_pct=EXCLUDED.cumplimiento_pct,cerrado_por=EXCLUDED.cerrado_por,cerrado_en=NOW() RETURNING id"""),
         {"p":programming_id,"v":version_id,"t":total,"f":final,"pe":pending,"pct":pct,"u":closed_by}).scalar_one()
-        conn.execute(text("DELETE FROM mantenimiento.cierre_item WHERE cierre_semanal_id=:c"),{"c":cid})
+        conn.execute(text("DELETE FROM cierre_item WHERE cierre_semanal_id=:c"),{"c":cid})
         for r in rows:
             reason_id=None; detail=related=None
             if r["estado"]!="FINALIZADA":
                 supplied=reasons.get(int(r["item_id"])) or {}; code=supplied.get("reason_code")
                 if not code: raise ProgrammingError(f"Falta motivo para item {r['item_id']}")
-                reason=conn.execute(text("SELECT id,requiere_detalle FROM mantenimiento.motivo_no_ejecucion WHERE codigo=:c AND activo=TRUE"),{"c":code}).mappings().one_or_none()
+                reason=conn.execute(text("SELECT id,requiere_detalle FROM motivo_no_ejecucion WHERE codigo=:c AND activo=TRUE"),{"c":code}).mappings().one_or_none()
                 if not reason: raise ProgrammingError(f"Motivo desconocido: {code}")
                 detail=supplied.get("detail"); related=supplied.get("related_order")
                 if reason["requiere_detalle"] and not detail: raise ProgrammingError(f"El motivo {code} requiere detalle")
                 reason_id=reason["id"]
-            conn.execute(text("""INSERT INTO mantenimiento.cierre_item(cierre_semanal_id,programacion_item_id,estado_ejecucion,motivo_no_ejecucion_id,detalle,orden_relacionada)
+            conn.execute(text("""INSERT INTO cierre_item(cierre_semanal_id,programacion_item_id,estado_ejecucion,motivo_no_ejecucion_id,detalle,orden_relacionada)
             VALUES(:c,:i,:s,:r,:d,:o)"""),{"c":cid,"i":r["item_id"],"s":r["estado"],"r":reason_id,"d":detail,"o":related})
-        conn.execute(text("UPDATE mantenimiento.programacion_semanal SET estado='CERRADA',cerrado_en=NOW() WHERE id=:id"),{"id":programming_id})
+        conn.execute(text("UPDATE programacion_semanal SET estado='CERRADA',cerrado_en=NOW() WHERE id=:id"),{"id":programming_id})
     return {"closure_id":int(cid),"hh_programmed":total,"hh_finalized":final,"hh_pending":pending,"compliance_pct":pct}
 
 
@@ -98,11 +98,11 @@ def _programming_export_data(version_id:int):
           ps.hh_disponibles,ps.hh_objetivo,ps.hh_standby,
           COALESCE(SUM(pi.hh_programadas),0)::float hh_programadas,
           COUNT(pi.id)::int items
-        FROM mantenimiento.programacion_semanal ps
-        JOIN mantenimiento.periodo_semanal per ON per.id=ps.periodo_semanal_id
-        JOIN mantenimiento.especialidad e ON e.id=ps.especialidad_id
-        JOIN mantenimiento.programacion_version pv ON pv.programacion_semanal_id=ps.id
-        LEFT JOIN mantenimiento.programacion_item pi ON pi.programacion_version_id=pv.id
+        FROM programacion_semanal ps
+        JOIN periodo_semanal per ON per.id=ps.periodo_semanal_id
+        JOIN especialidad e ON e.id=ps.especialidad_id
+        JOIN programacion_version pv ON pv.programacion_semanal_id=ps.id
+        LEFT JOIN programacion_item pi ON pi.programacion_version_id=pv.id
         WHERE pv.id=:v
         GROUP BY ps.id,pv.id,per.id,e.id"""),{"v":version_id}).mappings().one_or_none()
         if not header:
@@ -114,11 +114,11 @@ def _programming_export_data(version_id:int):
           pi.criticidad_snapshot criticidad,pi.condicion_snapshot condicion,
           pi.personas_usar,pi.tiempo_planeado_min,pi.hh_programadas,pi.origen,
           COALESCE(om.estado,'PENDIENTE') estado
-        FROM mantenimiento.programacion_item pi
-        JOIN mantenimiento.pmp p ON p.id=pi.pmp_id
-        JOIN mantenimiento.activo a ON a.id=p.activo_id
-        JOIN mantenimiento.plan_trabajo pt ON pt.id=p.plan_trabajo_id
-        LEFT JOIN mantenimiento.orden_mantenimiento om ON om.id=pi.orden_id
+        FROM programacion_item pi
+        JOIN pmp p ON p.id=pi.pmp_id
+        JOIN activo a ON a.id=p.activo_id
+        JOIN plan_trabajo pt ON pt.id=p.plan_trabajo_id
+        LEFT JOIN orden_mantenimiento om ON om.id=pi.orden_id
         WHERE pi.programacion_version_id=:v
         ORDER BY a.area_nombre,pt.nombre,p.titulo,a.codigo"""),{"v":version_id}).mappings().all()
     return dict(header),[dict(r) for r in rows]
@@ -323,63 +323,55 @@ TEST_MARKER="PRUEBA_WEB"
 def reset_test_data()->dict:
     with get_engine().begin() as conn:
         programming_ids=[int(x) for x in conn.execute(text(
-            "SELECT id FROM mantenimiento.programacion_semanal WHERE creado_por=:m"
+            "SELECT id FROM programacion_semanal WHERE creado_por=:m"
         ),{"m":TEST_MARKER}).scalars().all()]
 
         version_ids=[]
         if programming_ids:
             version_ids=[int(x) for x in conn.execute(text(
-                "SELECT id FROM mantenimiento.programacion_version WHERE programacion_semanal_id=ANY(:ids)"
+                "SELECT id FROM programacion_version WHERE programacion_semanal_id=ANY(:ids)"
             ),{"ids":programming_ids}).scalars().all()]
 
         item_count=0
         closure_count=0
         if programming_ids:
             closure_ids=[int(x) for x in conn.execute(text(
-                "SELECT id FROM mantenimiento.cierre_semanal WHERE programacion_semanal_id=ANY(:ids)"
+                "SELECT id FROM cierre_semanal WHERE programacion_semanal_id=ANY(:ids)"
             ),{"ids":programming_ids}).scalars().all()]
             if closure_ids:
-                conn.execute(text("DELETE FROM mantenimiento.cierre_item WHERE cierre_semanal_id=ANY(:ids)"),{"ids":closure_ids})
+                conn.execute(text("DELETE FROM cierre_item WHERE cierre_semanal_id=ANY(:ids)"),{"ids":closure_ids})
                 closure_count=conn.execute(text(
-                    "DELETE FROM mantenimiento.cierre_semanal WHERE id=ANY(:ids) RETURNING id"
+                    "DELETE FROM cierre_semanal WHERE id=ANY(:ids) RETURNING id"
                 ),{"ids":closure_ids}).rowcount or 0
 
         if version_ids:
             item_count=conn.execute(text(
-                "DELETE FROM mantenimiento.programacion_item WHERE programacion_version_id=ANY(:ids)"
+                "DELETE FROM programacion_item WHERE programacion_version_id=ANY(:ids)"
             ),{"ids":version_ids}).rowcount or 0
             conn.execute(text(
-                "DELETE FROM mantenimiento.programacion_version WHERE id=ANY(:ids)"
+                "DELETE FROM programacion_version WHERE id=ANY(:ids)"
             ),{"ids":version_ids})
 
         programming_count=0
         if programming_ids:
             programming_count=conn.execute(text(
-                "DELETE FROM mantenimiento.programacion_semanal WHERE id=ANY(:ids)"
+                "DELETE FROM programacion_semanal WHERE id=ANY(:ids)"
             ),{"ids":programming_ids}).rowcount or 0
 
-        conn.execute(text("""DELETE FROM mantenimiento.periodo_semanal ps
+        conn.execute(text("""DELETE FROM periodo_semanal ps
           WHERE NOT EXISTS (
-            SELECT 1 FROM mantenimiento.programacion_semanal p
+            SELECT 1 FROM programacion_semanal p
             WHERE p.periodo_semanal_id=ps.id
           )"""))
 
-        learned_rows=conn.execute(text("""UPDATE mantenimiento.clasificacion_plan cp
-          SET condicion='SIN CLASIFICAR',
-              personas_usar=pt.personas_defecto,
-              observacion='Sincronizado desde TEAM FOOD',
-              actualizado_por=NULL,
-              fuente='MAESTRO',
-              actualizado_en=now()
-          FROM mantenimiento.plan_trabajo pt
-          WHERE cp.plan_trabajo_id=pt.id
-            AND cp.actualizado_por=:m
-          RETURNING cp.id"""),{"m":TEST_MARKER}).fetchall()
-
-        time_rows=conn.execute(text("""UPDATE mantenimiento.plan_trabajo
-          SET tiempo_ejecucion_min=NULL,actualizado_por=NULL
+        learned_rows=conn.execute(text("""UPDATE plan_trabajo
+          SET numero_personas=NULL,
+              equipo_detenido=NULL,
+              actualizado_por=NULL
           WHERE actualizado_por=:m
           RETURNING id"""),{"m":TEST_MARKER}).fetchall()
+
+        time_rows=[]
 
     return {
       "ok":True,
