@@ -23,6 +23,10 @@ from backend.services.v2_query_service import (
     get_dashboard, get_pending_plans, save_plan_complement,
     get_technicians, save_technician_complement, get_pmp,
 )
+from backend.services.v2_programming_service import (
+    V2ProgrammingError, get_week_programming, save_week_programming,
+    export_weekly_excel, export_weekly_pdf,
+)
 from backend.services.programming_service import (
     ProgrammingError, close_programming, programming_detail, programming_history, save_programming,
     export_programming_excel, export_programming_pdf, reset_test_data,
@@ -156,6 +160,53 @@ def v2_pmp(
 ):
     try:return get_pmp(year,month,specialty=specialty,area=area,search=search,limit=limit)
     except ValueError as exc:raise HTTPException(422,str(exc)) from exc
+
+
+class V2WeeklyProgrammingCreate(BaseModel):
+    date_from:date
+    date_to:date
+    specialty:str
+    order_ids:list[int]=Field(min_length=1)
+    created_by:str|None="CARLOS ANDRÉS RECIO MUÑOZ"
+
+@app.get("/api/v2/programming/week")
+def v2_programming_week(date_from:date,date_to:date,specialty:str):
+    try:return get_week_programming(date_from=date_from,date_to=date_to,specialty=specialty)
+    except V2ProgrammingError as exc:raise HTTPException(422,str(exc)) from exc
+
+@app.post("/api/v2/programming")
+def v2_save_programming(body:V2WeeklyProgrammingCreate):
+    try:
+        return save_week_programming(
+            date_from=body.date_from,date_to=body.date_to,specialty=body.specialty,
+            order_ids=body.order_ids,created_by=body.created_by
+        )
+    except V2ProgrammingError as exc:
+        raise HTTPException(422,str(exc)) from exc
+
+@app.get("/api/v2/programming/{programming_id}/export.xlsx")
+def v2_export_programming_xlsx(programming_id:int):
+    try:
+        content,filename=export_weekly_excel(programming_id)
+        return StreamingResponse(
+            iter([content]),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition":f'attachment; filename="{filename}"'}
+        )
+    except V2ProgrammingError as exc:
+        raise HTTPException(404,str(exc)) from exc
+
+@app.get("/api/v2/programming/{programming_id}/export.pdf")
+def v2_export_programming_pdf(programming_id:int):
+    try:
+        content,filename=export_weekly_pdf(programming_id)
+        return StreamingResponse(
+            iter([content]),
+            media_type="application/pdf",
+            headers={"Content-Disposition":f'attachment; filename="{filename}"'}
+        )
+    except V2ProgrammingError as exc:
+        raise HTTPException(404,str(exc)) from exc
 
 
 @app.get("/api/master-status")
