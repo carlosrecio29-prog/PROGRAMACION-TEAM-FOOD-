@@ -1,5 +1,5 @@
 import {useEffect,useMemo,useState} from 'react'
-import {downloadProgrammingExport,getCandidates,getMonthReconciliation,saveProgramming} from '../api'
+import {downloadProgrammingExport,getCandidates,saveProgramming} from '../api'
 
 const STOPPED_CONDITIONS=['EQUIPO DETENIDO','LINEA DETENIDA','AREA/PLANTA DETENIDA']
 
@@ -84,7 +84,6 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
  const [message,setMessage]=useState('')
  const [refresh,setRefresh]=useState(0)
  const [loading,setLoading]=useState(false)
- const [reconciliation,setReconciliation]=useState({})
  const [lastSaved,setLastSaved]=useState(null)
  const [exporting,setExporting]=useState('')
 
@@ -120,13 +119,6 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
   return()=>{active=false;clearTimeout(timer)}
  },[specialty,year,month,area,criticality,origin,refresh])
 
- useEffect(()=>{
-  let active=true
-  getMonthReconciliation(year,month)
-   .then(r=>{if(active)setReconciliation(r||{})})
-   .catch(()=>{if(active)setReconciliation({})})
-  return()=>{active=false}
- },[year,month,refresh])
 
  const readyRows=useMemo(
   ()=>candidateRows.filter(x=>x.datos_completos&&!selected.some(s=>s.pmp_id===x.pmp_id)),
@@ -173,7 +165,6 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
   ].some(v=>String(v||'').toLowerCase().includes(q)))
  },[stoppedReady,stoppedSearch])
 
- const stats=reconciliation[specialty]||{}
  const target=Number(capacity?.target||0)
  const total=Number(capacity?.available||0)
  const standby=Number(capacity?.standby||0)
@@ -231,12 +222,10 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
  }
 
  return <div className="planner">
-  <div className="capacity-strip">
-   <div><span>Técnicos</span><b>{Number(capacity?.technicians||0)}</b><small>en {specialtyName}</small></div>
-   <div><span>Capacidad real</span><b>{total.toFixed(1)}</b><small>H-H disponibles</small></div>
+  <div className="capacity-strip compact-capacity">
+   <div><span>Capacidad semanal</span><b>{total.toFixed(1)}</b><small>H-H disponibles</small></div>
    <div className="target-card"><span>Meta programable</span><b>{target.toFixed(1)}</b><small>80% de capacidad</small></div>
    <div><span>Seleccionadas</span><b>{used.toFixed(1)}</b><small>{remaining.toFixed(1)} H-H por usar</small></div>
-   <div><span>Reserva</span><b>{standby.toFixed(1)}</b><small>20% standby</small></div>
   </div>
 
   <div className="capacity-progress">
@@ -244,24 +233,6 @@ export default function SpecialtyPlanner({specialty,specialtyName,capacity,week,
    <div className="progress-track"><i style={{width:pct(used,target)+'%'}}/></div>
   </div>
 
-  <div className="reconciliation-card">
-   <div className="reconciliation-head">
-    <div>
-     <span className="section-kicker">CONCILIACIÓN CON MAESTRO</span>
-     <h3>De Excel a programación</h3>
-     <p>Las OT repetidas se consolidan; las OT distintas se conservan como PMP independientes.</p>
-    </div>
-    <span className="reconciliation-period">{String(month).padStart(2,'0')} / {year}</span>
-   </div>
-   <div className="reconciliation-grid">
-    <div><span>PMP en maestro</span><b>{Number(stats.master_rows||0)}</b><small>Filas de {specialtyName}</small></div>
-    <div><span>OT únicas</span><b>{Number(stats.unique_ot||0)}</b><small>{Number(stats.repeated_extra_rows||0)} repetidas consolidadas</small></div>
-    <div><span>Pendientes</span><b>{Number(stats.pending_unique_ot||0)}</b><small>OT pendientes únicas</small></div>
-    <div><span>Finalizadas</span><b>{Number(stats.finalized_unique_ot||0)}</b><small>No entran a programación</small></div>
-    <div className="reconciliation-warn"><span>Inconsistencias</span><b>{Number(stats.pending_exceptions||0)}</b><small>Relación con maestro</small></div>
-    <div className="reconciliation-ok"><span>Disponibles ahora</span><b>{Number(stats.available_now||0)}</b><small>Antes de definir/filtrar</small></div>
-   </div>
-  </div>
 
   <div className="programming-groups">
    <div className="programming-group-card operating">
