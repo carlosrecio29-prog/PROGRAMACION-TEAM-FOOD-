@@ -140,16 +140,14 @@ def import_team_food(filename:str,content:bytes,*,year:int|None=None,month:int|N
                 if existing is None or int(existing["id"])==int(rec["id"]):
                     plan_by_key[src["description_key"]]=dict(rec)
 
-        plan_source={}
-        for r in parsed["plans"].rows:
-            plan_source[r["plan_key"]]=r
-            if r.get("description_key"):plan_source.setdefault(r["description_key"],r)
         activity_rows=[]
         for r in parsed["planning"].rows:
             if r["state"]!="HABILITADO":continue
-            a=asset_map.get(str(r["asset_code"]).strip().upper());p=plan_by_key.get(r["plan_key"]);src=plan_source.get(r["plan_key"])
+            a=asset_map.get(str(r["asset_code"]).strip().upper())
+            p=plan_by_key.get(r["plan_key"])
             if not a or not p:rejected+=1;continue
-            activity_rows.append({"aid":int(a["id"]),"pid":int(p["id"]),"sid":spec_ids[p["especialidad"]],"iid":iid})
+            sid=spec_ids[p["especialidad"]]
+            activity_rows.append({"aid":int(a["id"]),"pid":int(p["id"]),"sid":sid,"iid":iid})
         _execute_many(conn,"""INSERT INTO mantenimiento.actividad_maestra(activo_id,plan_trabajo_id,especialidad_id,fuente_datos,importacion_id_ultima,activo,actualizado_en)
           VALUES(:aid,:pid,:sid,'TEAM_FOOD',:iid,true,now())
           ON CONFLICT(activo_id,plan_trabajo_id,especialidad_id) DO UPDATE SET
