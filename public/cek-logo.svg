@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-labelledby="title desc">
+  <title id="title">CEK Global Inspection Services</title>
+  <desc id="desc">Emblema corporativo CEK inspirado en engranaje y globo.</desc>
+  <defs>
+    <linearGradient id="metal" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f8fbff"/>
+      <stop offset="0.45" stop-color="#b8c8d8"/>
+      <stop offset="1" stop-color="#6f879d"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b4a7e"/>
+      <stop offset="0.55" stop-color="#176ca8"/>
+      <stop offset="1" stop-color="#08345d"/>
+    </linearGradient>
+    <filter id="shadow" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="5" stdDeviation="5" flood-color="#062844" flood-opacity="0.26"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#shadow)">
+    <g fill="url(#metal)" stroke="#58738c" stroke-width="2">
+      <rect x="70" y="5" width="20" height="25" rx="4"/>
+      <rect x="70" y="130" width="20" height="25" rx="4"/>
+      <rect x="5" y="70" width="25" height="20" rx="4"/>
+      <rect x="130" y="70" width="25" height="20" rx="4"/>
+      <rect x="21" y="22" width="20" height="25" rx="4" transform="rotate(-45 31 34.5)"/>
+      <rect x="119" y="113" width="20" height="25" rx="4" transform="rotate(-45 129 125.5)"/>
+      <rect x="113" y="21" width="25" height="20" rx="4" transform="rotate(-45 125.5 31)"/>
+      <rect x="22" y="119" width="25" height="20" rx="4" transform="rotate(-45 34.5 129)"/>
+    </g>
+
+    <circle cx="80" cy="80" r="59" fill="url(#metal)" stroke="#516e87" stroke-width="3"/>
+    <circle cx="80" cy="80" r="48" fill="url(#blue)" stroke="#ffffff" stroke-opacity="0.72" stroke-width="2"/>
+
+    <g fill="none" stroke="#cfe8fb" stroke-width="1.8" opacity="0.9">
+      <ellipse cx="80" cy="80" rx="28" ry="47"/>
+      <ellipse cx="80" cy="80" rx="12" ry="47"/>
+      <ellipse cx="80" cy="80" rx="47" ry="18"/>
+      <ellipse cx="80" cy="80" rx="47" ry="34"/>
+      <path d="M33 80h94"/>
+      <path d="M80 33v94"/>
+    </g>
+
+    <path d="M38 69c15-13 28-18 42-18 18 0 31 6 43 19-12-4-23-6-34-5-17 1-31 6-51 18z" fill="#ffffff" opacity="0.18"/>
+
+    <rect x="29" y="61" width="102" height="38" rx="11" fill="#ffffff" fill-opacity="0.95" stroke="#d7e3ec" stroke-width="2"/>
+    <text x="80" y="88" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="31" font-weight="900" letter-spacing="2" fill="#0b4a7e">CEK</text>
+  </g>
+</svg>
