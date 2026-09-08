@@ -57,6 +57,11 @@ def get_week_programming(*, date_from: date, date_to: date, specialty: str) -> d
               CASE WHEN current_item.id IS NOT NULL THEN true ELSE false END AS seleccionado,
               CASE WHEN c.backlog_id IS NOT NULL AND current_item.id IS NULL THEN true ELSE false END AS es_backlog,
               CASE WHEN current_item.id IS NOT NULL THEN current_item.origen_backlog ELSE c.backlog_id IS NOT NULL END AS origen_backlog,
+              CASE
+                WHEN current_item.id IS NOT NULL THEN current_item.origen
+                WHEN c.backlog_id IS NOT NULL THEN 'BACKLOG'
+                ELSE 'PMP_MES'
+              END AS origen,
               current_item.estado_cierre,current_item.finalizado,current_item.verificado_en
             FROM candidate c
             LEFT JOIN programacion.programacion_item_v2 current_item
@@ -187,12 +192,13 @@ def save_week_programming(*, date_from: date, date_to: date, specialty: str, ord
         for row in rows:
             order_id = int(row["orden_mantenimiento_id"])
             origin_backlog = order_id in backlog_ids or order_id in previous_origins
+            origin = "BACKLOG" if origin_backlog else "PMP_MES"
             conn.execute(text("""
                 INSERT INTO programacion.programacion_item_v2(
-                  programacion_id,orden_mantenimiento_id,hh_programadas,requiere_parada,origen_backlog
-                ) VALUES(:programming_id,:order_id,:hh,:requires_stop,:origin_backlog)
+                  programacion_id,orden_mantenimiento_id,hh_programadas,requiere_parada,origen_backlog,origen
+                ) VALUES(:programming_id,:order_id,:hh,:requires_stop,:origin_backlog,:origin)
             """), {"programming_id": programming_id, "order_id": order_id, "hh": row["hh"],
-                     "requires_stop": row["requiere_parada"], "origin_backlog": origin_backlog})
+                     "requires_stop": row["requiere_parada"], "origin_backlog": origin_backlog, "origin": origin})
 
     return {
         "ok": True, "programming_id": int(programming_id), "hh_available": capacity["available"],
