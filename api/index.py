@@ -23,9 +23,12 @@ from backend.services.v2_query_service import (
     get_dashboard, get_pending_plans, save_plan_complement,
     get_technicians, save_technician_complement, get_pmp,
 )
-from backend.services.v2_programming_service import (
+from backend.services.v2_programming_runtime import (
     V2ProgrammingError, get_week_programming, save_week_programming,
     export_weekly_excel, export_weekly_pdf,
+)
+from backend.services.v2_closure_service import (
+    V2ClosureError, get_week_closure, close_week_from_calendar,
 )
 from backend.services.programming_service import (
     ProgrammingError, close_programming, programming_detail, programming_history, save_programming,
@@ -62,7 +65,6 @@ def health():
         }
     except Exception as exc:
         message=str(exc)
-        # Evitar que una excepción llegue a exponer credenciales.
         if "@" in message:
             parts=message.split("@")
             message="[credenciales ocultas]@" + parts[-1]
@@ -108,14 +110,10 @@ async def import_v2_base(
     except Exception as exc:
         raise HTTPException(500,f"Error importando base V2: {exc}") from exc
 
-
 @app.get("/api/v2/status")
 def v2_status():
-    try:
-        return get_v2_status()
-    except Exception as exc:
-        raise HTTPException(500,f"Error consultando base V2: {exc}") from exc
-
+    try:return get_v2_status()
+    except Exception as exc:raise HTTPException(500,f"Error consultando base V2: {exc}") from exc
 
 @app.get("/api/v2/dashboard")
 def v2_dashboard(year:int=2026,month:int=Query(9,ge=1,le=12)):
@@ -161,7 +159,6 @@ def v2_pmp(
     try:return get_pmp(year,month,specialty=specialty,area=area,search=search,limit=limit)
     except ValueError as exc:raise HTTPException(422,str(exc)) from exc
 
-
 class V2WeeklyProgrammingCreate(BaseModel):
     date_from:date
     date_to:date
@@ -182,6 +179,28 @@ def v2_save_programming(body:V2WeeklyProgrammingCreate):
             order_ids=body.order_ids,created_by=body.created_by
         )
     except V2ProgrammingError as exc:
+        raise HTTPException(422,str(exc)) from exc
+
+@app.get("/api/v2/programming/{programming_id}/closure")
+def v2_week_closure(programming_id:int):
+    try:return get_week_closure(programming_id)
+    except V2ClosureError as exc:raise HTTPException(404,str(exc)) from exc
+
+@app.post("/api/v2/programming/{programming_id}/close-file")
+async def v2_close_week_file(
+    programming_id:int,
+    file:UploadFile=File(...),
+    closed_by:str|None=Query("CARLOS ANDRÉS RECIO MUÑOZ"),
+):
+    try:
+        content=await read_upload(file)
+        return close_week_from_calendar(
+            programming_id=programming_id,
+            content=content,
+            filename=file.filename or "calendario.xlsx",
+            closed_by=closed_by,
+        )
+    except V2ClosureError as exc:
         raise HTTPException(422,str(exc)) from exc
 
 @app.get("/api/v2/programming/{programming_id}/export.xlsx")
@@ -207,7 +226,6 @@ def v2_export_programming_pdf(programming_id:int):
         )
     except V2ProgrammingError as exc:
         raise HTTPException(404,str(exc)) from exc
-
 
 @app.get("/api/master-status")
 def master_status():return get_master_status()
@@ -347,7 +365,6 @@ def close_program(body:ProgrammingClose):
     try:return close_programming(programming_id=body.programming_id,version_id=body.version_id,
       reasons=reason_map,closed_by=body.closed_by)
     except ProgrammingError as exc:raise HTTPException(422,str(exc)) from exc
-
 
 class TestResetRequest(BaseModel):
     confirmation:str
