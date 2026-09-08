@@ -54,19 +54,24 @@ jobs:
           SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
         run: python .github/scripts/apply_supabase_migrations.py
 
-      - name: Validate Vercel secrets
+      - name: Check Vercel configuration
         if: github.event_name != 'pull_request'
+        id: vercel
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
-          test -n "$VERCEL_TOKEN" || (echo "Falta VERCEL_TOKEN" && exit 1)
-          test -n "$VERCEL_ORG_ID" || (echo "Falta VERCEL_ORG_ID" && exit 1)
-          test -n "$VERCEL_PROJECT_ID" || (echo "Falta VERCEL_PROJECT_ID" && exit 1)
+          if [ -n "$VERCEL_TOKEN" ] && [ -n "$VERCEL_ORG_ID" ] && [ -n "$VERCEL_PROJECT_ID" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            echo "Vercel configurado: se desplegará producción."
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "Vercel no tiene las tres credenciales requeridas; se omite el deploy sin afectar pruebas ni migraciones."
+          fi
 
       - name: Deploy production to Vercel
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && steps.vercel.outputs.ready == 'true'
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
