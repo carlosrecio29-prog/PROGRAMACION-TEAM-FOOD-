@@ -1,10 +1,13 @@
 ALTER TABLE programacion.programacion_item_v2
-  ADD COLUMN IF NOT EXISTS origen varchar(20) NOT NULL DEFAULT 'PMP';
+  ADD COLUMN IF NOT EXISTS origen varchar(20) NOT NULL DEFAULT 'PMP_MES';
+
+ALTER TABLE programacion.programacion_item_v2
+  ALTER COLUMN origen SET DEFAULT 'PMP_MES';
 
 ALTER TABLE programacion.programacion_item_v2
   DROP CONSTRAINT IF EXISTS programacion_item_v2_origen_check;
 ALTER TABLE programacion.programacion_item_v2
-  ADD CONSTRAINT programacion_item_v2_origen_check CHECK (origen IN ('PMP','BACKLOG'));
+  ADD CONSTRAINT programacion_item_v2_origen_check CHECK (origen IN ('PMP_MES','BACKLOG'));
 
 CREATE TABLE IF NOT EXISTS programacion.cierre_semanal_v2 (
   id bigserial PRIMARY KEY,
