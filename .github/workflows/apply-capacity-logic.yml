@@ -23,10 +23,12 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
-          backend_path = Path('backend/services/v2_programming_runtime.py')
+          backend_path = Path('backend/services/v2_programming_service.py')
+          runtime_path = Path('backend/services/v2_programming_runtime.py')
           frontend_path = Path('frontend/src/App.jsx')
 
           backend = backend_path.read_text(encoding='utf-8')
+          runtime = runtime_path.read_text(encoding='utf-8')
           frontend = frontend_path.read_text(encoding='utf-8')
 
           old_sql = '''          count(DISTINCT t.id)::int AS tecnicos,\n          round(COALESCE(sum(pt.horas_disponibles),0),2) AS hh_disponibles'''
@@ -40,9 +42,10 @@ jobs:
           if old_capacity not in backend:
               raise SystemExit('No se encontro la formula de capacidad esperada')
           backend = backend.replace(old_capacity, new_capacity, 1)
-          backend = backend.replace(
-              'supera la meta del 80% ({capacity[\'target\']:.1f} H-H)',
-              'supera la meta programable ({capacity[\'target\']:.1f} H-H)',
+
+          runtime = runtime.replace(
+              "supera la meta del 80% ({capacity['target']:.1f} H-H)",
+              "supera la meta programable ({capacity['target']:.1f} H-H)",
               1,
           )
 
@@ -71,6 +74,7 @@ jobs:
           )
 
           backend_path.write_text(backend, encoding='utf-8')
+          runtime_path.write_text(runtime, encoding='utf-8')
           frontend_path.write_text(frontend, encoding='utf-8')
           PY
 
@@ -79,7 +83,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add backend/services/v2_programming_runtime.py frontend/src/App.jsx
+          git add backend/services/v2_programming_service.py backend/services/v2_programming_runtime.py frontend/src/App.jsx
           if git diff --cached --quiet; then
             echo "No changes to commit"
             exit 0
