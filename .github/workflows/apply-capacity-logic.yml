@@ -1,0 +1,88 @@
+name: Apply double 80 percent capacity logic
+
+on:
+  push:
+    paths:
+      - '.github/workflows/apply-capacity-logic.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch-capacity-logic:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Apply capacity logic to backend and frontend
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          backend_path = Path('backend/services/v2_programming_runtime.py')
+          frontend_path = Path('frontend/src/App.jsx')
+
+          backend = backend_path.read_text(encoding='utf-8')
+          frontend = frontend_path.read_text(encoding='utf-8')
+
+          old_sql = '''          count(DISTINCT t.id)::int AS tecnicos,\n          round(COALESCE(sum(pt.horas_disponibles),0),2) AS hh_disponibles'''
+          new_sql = '''          count(DISTINCT t.id)::int AS tecnicos_asignados,\n          count(DISTINCT t.id) FILTER (WHERE pt.horas_disponibles > 0)::int AS tecnicos_disponibles,\n          round(COALESCE(sum(pt.horas_disponibles),0),2) AS hh_disponibles'''
+          if old_sql not in backend:
+              raise SystemExit('No se encontro el bloque SQL de capacidad esperado')
+          backend = backend.replace(old_sql, new_sql, 1)
+
+          old_capacity = '''    available=float(row["hh_disponibles"] or 0)\n    return {\n        "technicians":int(row["tecnicos"] or 0),\n        "available":round(available,2),\n        "target":round(available*.80,2),\n        "reserve":round(available*.20,2),\n    }'''
+          new_capacity = '''    available=float(row["hh_disponibles"] or 0)\n    effective=round(available*.80,2)\n    target=round(effective*.80,2)\n    reserve=round(effective*.20,2)\n    initial_margin=round(available-effective,2)\n    technicians_available=int(row["tecnicos_disponibles"] or 0)\n    technicians_assigned=int(row["tecnicos_asignados"] or 0)\n    return {\n        "technicians":technicians_available,\n        "technicians_available":technicians_available,\n        "technicians_assigned":technicians_assigned,\n        "available":round(available,2),\n        "effective":effective,\n        "target":target,\n        "reserve":reserve,\n        "initial_margin":initial_margin,\n    }'''
+          if old_capacity not in backend:
+              raise SystemExit('No se encontro la formula de capacidad esperada')
+          backend = backend.replace(old_capacity, new_capacity, 1)
+          backend = backend.replace(
+              'supera la meta del 80% ({capacity[\'target\']:.1f} H-H)',
+              'supera la meta programable ({capacity[\'target\']:.1f} H-H)',
+              1,
+          )
+
+          old_vars = '''const target=number(data?.capacity?.target);const available=number(data?.capacity?.available);const reserve=number(data?.capacity?.reserve);const remaining=Math.max(0,target-selectedHH);const progress=target>0?Math.min(100,selectedHH/target*100):0'''
+          new_vars = '''const target=number(data?.capacity?.target);const available=number(data?.capacity?.available);const effective=number(data?.capacity?.effective);const reserve=number(data?.capacity?.reserve);const initialMargin=number(data?.capacity?.initial_margin);const techniciansAvailable=number(data?.capacity?.technicians_available,data?.capacity?.technicians||0);const techniciansAssigned=number(data?.capacity?.technicians_assigned,data?.capacity?.technicians||0);const remaining=Math.max(0,target-selectedHH);const progress=target>0?Math.min(100,selectedHH/target*100):0'''
+          if old_vars not in frontend:
+              raise SystemExit('No se encontro el bloque de variables de capacidad en frontend')
+          frontend = frontend.replace(old_vars, new_vars, 1)
+
+          old_badge = '''<Badge>{loading?'Calculando...':`${data?.capacity?.technicians||0} técnicos`}</Badge>'''
+          new_badge = '''<Badge>{loading?'Calculando...':`${techniciansAvailable} disponibles / ${techniciansAssigned} asignados`}</Badge>'''
+          if old_badge not in frontend:
+              raise SystemExit('No se encontro el indicador de tecnicos')
+          frontend = frontend.replace(old_badge, new_badge, 1)
+
+          old_cards = '''<section className="v2-capacity-panel"><div className="v2-capacity-cards"><div><span>H-H disponibles</span><b>{fmt(available,1)}</b><small>100% de capacidad</small></div><div className="target"><span>Meta programable</span><b>{fmt(target,1)}</b><small>80% que debes programar</small></div><div><span>Reserva</span><b>{fmt(reserve,1)}</b><small>20% correctivos, traslados e imprevistos</small></div><div className="selected"><span>H-H seleccionadas</span><b>{fmt(selectedHH,1)}</b><small>{selected.size} órdenes / actividades</small></div><div className={remaining<=.01?'complete':'remaining'}><span>{remaining<=.01?'Meta alcanzada':'Faltan para meta'}</span><b>{fmt(remaining,1)}</b><small>H-H</small></div></div><div className="v2-progress-block"><div className="v2-progress-copy"><span>Avance hacia el 80%</span><b>{fmt(progress,1)}%</b></div>'''
+          new_cards = '''<section className="v2-capacity-panel"><div className="v2-capacity-cards"><div><span>H-H netas técnicos</span><b>{fmt(available,1)}</b><small>100% según turnos y ausencias</small></div><div><span>Capacidad efectiva</span><b>{fmt(effective,1)}</b><small>80% de las H-H netas</small></div><div><span>Margen inicial</span><b>{fmt(initialMargin,1)}</b><small>20% fuera de la capacidad efectiva</small></div><div className="target"><span>Meta programable</span><b>{fmt(target,1)}</b><small>80% de la capacidad efectiva</small></div><div><span>Reserva</span><b>{fmt(reserve,1)}</b><small>20% de la capacidad efectiva para correctivos e imprevistos</small></div><div className="selected"><span>H-H seleccionadas</span><b>{fmt(selectedHH,1)}</b><small>{selected.size} órdenes / actividades</small></div><div className={remaining<=.01?'complete':'remaining'}><span>{remaining<=.01?'Meta alcanzada':'Faltan para meta'}</span><b>{fmt(remaining,1)}</b><small>H-H</small></div></div><div className="v2-progress-block"><div className="v2-progress-copy"><span>Avance hacia la meta programable</span><b>{fmt(progress,1)}%</b></div>'''
+          if old_cards not in frontend:
+              raise SystemExit('No se encontro el panel de capacidad esperado')
+          frontend = frontend.replace(old_cards, new_cards, 1)
+
+          frontend = frontend.replace(
+              'El reporte mostrará la capacidad, la meta del 80%, la reserva del 20% y las órdenes que el ingeniero debe responder.',
+              'El reporte mostrará las H-H netas, la capacidad efectiva (80%), la meta programable (80% de la efectiva), la reserva (20% de la efectiva) y las órdenes que el ingeniero debe responder.',
+              1,
+          )
+
+          backend_path.write_text(backend, encoding='utf-8')
+          frontend_path.write_text(frontend, encoding='utf-8')
+          PY
+
+      - name: Commit application changes
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/services/v2_programming_runtime.py frontend/src/App.jsx
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "feat: use effective capacity with double 80 percent rule"
+          git push origin main
