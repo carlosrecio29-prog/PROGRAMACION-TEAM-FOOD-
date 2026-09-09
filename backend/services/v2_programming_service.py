@@ -30,7 +30,8 @@ def _validate_week(date_from:date,date_to:date,specialty:str)->str:
 def _capacity(conn,date_from:date,date_to:date,specialty:str)->dict[str,Any]:
     row=conn.execute(text("""
         SELECT
-          count(DISTINCT t.id)::int AS tecnicos,
+          count(DISTINCT t.id)::int AS tecnicos_asignados,
+          count(DISTINCT t.id) FILTER (WHERE pt.horas_disponibles > 0)::int AS tecnicos_disponibles,
           round(COALESCE(sum(pt.horas_disponibles),0),2) AS hh_disponibles
         FROM programacion.programacion_tecnico pt
         JOIN programacion.tecnico t ON t.id=pt.tecnico_id
@@ -38,11 +39,21 @@ def _capacity(conn,date_from:date,date_to:date,specialty:str)->dict[str,Any]:
           AND t.especialidad_efectiva=:specialty
     """),{"date_from":date_from,"date_to":date_to,"specialty":specialty}).mappings().one()
     available=float(row["hh_disponibles"] or 0)
+    effective=round(available*.80,2)
+    target=round(effective*.80,2)
+    reserve=round(effective*.20,2)
+    initial_margin=round(available-effective,2)
+    technicians_available=int(row["tecnicos_disponibles"] or 0)
+    technicians_assigned=int(row["tecnicos_asignados"] or 0)
     return {
-        "technicians":int(row["tecnicos"] or 0),
+        "technicians":technicians_available,
+        "technicians_available":technicians_available,
+        "technicians_assigned":technicians_assigned,
         "available":round(available,2),
-        "target":round(available*.80,2),
-        "reserve":round(available*.20,2),
+        "effective":effective,
+        "target":target,
+        "reserve":reserve,
+        "initial_margin":initial_margin,
     }
 
 

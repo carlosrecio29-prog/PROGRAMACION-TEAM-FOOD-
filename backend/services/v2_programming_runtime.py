@@ -156,7 +156,7 @@ def save_week_programming(*, date_from: date, date_to: date, specialty: str, ord
 
         total = round(sum(float(r["hh"] or 0) for r in rows), 2)
         if total > capacity["target"] + .001:
-            raise V2ProgrammingError(f"La selección suma {total:.1f} H-H y supera la meta del 80% ({capacity['target']:.1f} H-H)")
+            raise V2ProgrammingError(f"La selección suma {total:.1f} H-H y supera la meta programable ({capacity['target']:.1f} H-H)")
 
         programming_id = conn.execute(text("""
             INSERT INTO programacion.programacion_semanal_v2(
