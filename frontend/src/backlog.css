@@ -25,7 +25,7 @@
   --cek-shadow-soft:0 8px 24px rgba(15,52,88,.06);
 }
 
-html{scroll-behavior:smooth}
+html{scroll-behavior:auto}
 body{
   background:
     radial-gradient(circle at 88% 6%,rgba(59,145,200,.10),transparent 26%),
@@ -310,6 +310,24 @@ tbody tr{transition:background .13s ease}tbody tr:hover{background:#f6faff}
 .v2-activity-section.backlog .v2-activity-head{background:linear-gradient(90deg,#fff4cf,#fffdf7);box-shadow:inset 5px 0 0 #d29c32}
 .v2-badge.backlog{background:#fff0b8;color:#765300;border-color:#e5c45c}
 .v2-program-table{max-height:460px}
+.v2-program-table{overflow-anchor:none}
+
+/* ---------- Programación semanal: filtros aislados ---------- */
+.v2-weekly-programming{gap:16px}
+.v2-week-context{padding-bottom:18px}
+.v2-capacity-summary{padding:18px 20px}
+.v2-capacity-summary .v2-capacity-cards{grid-template-columns:repeat(4,1fr)}
+.v2-capacity-details{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;color:#5d7387;font-size:9px}
+.v2-capacity-details span{padding:6px 9px;border:1px solid #dce7ef;border-radius:999px;background:#f7fafc}
+.v2-capacity-details b{color:#1c4668}
+.v2-available-work{padding-top:18px}
+.v2-program-toolbar p{margin:4px 0 0;color:var(--cek-muted);font-size:9.5px}
+.v2-group-filters{display:grid;grid-template-columns:minmax(180px,.7fr) minmax(240px,1.3fr);gap:9px;padding:0 17px 14px;background:inherit}
+.v2-group-filters select,.v2-group-filters input{width:100%;min-width:0}
+.v2-activity-section.operating .v2-group-filters{background:#fbfefc}
+.v2-activity-section.stopped .v2-group-filters{background:#fffdfd}
+.v2-activity-section.backlog .v2-group-filters{background:#fffdf7}
+.v2-program-action-bar{position:sticky;top:16px;z-index:6;box-shadow:0 15px 30px rgba(15,52,88,.12)}
 
 /* ---------- Programación guardada / edición ---------- */
 .v2-program-review{
@@ -360,6 +378,7 @@ tbody tr{transition:background .13s ease}tbody tr:hover{background:#f6faff}
 @media(max-width:1250px){
   .v2-main{padding-left:26px;padding-right:26px}
   .v2-kpis{grid-template-columns:repeat(3,1fr)}
+  .v2-capacity-summary .v2-capacity-cards{grid-template-columns:repeat(2,1fr)}
 }
 @media(max-width:900px){
   .v2-sidebar{position:relative;width:100%;padding:18px}.v2-main{margin-left:0;padding:18px}
@@ -371,4 +390,6 @@ tbody tr{transition:background .13s ease}tbody tr:hover{background:#f6faff}
   .v2-topbar{padding:82px 16px 16px}.v2-topbar::before{left:16px;top:15px;transform:none;width:54px;height:54px}
   .v2-topbar h1{font-size:26px}.v2-hero{padding:22px}.v2-hero h2{font-size:21px}
   .v2-kpis{grid-template-columns:1fr}.v2-capacity-cards{grid-template-columns:1fr}
+  .v2-capacity-summary .v2-capacity-cards,.v2-group-filters{grid-template-columns:1fr}
+  .v2-program-action-bar{top:8px}
 }

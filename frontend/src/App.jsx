@@ -5,6 +5,7 @@ import {
   getV2WeekProgramming,saveV2WeekProgramming,downloadV2WeeklyReport
 } from './api'
 import WeeklyClosure from './components/WeeklyClosure'
+import WeeklyProgramming from './components/WeeklyProgramming'
 import './styles.css'
 import './backlog.css'
 
@@ -51,7 +52,7 @@ function Technicians({year,month,onChanged}){
 
 function monthWeeks(year,month){const days=new Date(year,month,0).getDate();const weeks=[];for(let start=1;start<=days;start+=7){const end=Math.min(start+6,days);const from=`${year}-${String(month).padStart(2,'0')}-${String(start).padStart(2,'0')}`;const to=`${year}-${String(month).padStart(2,'0')}-${String(end).padStart(2,'0')}`;weeks.push({from,to,label:`${start}–${end} ${MONTHS[month-1]}`})}return weeks}
 
-function WeeklyProgramming({year,month,dashboard}){
+function LegacyWeeklyProgramming({year,month,dashboard}){
   const weeks=useMemo(()=>monthWeeks(year,month),[year,month]);const [weekIndex,setWeekIndex]=useState(0);const [specialty,setSpecialty]=useState('MEC');const [data,setData]=useState(null);const [selected,setSelected]=useState(new Set());const [search,setSearch]=useState('');const [area,setArea]=useState('');const [loading,setLoading]=useState(false);const [saving,setSaving]=useState(false);const [error,setError]=useState('');const [message,setMessage]=useState('');const [dirty,setDirty]=useState(false);const [programmingId,setProgrammingId]=useState(null);const [editing,setEditing]=useState(true)
   const week=weeks[Math.min(weekIndex,weeks.length-1)]||weeks[0]
   async function load(){if(!week)return;try{setLoading(true);setError('');const r=await getV2WeekProgramming(week.from,week.to,specialty);setData(r);setSelected(new Set((r.selected_ids||[]).map(Number)));setProgrammingId(r.programming?.id||null);setEditing(!r.programming);setDirty(false)}catch(e){setError(e.message)}finally{setLoading(false)}}
