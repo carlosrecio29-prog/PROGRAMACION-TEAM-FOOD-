@@ -21,11 +21,11 @@
 
 - [x] 4.1 Auditar los selectores V2 duplicados entre `styles.css` y `backlog.css` y consolidar solo los overrides relacionados con la pantalla semanal.
 - [x] 4.2 Implementar el layout responsive de las tres barras de filtros y de las acciones principales sin introducir dependencias nuevas.
-- [ ] 4.3 Revisar visualmente Resumen, Cierre semanal y PMP para asegurar que la limpieza de estilos no provoque regresiones.
+- [x] 4.3 Revisar visualmente Resumen, Cierre semanal y PMP para asegurar que la limpieza de estilos no provoque regresiones.
 
 ## 5. Verificación
 
 - [x] 5.1 Añadir pruebas de interacción para seleccionar/quitar OT conservando la posición de scroll.
 - [x] 5.2 Añadir pruebas de aislamiento y persistencia de filtros para los tres grupos.
 - [x] 5.3 Ejecutar `npm run build` y los scripts de verificación del repositorio: `bash scripts/verify.sh`, `python scripts/check_agent_ownership.py` y `python scripts/check_destructive_changes.py`.
-- [ ] 5.4 Realizar una comprobación manual responsive y documentar cualquier ajuste visual pendiente antes de integrar.
+- [x] 5.4 Realizar una comprobación manual responsive y documentar cualquier ajuste visual pendiente antes de integrar.
