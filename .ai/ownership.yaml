@@ -1,0 +1,29 @@
+# Patrones relativos a la raíz. El Lead puede integrar cualquier área.
+roles:
+  database:
+    - supabase/**
+    - tests/database/**
+  backend:
+    - backend/**
+    - api/**
+  frontend:
+    - frontend/**
+  qa:
+    - tests/**
+    - e2e/**
+  security-release:
+    - .github/workflows/**
+    - .github/scripts/**
+    - vercel.json
+    - package-lock.json
+    - requirements*.txt
+    - pyproject.toml
+  lead:
+    - AGENTS.md
+    - .ai/**
+    - openspec/**
+    - docs/adr/**
+shared:
+  - README.md
+  - scripts/**
+escalation: Registra un handoff en .ai/handoffs y solicita transferencia al Lead; no edites silenciosamente otro patrón.

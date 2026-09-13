@@ -1,4 +1,4 @@
-name: CI + Supabase migrations + Vercel deploy
+name: CI gates + Supabase migrations + Vercel deploy
 
 on:
   push:
@@ -17,6 +17,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Harness and safety checks
+        run: |
+          python scripts/check_destructive_changes.py
+          python scripts/check_agent_ownership.py lead
+          python -m py_compile scripts/check_destructive_changes.py scripts/check_agent_ownership.py
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -25,18 +31,18 @@ jobs:
       - name: Install Python dependencies
         run: pip install -r requirements.txt pytest
 
-      - name: Parser tests
-        run: pytest -q
+      - name: Backend verification
+        run: bash scripts/verify_backend.sh
 
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
 
-      - name: Install frontend
-        run: npm install
+      - name: Frontend verification
+        run: bash scripts/verify_frontend.sh
 
-      - name: Build React
-        run: npm run build
+      - name: Database verification
+        run: bash scripts/verify_database.sh
 
       - name: Validate Supabase secrets
         if: github.event_name != 'pull_request'

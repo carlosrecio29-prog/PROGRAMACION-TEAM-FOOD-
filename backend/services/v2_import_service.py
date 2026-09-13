@@ -107,6 +107,22 @@ def _duration_hours(value:Any)->float|None:
     return minutes/60.0
 
 
+def _order_source_key(period:date, row:dict[str,Any], occurrence:int)->str:
+    """Return a stable identity while excluding mutable source fields."""
+    ot_raw=normalize_text(row.get("numero_ot_raw"))
+    numero_ot=None if ot_raw in {"","SIN ASIGNAR"} else _scalar(row["numero_ot_raw"])
+    if numero_ot:
+        base="|".join([str(period), "OT", numero_ot])
+    else:
+        base="|".join([
+            str(period), "SIN ASIGNAR",
+            normalize_text(row.get("activo_codigo")),
+            normalize_text(row.get("plan_clave_software")),
+            normalize_text(row.get("cronograma_planeacion")),
+        ])
+    return hashlib.sha256(f"{base}|{occurrence}".encode("utf-8")).hexdigest()
+
+
 def _parse_assets(content:bytes)->list[dict[str,Any]]:
     wb=workbook_from_bytes(content)
     ws=_first_sheet(wb)
@@ -347,36 +363,6 @@ def import_software_base(
     warnings=list(tech_warnings)
 
     with get_engine().begin() as conn:
-        # Los complementos hechos en la app sobreviven a una nueva exportación del software.
-        plan_complements={
-            _plan_key(r["grupo"],r["plan_trabajo"]):{
-                "numero_personas_app":r["numero_personas_app"],
-                "tiempo_parada_app_min":r["tiempo_parada_app_min"],
-            }
-            for r in conn.execute(text("""
-                SELECT grupo,plan_trabajo,numero_personas_app,tiempo_parada_app_min
-                FROM programacion.plan_trabajo
-                WHERE numero_personas_app IS NOT NULL OR tiempo_parada_app_min IS NOT NULL
-            """)).mappings()
-        }
-        technician_complements={
-            r["nombre_normalizado"]:r["especialidad_app"]
-            for r in conn.execute(text("""
-                SELECT nombre_normalizado,especialidad_app
-                FROM programacion.tecnico
-                WHERE especialidad_app IS NOT NULL
-            """)).mappings()
-        }
-
-        conn.execute(text("""TRUNCATE TABLE
-          programacion.programacion_tecnico,
-          programacion.orden_mantenimiento,
-          programacion.planeacion,
-          programacion.tecnico,
-          programacion.plan_trabajo,
-          programacion.activo
-          RESTART IDENTITY CASCADE"""))
-
         if assets:
             conn.execute(text("""INSERT INTO programacion.activo(
               codigo,descripcion,activo_padre_codigo,marca,modelo,serie,ubicacion,criticidad,
@@ -386,7 +372,18 @@ def import_software_base(
               :codigo,:descripcion,:activo_padre_codigo,:marca,:modelo,:serie,:ubicacion,:criticidad,
               :especialidad,:departamento,:centro_costo,:agrupacion,:grupo_analisis,:grupo_pdt,
               :estado,:habilitado,:fila_origen
-            )"""),assets)
+            )
+            ON CONFLICT (codigo) DO UPDATE SET
+              descripcion=EXCLUDED.descripcion,
+              activo_padre_codigo=EXCLUDED.activo_padre_codigo,
+              marca=EXCLUDED.marca, modelo=EXCLUDED.modelo, serie=EXCLUDED.serie,
+              ubicacion=EXCLUDED.ubicacion, criticidad=EXCLUDED.criticidad,
+              especialidad=EXCLUDED.especialidad, departamento=EXCLUDED.departamento,
+              centro_costo=EXCLUDED.centro_costo, agrupacion=EXCLUDED.agrupacion,
+              grupo_analisis=EXCLUDED.grupo_analisis, grupo_pdt=EXCLUDED.grupo_pdt,
+              estado=EXCLUDED.estado, habilitado=EXCLUDED.habilitado,
+              fila_origen=EXCLUDED.fila_origen, actualizado_en=now()
+            """),assets)
 
         if plans:
             conn.execute(text("""INSERT INTO programacion.plan_trabajo(
@@ -397,32 +394,19 @@ def import_software_base(
               :grupo,:descripcion_grupo,:plan_trabajo,:descripcion_plan_trabajo,:tipo_frecuencia,
               :valor_frecuencia,:tiempo_ejecucion_min,:numero_personas,:tiempo_parada_min,
               :especialidad,:orden_tipo,:estado,:habilitado,:fila_origen
-            )"""),plans)
-
-        if plan_complements:
-            for key,values in plan_complements.items():
-                grupo,plan_name=key.split("-",1) if "-" in key else ("",key)
-                # Se busca por la clave normalizada completa para tolerar mayúsculas/acentos.
-                for row in conn.execute(text("""
-                    SELECT id,grupo,plan_trabajo
-                    FROM programacion.plan_trabajo
-                """)).mappings():
-                    if _plan_key(row["grupo"],row["plan_trabajo"])==key:
-                        conn.execute(text("""
-                            UPDATE programacion.plan_trabajo
-                            SET numero_personas_app=:people,
-                                tiempo_parada_app_min=:stop,
-                                complementado_en=CASE
-                                  WHEN :people IS NOT NULL OR :stop IS NOT NULL THEN now()
-                                  ELSE complementado_en
-                                END
-                            WHERE id=:id
-                        """),{
-                            "people":values["numero_personas_app"],
-                            "stop":values["tiempo_parada_app_min"],
-                            "id":row["id"],
-                        })
-                        break
+            )
+            ON CONFLICT (grupo,plan_trabajo) DO UPDATE SET
+              descripcion_grupo=EXCLUDED.descripcion_grupo,
+              descripcion_plan_trabajo=EXCLUDED.descripcion_plan_trabajo,
+              tipo_frecuencia=EXCLUDED.tipo_frecuencia,
+              valor_frecuencia=EXCLUDED.valor_frecuencia,
+              tiempo_ejecucion_min=EXCLUDED.tiempo_ejecucion_min,
+              numero_personas=EXCLUDED.numero_personas,
+              tiempo_parada_min=EXCLUDED.tiempo_parada_min,
+              especialidad=EXCLUDED.especialidad, orden_tipo=EXCLUDED.orden_tipo,
+              estado=EXCLUDED.estado, habilitado=EXCLUDED.habilitado,
+              fila_origen=EXCLUDED.fila_origen, actualizado_en=now()
+            """),plans)
 
         asset_map={
             normalize_text(r["codigo"]):int(r["id"])
@@ -458,7 +442,17 @@ def import_software_base(
               :id_cronograma_planeacion,:activo_id,:plan_trabajo_id,:plan_clave_software,
               :descripcion,:prioridad,:usuario,:fecha_inicio,:fecha_fin,:autogenerar_orden,
               :programacion_fija,:estado,:habilitado,:fila_origen
-            )"""),planning_db)
+            )
+            ON CONFLICT (id_cronograma_planeacion) DO UPDATE SET
+              activo_id=EXCLUDED.activo_id, plan_trabajo_id=EXCLUDED.plan_trabajo_id,
+              plan_clave_software=EXCLUDED.plan_clave_software,
+              descripcion=EXCLUDED.descripcion, prioridad=EXCLUDED.prioridad,
+              usuario=EXCLUDED.usuario, fecha_inicio=EXCLUDED.fecha_inicio,
+              fecha_fin=EXCLUDED.fecha_fin, autogenerar_orden=EXCLUDED.autogenerar_orden,
+              programacion_fija=EXCLUDED.programacion_fija, estado=EXCLUDED.estado,
+              habilitado=EXCLUDED.habilitado, fila_origen=EXCLUDED.fila_origen,
+              actualizado_en=now()
+            """),planning_db)
 
         planning_lookup=defaultdict(list)
         for r in conn.execute(text("""SELECT
@@ -495,16 +489,17 @@ def import_software_base(
 
             ot_raw=normalize_text(r["numero_ot_raw"])
             numero_ot=None if ot_raw in {"","SIN ASIGNAR"} else _scalar(r["numero_ot_raw"])
-            base_identity="|".join([
-                str(period),
-                numero_ot or "SIN ASIGNAR",
-                normalize_text(r["activo_codigo"]),
-                normalize_text(r["plan_clave_software"]),
-                normalize_text(r.get("titulo")),
-                normalize_text(r.get("cronograma_planeacion")),
-            ])
-            occurrence[base_identity]+=1
-            source_key=hashlib.sha256(f"{base_identity}|{occurrence[base_identity]}".encode("utf-8")).hexdigest()
+            identity_base=(
+                "|".join([str(period), "OT", numero_ot]) if numero_ot else
+                "|".join([
+                    str(period), "SIN ASIGNAR",
+                    normalize_text(r["activo_codigo"]),
+                    normalize_text(r["plan_clave_software"]),
+                    normalize_text(r.get("cronograma_planeacion")),
+                ])
+            )
+            occurrence[identity_base]+=1
+            source_key=_order_source_key(period,r,occurrence[identity_base])
             order_db.append({
                 **r,
                 "source_key":source_key,
@@ -524,23 +519,31 @@ def import_software_base(
               :source_key,:periodo,:numero_ot,:activo_id,:planeacion_id,:plan_trabajo_id,
               :plan_clave_software,:titulo,:especialidad,:orden_tipo,:responsable,
               :cronograma_planeacion,:tiempo_planeado_min,:estado,:fila_origen
-            )"""),order_db)
+            )
+            ON CONFLICT (source_key) DO UPDATE SET
+              periodo=EXCLUDED.periodo, numero_ot=EXCLUDED.numero_ot,
+              activo_id=EXCLUDED.activo_id, planeacion_id=EXCLUDED.planeacion_id,
+              plan_trabajo_id=EXCLUDED.plan_trabajo_id,
+              plan_clave_software=EXCLUDED.plan_clave_software,
+              titulo=EXCLUDED.titulo, especialidad=EXCLUDED.especialidad,
+              orden_tipo=EXCLUDED.orden_tipo, responsable=EXCLUDED.responsable,
+              cronograma_planeacion=EXCLUDED.cronograma_planeacion,
+              tiempo_planeado_min=EXCLUDED.tiempo_planeado_min,
+              estado=EXCLUDED.estado, fila_origen=EXCLUDED.fila_origen,
+              actualizado_en=now()
+            """),order_db)
 
         if technicians:
             conn.execute(text("""INSERT INTO programacion.tecnico(
               identificacion,nombre,nombre_normalizado,especialidad,fila_origen
             ) VALUES(
               :identificacion,:nombre,:nombre_normalizado,:especialidad,:fila_origen
-            )"""),technicians)
-
-        if technician_complements:
-            for name_normalized,specialty in technician_complements.items():
-                conn.execute(text("""
-                    UPDATE programacion.tecnico
-                    SET especialidad_app=:specialty,
-                        complementado_en=now()
-                    WHERE nombre_normalizado=:name
-                """),{"specialty":specialty,"name":name_normalized})
+            )
+            ON CONFLICT (nombre_normalizado) DO UPDATE SET
+              identificacion=EXCLUDED.identificacion, nombre=EXCLUDED.nombre,
+              especialidad=EXCLUDED.especialidad,
+              fila_origen=EXCLUDED.fila_origen, actualizado_en=now()
+            """),technicians)
 
         technician_map={
             r["nombre_normalizado"]:int(r["id"])
@@ -558,7 +561,12 @@ def import_software_base(
               tecnico_id,fecha,turno_codigo,tipo_dia,horas_disponibles,fila_origen
             ) VALUES(
               :tecnico_id,:fecha,:turno_codigo,:tipo_dia,:horas_disponibles,:fila_origen
-            )"""),schedule_db)
+            )
+            ON CONFLICT (tecnico_id,fecha) DO UPDATE SET
+              turno_codigo=EXCLUDED.turno_codigo, tipo_dia=EXCLUDED.tipo_dia,
+              horas_disponibles=EXCLUDED.horas_disponibles,
+              fila_origen=EXCLUDED.fila_origen, actualizado_en=now()
+            """),schedule_db)
 
         status=conn.execute(text("""SELECT
           (SELECT count(*) FROM programacion.activo) activos,
