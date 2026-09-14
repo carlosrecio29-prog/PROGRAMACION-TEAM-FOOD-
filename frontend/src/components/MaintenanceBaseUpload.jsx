@@ -1,0 +1,120 @@
+import { useState } from "react";
+
+function readError(payload, status) {
+  if (payload?.detail) return payload.detail;
+  return `No se pudo actualizar la base (HTTP ${status})`;
+}
+
+export default function MaintenanceBaseUpload({ year, month }) {
+  const [plans, setPlans] = useState(null);
+  const [activities, setActivities] = useState(null);
+  const [monthly, setMonthly] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [result, setResult] = useState(null);
+
+  async function upload() {
+    if (!plans || !activities || !monthly) {
+      setError("Selecciona los tres Excel antes de actualizar la base.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setResult(null);
+    try {
+      const form = new FormData();
+      form.append("plans", plans);
+      form.append("activities", activities);
+      form.append("monthly", monthly);
+      const params = new URLSearchParams({ year, month });
+      const response = await fetch(`/api/v2/import-maintenance?${params}`, {
+        method: "POST",
+        body: form,
+      });
+      let payload = null;
+      try {
+        payload = await response.json();
+      } catch {
+        payload = null;
+      }
+      if (!response.ok) throw new Error(readError(payload, response.status));
+      setResult(payload);
+      window.setTimeout(() => window.location.reload(), 900);
+    } catch (e) {
+      setError(e.message || "Error actualizando la base de mantenimiento");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <details className="v2-panel" style={{ marginBottom: 18 }}>
+      <summary style={{ cursor: "pointer", listStyle: "none" }}>
+        <div className="v2-section-head" style={{ marginBottom: 0 }}>
+          <div>
+            <span className="v2-kicker">ACTUALIZAR BASE DE MANTENIMIENTO</span>
+            <h3 style={{ marginBottom: 4 }}>Cargar los 3 Excel del software</h3>
+            <p style={{ margin: 0 }}>
+              Plan de Trabajo + Actividades + Lista de Calendario / PMP.
+            </p>
+          </div>
+          <span className="v2-primary" style={{ pointerEvents: "none" }}>
+            Abrir cargador
+          </span>
+        </div>
+      </summary>
+
+      <div className="v2-quality-grid" style={{ marginTop: 18 }}>
+        <label>
+          <b>1. Plan de Trabajo</b>
+          <small>Maestro de planes, personas, tiempos y condición de parada.</small>
+          <input
+            type="file"
+            accept=".xlsx"
+            onChange={(e) => setPlans(e.target.files?.[0] || null)}
+          />
+        </label>
+        <label>
+          <b>2. Plan de Trabajo - Actividades</b>
+          <small>Pasos o actividades internas de cada plan.</small>
+          <input
+            type="file"
+            accept=".xlsx"
+            onChange={(e) => setActivities(e.target.files?.[0] || null)}
+          />
+        </label>
+        <label>
+          <b>3. Lista de Calendario / PMP</b>
+          <small>Órdenes del período que aparecerán en PMP DEL MES.</small>
+          <input
+            type="file"
+            accept=".xlsx"
+            onChange={(e) => setMonthly(e.target.files?.[0] || null)}
+          />
+        </label>
+      </div>
+
+      <div className="v2-program-review-actions" style={{ marginTop: 18 }}>
+        <button
+          type="button"
+          className="v2-primary"
+          onClick={upload}
+          disabled={busy}
+        >
+          {busy ? "Actualizando base..." : "Actualizar datos"}
+        </button>
+        <small>
+          Período seleccionado: {String(month).padStart(2, "0")}/{year}. No se
+          modifican activos ni técnicos.
+        </small>
+      </div>
+
+      {error && <div className="v2-error" style={{ marginTop: 14 }}>{error}</div>}
+      {result && (
+        <div className="v2-success" style={{ marginTop: 14 }}>
+          Base actualizada: {result.planes} planes · {result.actividades} actividades · {result.registros_pmp} registros PMP · {result.pmp_mecanica} registros MEC. Recargando…
+        </div>
+      )}
+    </details>
+  );
+}
