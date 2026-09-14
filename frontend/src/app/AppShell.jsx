@@ -1,3 +1,4 @@
+import MaintenanceBaseUpload from "../components/MaintenanceBaseUpload";
 import { MONTHS, NAV_GROUPS, VIEW_META } from "./navigation";
 
 export default function AppShell({
@@ -59,6 +60,7 @@ export default function AppShell({
             </div>
           </div>
         </header>
+        <MaintenanceBaseUpload year={year} month={month} />
         {children}
       </main>
     </div>
