@@ -18,11 +18,7 @@ export default function AppShell({
     <div className="v2-shell">
       <aside className="v2-sidebar" aria-label="Navegación principal">
         <div className="v2-brand">
-          <img
-            className="v2-brand-logo"
-            src={cekLogo}
-            alt="C.E.K Global Inspection Services"
-          />
+          <img className="v2-brand-logo" src={cekLogo} alt="C.E.K Global Inspection Services" />
           <span><b>PROGRAMACIÓN</b><small>TEAM FOOD · Barranquilla</small></span>
         </div>
         <nav aria-label="Flujos operativos">
