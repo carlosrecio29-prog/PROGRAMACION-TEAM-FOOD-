@@ -1,4 +1,6 @@
 import MaintenanceBaseUpload from "../components/MaintenanceBaseUpload";
+import cekLogo from "../assets/cek-global-logo.jpg";
+import "../brand.css";
 import { MONTHS, NAV_GROUPS, VIEW_META } from "./navigation";
 
 export default function AppShell({
@@ -16,7 +18,11 @@ export default function AppShell({
     <div className="v2-shell">
       <aside className="v2-sidebar" aria-label="Navegación principal">
         <div className="v2-brand">
-          <div aria-hidden="true">CEK</div>
+          <img
+            className="v2-brand-logo"
+            src={cekLogo}
+            alt="C.E.K Global Inspection Services"
+          />
           <span><b>PROGRAMACIÓN</b><small>TEAM FOOD · Barranquilla</small></span>
         </div>
         <nav aria-label="Flujos operativos">
