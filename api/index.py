@@ -30,6 +30,7 @@ from backend.services.v2_programming_runtime import (
 from backend.services.v2_closure_service import (
     V2ClosureError, get_week_closure, close_week_from_calendar,
 )
+from backend.services.v2_backlog_service import get_accumulated_backlog
 from backend.services.programming_service import (
     ProgrammingError, close_programming, programming_detail, programming_history, save_programming,
     export_programming_excel, export_programming_pdf, reset_test_data,
@@ -180,6 +181,15 @@ def v2_save_programming(body:V2WeeklyProgrammingCreate):
         )
     except V2ProgrammingError as exc:
         raise HTTPException(422,str(exc)) from exc
+
+@app.get("/api/v2/backlog")
+def v2_backlog(
+    specialty:str|None=None,area:str|None=None,state:str|None=None,search:str|None=None,
+    order_id:int|None=None,limit:int=Query(300,ge=1,le=1000),
+):
+    return get_accumulated_backlog(
+        specialty=specialty,area=area,state=state,search=search,order_id=order_id,limit=limit,
+    )
 
 @app.get("/api/v2/programming/{programming_id}/closure")
 def v2_week_closure(programming_id:int):

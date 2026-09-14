@@ -25,6 +25,7 @@ La arquitectura verificable y los riesgos están en `.ai/architecture.md`; las r
 8. Cambios de comportamiento requieren pruebas. Cambios de API requieren especificación/contrato antes de divergir frontend y backend.
 9. Respeta `.ai/ownership.yaml`. Si necesitas otro dominio, registra un handoff o pide transferencia al Lead.
 10. Nunca expongas claves service-role al frontend ni hagas cambios de producción no verificados.
+11. Usa los agentes y asigna tasks a ellos que estan en .codex
 
 ## Flujo de trabajo
 

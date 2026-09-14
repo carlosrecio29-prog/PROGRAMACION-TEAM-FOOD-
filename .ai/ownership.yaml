@@ -21,6 +21,7 @@ roles:
   lead:
     - AGENTS.md
     - .ai/**
+    - .codex/**
     - openspec/**
     - docs/adr/**
 shared:

@@ -171,10 +171,11 @@ def close_week_from_calendar(
                        'PENDIENTE DE CIERRE SEMANAL',:closed_by,now(),now()
                 FROM unnest(CAST(:ids AS bigint[])) AS x
                 ON CONFLICT(orden_mantenimiento_id)
-                DO UPDATE SET programacion_origen_id=EXCLUDED.programacion_origen_id,
-                  semana_origen_inicio=EXCLUDED.semana_origen_inicio,semana_origen_fin=EXCLUDED.semana_origen_fin,
+                DO UPDATE SET estado_seguimiento='PENDIENTE_DISPONIBLE',
+                  programacion_origen_id=EXCLUDED.programacion_origen_id,
                   especialidad=EXCLUDED.especialidad,motivo=EXCLUDED.motivo,movido_por=EXCLUDED.movido_por,
-                  movido_en=now(),actualizado_en=now()
+                  ultimo_resultado_cierre='PENDIENTE',ultimo_cierre_en=now(),
+                  movido_en=now(),actualizado_en=now(),ultima_programacion_id=NULL
             """), {
                 "programming_id": programming_id,
                 "week_start": programming["semana_inicio"],
@@ -183,8 +184,21 @@ def close_week_from_calendar(
                 "closed_by": closed_by,
                 "ids": carry_ids,
             })
+        if carry_ids:
+            conn.execute(text("""
+                UPDATE programacion.backlog_v2
+                SET primera_semana_origen_inicio=COALESCE(primera_semana_origen_inicio,semana_origen_inicio),
+                    primera_semana_origen_fin=COALESCE(primera_semana_origen_fin,semana_origen_fin)
+                WHERE orden_mantenimiento_id=ANY(CAST(:ids AS bigint[]))
+            """), {"ids": carry_ids})
         if finalized_ids:
-            conn.execute(text("DELETE FROM programacion.backlog_v2 WHERE orden_mantenimiento_id=ANY(CAST(:ids AS bigint[]))"), {"ids": finalized_ids})
+            conn.execute(text("""
+                UPDATE programacion.backlog_v2
+                SET estado_seguimiento='FINALIZADA',ultimo_resultado_cierre='FINALIZADA',
+                    ultimo_cierre_en=now(),finalizado_en=now(),finalizado_por=:closed_by,
+                    ultima_programacion_id=NULL,actualizado_en=now()
+                WHERE orden_mantenimiento_id=ANY(CAST(:ids AS bigint[]))
+            """), {"ids": finalized_ids, "closed_by": closed_by})
 
         conn.execute(text("""
             UPDATE programacion.programacion_semanal_v2

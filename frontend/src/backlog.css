@@ -346,6 +346,9 @@ tbody tr{transition:background .13s ease}tbody tr:hover{background:#f6faff}
 
 .v2-backlog-origin{display:flex;flex-direction:column;gap:4px}.v2-backlog-origin b{color:#805b00}.v2-backlog-origin small{color:#76643b}
 
+/* ---------- Backlog acumulado ---------- */
+.v2-backlog-workspace{gap:18px}.v2-backlog-hero{padding:25px 28px}.v2-backlog-indicators{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.v2-backlog-indicators>div{padding:17px;border:1px solid #e1c97e;border-radius:16px;background:linear-gradient(145deg,#fff8e5,#fffdf7);box-shadow:var(--cek-shadow-soft)}.v2-backlog-indicators>div.finalized{border-color:#b8dec9;background:linear-gradient(145deg,#edf9f3,#fbfffd)}.v2-backlog-indicators>div.pending{border-color:#bcd8ea;background:linear-gradient(145deg,#edf6fc,#fbfdff)}.v2-backlog-indicators span{display:block;font-size:9px;letter-spacing:.5px;color:var(--cek-muted)}.v2-backlog-indicators b{display:block;margin:8px 0 4px;font-size:29px;color:#183d60}.v2-backlog-indicators small{font-size:9px;color:var(--cek-muted)}.v2-filter-context{margin:0 0 12px;padding:9px 11px;border-radius:10px;background:#eef6fc;color:#315c7b;font-size:10px}.v2-filter-context button,.v2-backlog-link{margin-left:8px;border:0;background:transparent;color:#0b5e9b;font-weight:800;text-decoration:underline;cursor:pointer;font-size:9px}.v2-backlog-link{display:block;margin:5px 0 0;padding:0;text-align:left}
+
 /* ---------- Selección actual ---------- */
 .v2-selected-section{padding:18px;border-color:#bfd4e5}
 .v2-selected-head{margin-bottom:13px}
@@ -392,4 +395,5 @@ tbody tr{transition:background .13s ease}tbody tr:hover{background:#f6faff}
   .v2-kpis{grid-template-columns:1fr}.v2-capacity-cards{grid-template-columns:1fr}
   .v2-capacity-summary .v2-capacity-cards,.v2-group-filters{grid-template-columns:1fr}
   .v2-program-action-bar{top:8px}
+  .v2-backlog-indicators{grid-template-columns:1fr}
 }

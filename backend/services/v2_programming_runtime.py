@@ -41,7 +41,8 @@ def get_week_programming(*, date_from: date, date_to: date, specialty: str) -> d
               JOIN programacion.activo a ON a.id=o.activo_id
               LEFT JOIN programacion.activo root ON root.codigo='BA-'||a.area_codigo
               JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
-              LEFT JOIN programacion.backlog_v2 b ON b.orden_mantenimiento_id=o.id AND b.especialidad=:specialty
+              LEFT JOIN programacion.backlog_v2 b ON b.orden_mantenimiento_id=o.id
+                AND b.especialidad=:specialty AND b.estado_seguimiento='PENDIENTE_DISPONIBLE'
               LEFT JOIN programacion.programacion_item_v2 ci
                 ON ci.orden_mantenimiento_id=o.id AND ci.programacion_id=CAST(:programming_id AS bigint)
               WHERE o.especialidad=:specialty
@@ -125,6 +126,7 @@ def save_week_programming(*, date_from: date, date_to: date, specialty: str, ord
         backlog_ids = {int(x) for x in conn.execute(text("""
             SELECT orden_mantenimiento_id FROM programacion.backlog_v2
             WHERE orden_mantenimiento_id=ANY(CAST(:ids AS bigint[]))
+              AND estado_seguimiento<>'FINALIZADA'
         """), {"ids": unique_ids}).scalars().all()}
 
         rows = [dict(r) for r in conn.execute(text("""
@@ -180,14 +182,26 @@ def save_week_programming(*, date_from: date, date_to: date, specialty: str, ord
                 SELECT x,:programming_id,:date_from,:date_to,:specialty,'RETIRADA DE PROGRAMACIÓN SEMANAL',:created_by,now(),now()
                 FROM unnest(CAST(:removed_ids AS bigint[])) AS x
                 ON CONFLICT(orden_mantenimiento_id)
-                DO UPDATE SET programacion_origen_id=EXCLUDED.programacion_origen_id,
-                  semana_origen_inicio=EXCLUDED.semana_origen_inicio,semana_origen_fin=EXCLUDED.semana_origen_fin,
-                  especialidad=EXCLUDED.especialidad,motivo=EXCLUDED.motivo,movido_por=EXCLUDED.movido_por,
-                  movido_en=now(),actualizado_en=now()
+                DO UPDATE SET estado_seguimiento='PENDIENTE_DISPONIBLE',ultima_programacion_id=NULL,
+                  motivo=EXCLUDED.motivo,movido_por=EXCLUDED.movido_por,movido_en=now(),actualizado_en=now()
             """), {"programming_id": programming_id, "date_from": date_from, "date_to": date_to,
                      "specialty": specialty, "created_by": created_by, "removed_ids": removed_ids})
 
-        conn.execute(text("DELETE FROM programacion.backlog_v2 WHERE orden_mantenimiento_id=ANY(CAST(:ids AS bigint[]))"), {"ids": unique_ids})
+        if removed_ids:
+            conn.execute(text("""
+                UPDATE programacion.backlog_v2
+                SET primera_semana_origen_inicio=COALESCE(primera_semana_origen_inicio,semana_origen_inicio),
+                    primera_semana_origen_fin=COALESCE(primera_semana_origen_fin,semana_origen_fin)
+                WHERE orden_mantenimiento_id=ANY(CAST(:ids AS bigint[]))
+            """), {"ids": removed_ids})
+
+        conn.execute(text("""
+            UPDATE programacion.backlog_v2
+            SET estado_seguimiento='PENDIENTE_PROGRAMADA',ultima_programacion_id=:programming_id,
+                reprogramaciones=reprogramaciones+1,actualizado_en=now()
+            WHERE orden_mantenimiento_id=ANY(CAST(:ids AS bigint[]))
+              AND estado_seguimiento='PENDIENTE_DISPONIBLE'
+        """), {"programming_id": programming_id, "ids": unique_ids})
         conn.execute(text("DELETE FROM programacion.programacion_item_v2 WHERE programacion_id=:programming_id"), {"programming_id": programming_id})
         for row in rows:
             order_id = int(row["orden_mantenimiento_id"])
