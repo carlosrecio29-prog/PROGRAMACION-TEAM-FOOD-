@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+from sqlalchemy.exc import SQLAlchemyError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy import text
@@ -165,12 +166,14 @@ class V2WeeklyProgrammingCreate(BaseModel):
     date_to:date
     specialty:str
     order_ids:list[int]=Field(min_length=1)
-    created_by:str|None="CARLOS ANDRÉS RECIO MUÑOZ"
+    created_by:str|None=None
 
 @app.get("/api/v2/programming/week")
 def v2_programming_week(date_from:date,date_to:date,specialty:str):
     try:return get_week_programming(date_from=date_from,date_to=date_to,specialty=specialty)
     except V2ProgrammingError as exc:raise HTTPException(422,str(exc)) from exc
+    except SQLAlchemyError as exc:
+        raise HTTPException(503,"La base V2 no tiene aplicada la migración activa de programación/backlog") from exc
 
 @app.post("/api/v2/programming")
 def v2_save_programming(body:V2WeeklyProgrammingCreate):
@@ -185,11 +188,18 @@ def v2_save_programming(body:V2WeeklyProgrammingCreate):
 @app.get("/api/v2/backlog")
 def v2_backlog(
     specialty:str|None=None,area:str|None=None,state:str|None=None,search:str|None=None,
-    order_id:int|None=None,limit:int=Query(300,ge=1,le=1000),
+    order_id:int|None=None,age_min:int|None=Query(None,ge=0),age_max:int|None=Query(None,ge=0),
+    limit:int=Query(300,ge=1,le=1000),
 ):
-    return get_accumulated_backlog(
-        specialty=specialty,area=area,state=state,search=search,order_id=order_id,limit=limit,
-    )
+    try:
+        return get_accumulated_backlog(
+            specialty=specialty,area=area,state=state,search=search,order_id=order_id,
+            age_min=age_min,age_max=age_max,limit=limit,
+        )
+    except ValueError as exc:
+        raise HTTPException(422,str(exc)) from exc
+    except SQLAlchemyError as exc:
+        raise HTTPException(503,"La base V2 no tiene aplicada la migración activa de backlog") from exc
 
 @app.get("/api/v2/programming/{programming_id}/closure")
 def v2_week_closure(programming_id:int):
@@ -200,7 +210,7 @@ def v2_week_closure(programming_id:int):
 async def v2_close_week_file(
     programming_id:int,
     file:UploadFile=File(...),
-    closed_by:str|None=Query("CARLOS ANDRÉS RECIO MUÑOZ"),
+    closed_by:str|None=Query(None),
 ):
     try:
         content=await read_upload(file)
@@ -212,6 +222,8 @@ async def v2_close_week_file(
         )
     except V2ClosureError as exc:
         raise HTTPException(422,str(exc)) from exc
+    except SQLAlchemyError as exc:
+        raise HTTPException(503,"La base V2 no tiene aplicada la migración activa de cierre/backlog") from exc
 
 @app.get("/api/v2/programming/{programming_id}/export.xlsx")
 def v2_export_programming_xlsx(programming_id:int):

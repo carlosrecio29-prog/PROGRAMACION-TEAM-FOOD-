@@ -72,7 +72,35 @@ def get_week_closure(programming_id: int) -> dict[str, Any]:
             WHERE pi.programacion_id=:id
             ORDER BY pi.finalizado DESC NULLS LAST,a.area_codigo,o.numero_ot NULLS LAST,a.codigo,p.plan_trabajo
         """), {"id": programming_id}).mappings()]
-    return {"programming": dict(header), "rows": rows}
+    verified_rows = [row for row in rows if row.get("estado_cierre")]
+    hh_programmed = round(sum(float(row.get("hh_programadas") or 0) for row in rows), 2)
+    hh_finalized = round(sum(
+        float(row.get("hh_programadas") or 0)
+        for row in verified_rows if row.get("finalizado") is True
+    ), 2)
+    hh_pending = round(sum(
+        float(row.get("hh_programadas") or 0)
+        for row in verified_rows if row.get("finalizado") is not True
+    ), 2)
+    finalized = sum(1 for row in verified_rows if row.get("finalizado") is True)
+    pending = sum(1 for row in verified_rows if row.get("finalizado") is False)
+    not_found = sum(1 for row in verified_rows if row.get("finalizado") is None)
+    return {
+        "programming": dict(header),
+        "rows": rows,
+        "summary": {
+            "verified": bool(rows) and len(verified_rows) == len(rows),
+            "programmed": len(rows),
+            "finalized": finalized,
+            "pending": pending,
+            "not_found": not_found,
+            "unchecked": len(rows) - len(verified_rows),
+            "hh_programmed": hh_programmed,
+            "hh_finalized": hh_finalized,
+            "hh_pending": hh_pending,
+            "compliance_pct": round(hh_finalized / hh_programmed * 100, 1) if hh_programmed else 0,
+        },
+    }
 
 
 def close_week_from_calendar(
@@ -175,6 +203,7 @@ def close_week_from_calendar(
                   programacion_origen_id=EXCLUDED.programacion_origen_id,
                   especialidad=EXCLUDED.especialidad,motivo=EXCLUDED.motivo,movido_por=EXCLUDED.movido_por,
                   ultimo_resultado_cierre='PENDIENTE',ultimo_cierre_en=now(),
+                  ultimo_cierre_en=now(),
                   movido_en=now(),actualizado_en=now(),ultima_programacion_id=NULL
             """), {
                 "programming_id": programming_id,
@@ -184,6 +213,14 @@ def close_week_from_calendar(
                 "closed_by": closed_by,
                 "ids": carry_ids,
             })
+            if not_found_ids:
+                conn.execute(text("""
+                    UPDATE programacion.backlog_v2
+                    SET ultimo_resultado_cierre='NO_ENCONTRADA',
+                        motivo='NO ENCONTRADA EN CALENDARIO DE CIERRE',
+                        actualizado_en=now()
+                    WHERE orden_mantenimiento_id=ANY(CAST(:ids AS bigint[]))
+                """), {"ids": not_found_ids})
         if carry_ids:
             conn.execute(text("""
                 UPDATE programacion.backlog_v2
@@ -217,11 +254,5 @@ def close_week_from_calendar(
         })
 
     result = get_week_closure(programming_id)
-    result["summary"] = {
-        "total": len(items),
-        "finalized": len(finalized_ids),
-        "pending": len(pending_ids),
-        "not_found": len(not_found_ids),
-        "moved_to_backlog": len(carry_ids),
-    }
+    result["summary"]["moved_to_backlog"] = len(carry_ids)
     return result

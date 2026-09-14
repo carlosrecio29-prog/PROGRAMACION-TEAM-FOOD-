@@ -14,6 +14,9 @@ import {
 import WeeklyClosure from "./components/WeeklyClosure";
 import WeeklyProgramming from "./components/WeeklyProgramming";
 import AccumulatedBacklog from "./components/AccumulatedBacklog";
+import AppShell from "./app/AppShell";
+import { navigationIds } from "./app/navigation";
+import Badge from "./shared/Badge";
 import "./styles.css";
 import "./backlog.css";
 
@@ -49,10 +52,6 @@ function fmt(v, d = 1) {
     maximumFractionDigits: d,
   });
 }
-function Badge({ children, tone = "" }) {
-  return <span className={"v2-badge " + tone}>{children}</span>;
-}
-
 function Summary({ data, onGoPending }) {
   const s = data?.summary || {};
   const p = data?.pending || {};
@@ -1378,7 +1377,10 @@ function Pmp({ year, month, dashboard }) {
 }
 
 export default function App() {
-  const [view, setView] = useState("summary");
+  const [view, setView] = useState(() => {
+    const requested = window.location.hash.replace(/^#\/?/, "");
+    return navigationIds().includes(requested) ? requested : "summary";
+  });
   const [year] = useState(2026);
   const [month, setMonth] = useState(9);
   const [dashboard, setDashboard] = useState(null);
@@ -1398,140 +1400,26 @@ export default function App() {
   useEffect(() => {
     refresh();
   }, [year, month]);
-  const titles = {
-    summary: [
-      "Resumen mensual",
-      "Estado de la información antes de empezar a programar.",
-    ],
-    pending: [
-      "Completar datos",
-      "Solo aparecen datos que hacen falta en los planes usados este mes.",
-    ],
-    programming: [
-      "Programación semanal",
-      "Consulta, modifica y conserva en backlog las OT retiradas de programaciones anteriores.",
-    ],
-    closure: [
-      "Cierre semanal",
-      "Carga el calendario actualizado y verifica qué OT finalizaron y cuáles pasan a backlog.",
-    ],
-    backlog: [
-      "Backlog acumulado",
-      "OT pendientes no finalizadas, conservadas hasta confirmar el cierre.",
-    ],
-    pmp: [
-      "PMP del mes",
-      "Cartera preventiva exportada desde el software de mantenimiento.",
-    ],
-    technicians: [
-      "Técnicos",
-      "Turnos, disponibilidad y especialidades del personal.",
-    ],
-  };
+  function navigate(nextView) {
+    setView(nextView);
+    window.history.replaceState(null, "", `#/${nextView}`);
+  }
   return (
-    <div className="v2-shell">
-      <aside className="v2-sidebar">
-        <div className="v2-brand">
-          <div>CEK</div>
-          <span>
-            <b>PROGRAMACIÓN</b>
-            <small>TEAM FOOD · Barranquilla</small>
-          </span>
-        </div>
-        <nav>
-          <button
-            className={view === "summary" ? "active" : ""}
-            onClick={() => setView("summary")}
-          >
-            <span>01</span>Resumen
-          </button>
-          <button
-            className={view === "pending" ? "active" : ""}
-            onClick={() => setView("pending")}
-          >
-            <span>02</span>Completar datos
-            {number(dashboard?.pending?.planes_pendientes) > 0 && (
-              <i>{dashboard.pending.planes_pendientes}</i>
-            )}
-          </button>
-          <button
-            className={view === "programming" ? "active" : ""}
-            onClick={() => setView("programming")}
-          >
-            <span>03</span>Programación semanal
-          </button>
-          <button
-            className={view === "closure" ? "active" : ""}
-            onClick={() => setView("closure")}
-          >
-            <span>04</span>Cierre semanal
-          </button>
-          <button
-            className={view === "backlog" ? "active" : ""}
-            onClick={() => setView("backlog")}
-          >
-            <span>05</span>Backlog
-          </button>
-          <button
-            className={view === "pmp" ? "active" : ""}
-            onClick={() => setView("pmp")}
-          >
-            <span>06</span>PMP del mes
-          </button>
-          <button
-            className={view === "technicians" ? "active" : ""}
-            onClick={() => setView("technicians")}
-          >
-            <span>06</span>Técnicos
-            {number(dashboard?.summary?.tecnicos_sin_especialidad) > 0 && (
-              <i>{dashboard.summary.tecnicos_sin_especialidad}</i>
-            )}
-          </button>
-        </nav>
-        <div className="v2-side-note">
-          <small>Fuente principal</small>
-          <b>Software de mantenimiento</b>
-          <span>La app complementa únicamente los datos faltantes.</span>
-        </div>
-        <div className="v2-profile">
-          <span>CARLOS ANDRÉS RECIO MUÑOZ</span>
-          <small>C.E.K GLOBAL INSPECTION</small>
-        </div>
-      </aside>
-      <main className="v2-main">
-        <header className="v2-topbar">
-          <div>
-            <span className="v2-kicker">PLANTA BARRANQUILLA</span>
-            <h1>{titles[view][0]}</h1>
-            <p>{titles[view][1]}</p>
-          </div>
-          <div className="v2-top-actions">
-            <label>
-              Periodo
-              <select
-                value={month}
-                onChange={(e) => setMonth(Number(e.target.value))}
-              >
-                {MONTHS.map((m, i) => (
-                  <option key={m} value={i + 1}>
-                    {m} 2026
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className={"v2-health " + health}>
-              <i />
-              {health === "ok"
-                ? "Base conectada"
-                : health === "error"
-                  ? "Sin conexión"
-                  : "Conectando..."}
-            </div>
-          </div>
-        </header>
+    <AppShell
+      view={view}
+      onNavigate={navigate}
+      year={year}
+      month={month}
+      onMonthChange={setMonth}
+      health={health}
+      indicators={{
+        pending: number(dashboard?.pending?.planes_pendientes),
+        technicians: number(dashboard?.summary?.tecnicos_sin_especialidad),
+      }}
+    >
         {error && <div className="v2-error">{error}</div>}
         {view === "summary" && (
-          <Summary data={dashboard} onGoPending={() => setView("pending")} />
+          <Summary data={dashboard} onGoPending={() => navigate("pending")} />
         )}{" "}
         {view === "pending" && (
           <PendingPlans year={year} month={month} onChanged={refresh} />
@@ -1539,7 +1427,7 @@ export default function App() {
         {view === "programming" && (
           <WeeklyProgramming year={year} month={month} dashboard={dashboard} />
         )}{" "}
-        {view === "closure" && <WeeklyClosure year={year} month={month} onOpenBacklog={(orderId) => { setBacklogOrderId(orderId); setView("backlog"); }} />}{" "}
+        {view === "closure" && <WeeklyClosure year={year} month={month} onOpenBacklog={(orderId) => { setBacklogOrderId(orderId); navigate("backlog"); }} />}{" "}
         {view === "backlog" && <AccumulatedBacklog areas={dashboard?.areas || []} initialOrderId={backlogOrderId} onClearOrder={() => setBacklogOrderId("")} />}{" "}
         {view === "pmp" && (
           <Pmp year={year} month={month} dashboard={dashboard} />
@@ -1547,7 +1435,6 @@ export default function App() {
         {view === "technicians" && (
           <Technicians year={year} month={month} onChanged={refresh} />
         )}
-      </main>
-    </div>
+    </AppShell>
   );
 }

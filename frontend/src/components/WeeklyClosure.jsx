@@ -4,6 +4,7 @@ import {
   getV2WeekClosure,
   uploadV2WeekClosure,
 } from "../api";
+import Badge from "../shared/Badge";
 
 const MONTHS = [
   "Enero",
@@ -36,9 +37,6 @@ function fmt(v, d = 1) {
     minimumFractionDigits: d,
     maximumFractionDigits: d,
   });
-}
-function Badge({ children, tone = "" }) {
-  return <span className={"v2-badge " + tone}>{children}</span>;
 }
 function monthWeeks(year, month) {
   const days = new Date(year, month, 0).getDate();
@@ -127,18 +125,16 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
   }
 
   const rows = closure?.rows || [];
-  const finalized = rows.filter((r) => r.finalizado === true).length;
-  const pending = rows.filter((r) => r.finalizado === false).length;
-  const notFound = rows.filter(
-    (r) => r.finalizado == null && r.estado_cierre,
-  ).length;
-  const unchecked = rows.filter((r) => !r.estado_cierre).length;
-  const hhFinalized = rows
-    .filter((r) => r.finalizado === true)
-    .reduce((s, r) => s + number(r.hh_programadas), 0);
-  const hhTotal = rows.reduce((s, r) => s + number(r.hh_programadas), 0);
-  const hhPending = Math.max(0, hhTotal - hhFinalized);
-  const pct = rows.length ? (finalized / rows.length) * 100 : 0;
+  const summary = closure?.summary || {};
+  const finalized = number(summary.finalized);
+  const pending = number(summary.pending);
+  const notFound = number(summary.not_found);
+  const unchecked = number(summary.unchecked, rows.length);
+  const verified = summary.verified === true;
+  const hhTotal = number(summary.hh_programmed);
+  const hhFinalized = number(summary.hh_finalized);
+  const hhPending = number(summary.hh_pending);
+  const pct = number(summary.compliance_pct);
 
   return (
     <div className="v2-stack">
@@ -216,22 +212,22 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
               </div>
               <div className="target">
                 <span>H-H finalizadas</span>
-                <b>{fmt(hhFinalized, 1)}</b>
-                <small>{finalized} finalizadas</small>
+                <b>{verified ? fmt(hhFinalized, 1) : "—"}</b>
+                <small>{verified ? `${finalized} finalizadas` : "pendiente de verificación"}</small>
               </div>
               <div>
                 <span>H-H pendientes</span>
-                <b>{fmt(hhPending, 1)}</b>
-                <small>{pending + notFound} OT pasan a backlog</small>
+                <b>{verified ? fmt(hhPending, 1) : "—"}</b>
+                <small>{verified ? `${pending + notFound} OT pasan a backlog` : "pendiente de verificación"}</small>
               </div>
               <div>
                 <span>No encontradas</span>
-                <b>{notFound}</b>
-                <small>también se conservan en backlog</small>
+                <b>{verified ? notFound : "—"}</b>
+                <small>{verified ? "también se conservan en backlog" : "pendiente de verificación"}</small>
               </div>
               <div className={unchecked ? "remaining" : "complete"}>
                 <span>{unchecked ? "Sin verificar" : "Cierre"}</span>
-                <b>{unchecked || fmt(pct, 0) + "%"}</b>
+                <b>{verified ? fmt(pct, 0) + "%" : unchecked}</b>
                 <small>
                   {unchecked
                     ? "carga el calendario actualizado"
@@ -241,11 +237,11 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
             </div>
             <div className="v2-progress-block">
               <div className="v2-progress-copy">
-                <span>Cumplimiento semanal por OT</span>
-                <b>{fmt(pct, 1)}%</b>
+                <span>Cumplimiento semanal por H-H</span>
+                <b>{verified ? `${fmt(pct, 1)}%` : "Pendiente"}</b>
               </div>
               <div className="v2-progress-track">
-                <i style={{ width: `${Math.min(100, pct)}%` }} />
+                <i style={{ width: `${verified ? Math.min(100, pct) : 0}%` }} />
               </div>
               <div className="v2-progress-foot">
                 <span>{finalized} finalizadas</span>

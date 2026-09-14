@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getV2Backlog } from "../api";
+import Badge from "../shared/Badge";
 
 function number(value) {
   const parsed = Number(value);
@@ -11,10 +12,6 @@ function fmt(value) {
     maximumFractionDigits: 1,
   });
 }
-function Badge({ children, tone = "" }) {
-  return <span className={"v2-badge " + tone}>{children}</span>;
-}
-
 export default function AccumulatedBacklog({
   areas = [],
   initialOrderId,
@@ -25,6 +22,8 @@ export default function AccumulatedBacklog({
     area: "",
     specialty: "",
     search: "",
+    age_min: "",
+    age_max: "",
     order_id: initialOrderId || "",
   });
   const [data, setData] = useState({ rows: [], summary: {} });
@@ -99,7 +98,7 @@ export default function AccumulatedBacklog({
             {loading ? "Consultando..." : `${rows.length} visibles`}
           </Badge>
         </div>
-        <div className="v2-toolbar v2-toolbar-4">
+        <div className="v2-toolbar v2-toolbar-6">
           <select
             aria-label="Estado de backlog"
             value={filters.state}
@@ -139,6 +138,22 @@ export default function AccumulatedBacklog({
             placeholder="Buscar OT, equipo o plan..."
             value={filters.search}
             onChange={(e) => update("search", e.target.value)}
+          />
+          <input
+            type="number"
+            min="0"
+            aria-label="Antigüedad mínima en días"
+            placeholder="Edad mín. (días)"
+            value={filters.age_min}
+            onChange={(e) => update("age_min", e.target.value)}
+          />
+          <input
+            type="number"
+            min="0"
+            aria-label="Antigüedad máxima en días"
+            placeholder="Edad máx. (días)"
+            value={filters.age_max}
+            onChange={(e) => update("age_max", e.target.value)}
           />
         </div>
         {filters.order_id && (

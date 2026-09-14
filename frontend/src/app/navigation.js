@@ -1,0 +1,32 @@
+export const MONTHS = [
+  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+];
+
+export const VIEW_META = {
+  summary: ["Inicio", "Estado operativo y próximos pasos del periodo."],
+  programming: ["Programación semanal", "Programa por capacidad, condición y origen de las OT."],
+  pmp: ["PMP del mes", "Cartera preventiva exportada desde el software de mantenimiento."],
+  closure: ["Cierre semanal", "Reconcilia la programación contra el estado verificado del software."],
+  backlog: ["Backlog acumulado", "OT pendientes conservadas hasta confirmar su finalización."],
+  pending: ["Completar datos", "Completa sólo los datos que faltan en los planes del periodo."],
+  technicians: ["Técnicos", "Turnos, disponibilidad y especialidades del personal."],
+};
+
+export const NAV_GROUPS = [
+  { label: "Inicio", items: [{ id: "summary", label: "Resumen operativo", code: "IN" }] },
+  { label: "Planificación", items: [
+    { id: "programming", label: "Programación semanal", code: "PS" },
+    { id: "pmp", label: "PMP del mes", code: "PM" },
+  ] },
+  { label: "Cierre", items: [{ id: "closure", label: "Cierre semanal", code: "CI" }] },
+  { label: "Backlog", items: [{ id: "backlog", label: "Seguimiento acumulado", code: "BL" }] },
+  { label: "Administración", items: [
+    { id: "pending", label: "Completar datos", code: "CD", indicator: "pending" },
+    { id: "technicians", label: "Técnicos", code: "TE", indicator: "technicians" },
+  ] },
+];
+
+export function navigationIds(groups = NAV_GROUPS) {
+  return groups.flatMap((group) => group.items.map((item) => item.id));
+}

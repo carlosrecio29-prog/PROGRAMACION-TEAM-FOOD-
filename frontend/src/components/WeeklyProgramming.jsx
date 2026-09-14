@@ -2,6 +2,7 @@ import {useEffect,useMemo,useState} from 'react'
 import {getV2WeekProgramming,saveV2WeekProgramming,downloadV2WeeklyReport} from '../api'
 import {emptyFilters,matchesFilters,updateGroupFilters} from '../features/planning/weeklyProgrammingFilters'
 import {toggleWeeklySelection} from '../features/planning/weeklyProgrammingSelection'
+import Badge from '../shared/Badge'
 
 const MONTHS=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 const SPEC_NAMES={MEC:'Mecánica',ELE:'Eléctrica',MET:'Metrología',SER:'Servicios'}
@@ -9,7 +10,6 @@ const SPECS=['MEC','ELE','MET','SER']
 
 function number(value,fallback=0){const parsed=Number(value);return Number.isFinite(parsed)?parsed:fallback}
 function fmt(value,decimals=1){return number(value).toLocaleString('es-CO',{minimumFractionDigits:decimals,maximumFractionDigits:decimals})}
-function Badge({children,tone=''}){return <span className={'v2-badge '+tone}>{children}</span>}
 function monthWeeks(year,month){const days=new Date(year,month,0).getDate();const weeks=[];for(let start=1;start<=days;start+=7){const end=Math.min(start+6,days);weeks.push({from:`${year}-${String(month).padStart(2,'0')}-${String(start).padStart(2,'0')}`,to:`${year}-${String(month).padStart(2,'0')}-${String(end).padStart(2,'0')}`,label:`${start}–${end} ${MONTHS[month-1]}`})}return weeks}
 
 function ActivityGroup({kind,rows,dashboard,editing,filters,onFiltersChange,onToggle}){
@@ -17,7 +17,7 @@ function ActivityGroup({kind,rows,dashboard,editing,filters,onFiltersChange,onTo
   const visible=matchesFilters(rows,filters)
   return <section className={'v2-activity-section '+kind} aria-label={config.title}>
     <div className="v2-activity-head"><div><span className="v2-kicker">{config.kicker}</span><h3>{config.title}</h3><p>{config.description}</p></div><Badge tone={config.tone}>{visible.length} disponibles</Badge></div>
-    <div className="v2-group-filters" aria-label={`Filtros de ${config.title}`}><select aria-label={`Área en ${config.title}`} value={filters.area} onChange={event=>onFiltersChange({area:event.target.value})}><option value="">Todas las áreas</option>{(dashboard?.areas||[]).map(area=><option key={area.codigo} value={area.codigo}>{area.codigo} · {area.nombre||area.codigo}</option>)}</select><input aria-label={`Buscar en ${config.title}`} placeholder="Buscar OT, equipo o plan..." value={filters.search} onChange={event=>onFiltersChange({search:event.target.value})}/></div>
+    <div className="v2-group-filters" aria-label={`Filtros de ${config.title}`}><div className="v2-group-filter-title"><span>Filtros independientes</span><b>{config.kicker}</b></div><label><span>Area</span><select aria-label={`Área en ${config.title}`} value={filters.area} onChange={event=>onFiltersChange({area:event.target.value})}><option value="">Todas las áreas</option>{(dashboard?.areas||[]).map(area=><option key={area.codigo} value={area.codigo}>{area.codigo} · {area.nombre||area.codigo}</option>)}</select></label><label><span>Buscar</span><input aria-label={`Buscar en ${config.title}`} placeholder="OT, equipo o plan..." value={filters.search} onChange={event=>onFiltersChange({search:event.target.value})}/></label></div>
     <div className="v2-table-wrap v2-program-table"><table><thead><tr>{kind==='backlog'&&<th>Origen</th>}<th>OT</th><th>Área</th><th>Equipo</th><th>Plan de trabajo</th><th>Personas</th><th>Tiempo</th><th>H-H</th><th>Seleccionar</th></tr></thead><tbody>{visible.map(row=><tr key={row.orden_mantenimiento_id}>{kind==='backlog'&&<td><div className="v2-backlog-origin"><b>Movida</b><small>{row.semana_origen_inicio||'Semana anterior'} → {row.semana_origen_fin||''}</small></div></td>}<td><b>{row.numero_ot||'SIN ASIGNAR'}</b></td><td><Badge>{row.area_codigo||'—'}</Badge><small>{row.area_nombre||''}</small></td><td><b>{row.activo_codigo}</b><small>{row.activo_descripcion}</small></td><td><span className="v2-plan">{row.plan_trabajo}</span><small>{row.descripcion_grupo||''}</small></td><td><b>{row.numero_personas_efectivo}</b></td><td>{fmt(row.tiempo_min,0)} min</td><td><b>{fmt(row.hh,1)}</b></td><td><button type="button" className="v2-select" disabled={!editing} onClick={()=>onToggle(row)}>{editing?'Seleccionar':'Solo lectura'}</button></td></tr>)}{!visible.length&&<tr><td colSpan={kind==='backlog'?9:8} className="v2-empty">No hay actividades con estos filtros.</td></tr>}</tbody></table></div>
   </section>
 }

@@ -47,7 +47,7 @@ def get_week_programming(*, date_from: date, date_to: date, specialty: str) -> d
                 ON ci.orden_mantenimiento_id=o.id AND ci.programacion_id=CAST(:programming_id AS bigint)
               WHERE o.especialidad=:specialty
                 AND (o.periodo=date_trunc('month',CAST(:date_from AS date))::date OR b.id IS NOT NULL OR ci.id IS NOT NULL)
-                AND (upper(COALESCE(o.estado,''))<>'FINALIZADO' OR ci.id IS NOT NULL)
+                AND (upper(COALESCE(o.estado,'')) NOT LIKE 'FINALIZ%' OR ci.id IS NOT NULL)
                 AND p.numero_personas_efectivo IS NOT NULL
                 AND p.tiempo_parada_efectivo_min IS NOT NULL
                 AND p.requiere_parada IS NOT NULL
@@ -135,7 +135,7 @@ def save_week_programming(*, date_from: date, date_to: date, specialty: str, ord
             FROM programacion.orden_mantenimiento o
             JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
             WHERE o.id=ANY(CAST(:ids AS bigint[])) AND o.especialidad=:specialty
-              AND upper(COALESCE(o.estado,''))<>'FINALIZADO'
+              AND upper(COALESCE(o.estado,'')) NOT LIKE 'FINALIZ%'
               AND p.numero_personas_efectivo IS NOT NULL AND p.tiempo_parada_efectivo_min IS NOT NULL
               AND p.requiere_parada IS NOT NULL AND COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min) IS NOT NULL
         """), {"ids": unique_ids, "specialty": specialty}).mappings()]

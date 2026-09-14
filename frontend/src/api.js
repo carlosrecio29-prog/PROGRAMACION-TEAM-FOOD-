@@ -225,13 +225,14 @@ export async function getV2WeekClosure(programmingId) {
 export async function uploadV2WeekClosure(
   programmingId,
   file,
-  closedBy = "CARLOS ANDRÉS RECIO MUÑOZ",
+  closedBy = "",
 ) {
-  const qs = new URLSearchParams({ closed_by: closedBy });
+  const qs = new URLSearchParams();
+  if (closedBy) qs.set("closed_by", closedBy);
   const form = new FormData();
   form.append("file", file);
   return check(
-    await fetch(`/api/v2/programming/${programmingId}/close-file?${qs}`, {
+    await fetch(`/api/v2/programming/${programmingId}/close-file${qs.size ? `?${qs}` : ""}`, {
       method: "POST",
       body: form,
     }),
