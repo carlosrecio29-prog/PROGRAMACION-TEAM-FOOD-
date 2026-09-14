@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import re
 from collections import Counter, defaultdict
-from datetime import date, datetime
+from datetime import date, datetime, time, timedelta
 from typing import Any
 
 from sqlalchemy import text
@@ -55,10 +55,46 @@ def _enabled(value:Any)->bool:
 
 
 def _number(value:Any)->float|None:
-    if value in (None,""):
+    """Parse numeric values exported by the maintenance software without losing zero.
+
+    Besides native Excel numbers, exports may contain Colombian decimal commas,
+    thousands separators, or time-like values. A real zero is always returned as
+    0.0; only an actually empty/unparseable value becomes None.
+    """
+    if value is None:
         return None
-    try:
+    if isinstance(value,bool):
         return float(value)
+    if isinstance(value,(int,float)):
+        return float(value)
+    if isinstance(value,timedelta):
+        return value.total_seconds()/60.0
+    if isinstance(value,time):
+        return value.hour*60.0+value.minute+value.second/60.0
+
+    raw=str(value).strip()
+    if not raw:
+        return None
+
+    compact=raw.replace("\u00a0","").replace(" ","")
+    clock=re.fullmatch(r"(-?\d+):(\d{1,2})(?::(\d{1,2}(?:[.,]\d+)?))?",compact)
+    if clock:
+        hours=int(clock.group(1))
+        minutes=int(clock.group(2))
+        seconds=float((clock.group(3) or "0").replace(",","."))
+        sign=-1.0 if hours<0 else 1.0
+        return hours*60.0+sign*(minutes+seconds/60.0)
+
+    if "," in compact and "." in compact:
+        if compact.rfind(",")>compact.rfind("."):
+            compact=compact.replace(".","").replace(",",".")
+        else:
+            compact=compact.replace(",","")
+    elif "," in compact:
+        compact=compact.replace(",",".")
+
+    try:
+        return float(compact)
     except (TypeError,ValueError):
         return None
 
@@ -177,7 +213,7 @@ def _parse_plans(content:bytes)->list[dict[str,Any]]:
             "tipo_frecuencia":cell_by_header(row,m,"TipoFrecuencia"),
             "valor_frecuencia":_number(cell_by_header(row,m,"ValorFrecuenci","ValorFrecuencia")),
             "tiempo_ejecucion_min":_number(cell_by_header(row,m,"TiempoEjecucion")),
-            "numero_personas":people if people and people>0 else None,
+            "numero_personas":people if people is not None and people>0 else None,
             "tiempo_parada_min":_number(cell_by_header(row,m,"TiempoParada")),
             "especialidad":_specialty(cell_by_header(row,m,"Especialidad")) or normalize_text(cell_by_header(row,m,"Especialidad")) or None,
             "orden_tipo":normalize_text(cell_by_header(row,m,"OrdenTipo")) or None,
