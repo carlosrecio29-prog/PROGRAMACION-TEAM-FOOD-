@@ -1,7 +1,7 @@
 import MaintenanceBaseUpload from "../components/MaintenanceBaseUpload";
 import PendingDataIndicators from "../components/PendingDataIndicators";
 import ShiftSettings from "../components/ShiftSettings";
-import companyLogo from "../assets/cek-global-inspection.jpg";
+import companyLogo from "../assets/cekLogoData";
 import "../admin-improvements.css";
 import { MONTHS, NAV_GROUPS, VIEW_META } from "./navigation";
 
