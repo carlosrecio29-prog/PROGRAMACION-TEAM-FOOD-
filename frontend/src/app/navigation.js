@@ -10,7 +10,8 @@ export const VIEW_META = {
   closure: ["Cierre semanal", "Reconcilia la programación contra el estado verificado del software."],
   backlog: ["Backlog acumulado", "OT pendientes conservadas hasta confirmar su finalización."],
   pending: ["Completar datos", "Completa sólo los datos que faltan en los planes del periodo."],
-  technicians: ["Técnicos", "Turnos, disponibilidad y especialidades del personal."],
+  technicians: ["Técnicos", "Personal, turnos, disponibilidad y especialidades."],
+  imports: ["Actualizar base", "Carga los Excel del software de mantenimiento en un único lugar."],
 };
 
 export const NAV_GROUPS = [
@@ -22,8 +23,9 @@ export const NAV_GROUPS = [
   { label: "Cierre", items: [{ id: "closure", label: "Cierre semanal", code: "CI" }] },
   { label: "Backlog", items: [{ id: "backlog", label: "Seguimiento acumulado", code: "BL" }] },
   { label: "Administración", items: [
+    { id: "imports", label: "Cargar Excel", code: "EX" },
     { id: "pending", label: "Completar datos", code: "CD", indicator: "pending" },
-    { id: "technicians", label: "Técnicos", code: "TE", indicator: "technicians" },
+    { id: "technicians", label: "Técnicos y turnos", code: "TE", indicator: "technicians" },
   ] },
 ];
 
