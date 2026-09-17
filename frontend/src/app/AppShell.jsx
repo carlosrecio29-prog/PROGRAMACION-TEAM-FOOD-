@@ -1,4 +1,8 @@
 import MaintenanceBaseUpload from "../components/MaintenanceBaseUpload";
+import PendingDataIndicators from "../components/PendingDataIndicators";
+import ShiftSettings from "../components/ShiftSettings";
+import companyLogo from "../assets/cek-global-inspection.jpg";
+import "../admin-improvements.css";
 import { MONTHS, NAV_GROUPS, VIEW_META } from "./navigation";
 
 export default function AppShell({
@@ -16,7 +20,15 @@ export default function AppShell({
     <div className="v2-shell">
       <aside className="v2-sidebar" aria-label="Navegación principal">
         <div className="v2-brand">
-          <span><b>PROGRAMACIÓN</b><small>TEAM FOOD · Barranquilla</small></span>
+          <img
+            className="v2-brand-logo"
+            src={companyLogo}
+            alt="C.E.K Global Inspection Services"
+          />
+          <span>
+            <b>PROGRAMACIÓN</b>
+            <small>TEAM FOOD · Barranquilla</small>
+          </span>
         </div>
         <nav aria-label="Flujos operativos">
           {NAV_GROUPS.map((group) => (
@@ -30,9 +42,12 @@ export default function AppShell({
                   aria-current={view === item.id ? "page" : undefined}
                   onClick={() => onNavigate(item.id)}
                 >
-                  <span>{item.code}</span>{item.label}
+                  <span>{item.code}</span>
+                  {item.label}
                   {item.indicator && Number(indicators[item.indicator]) > 0 && (
-                    <i aria-label={`${indicators[item.indicator]} pendientes`}>{indicators[item.indicator]}</i>
+                    <i aria-label={`${indicators[item.indicator]} pendientes`}>
+                      {indicators[item.indicator]}
+                    </i>
                   )}
                 </button>
               ))}
@@ -40,27 +55,52 @@ export default function AppShell({
           ))}
         </nav>
         <div className="v2-side-note">
-          <small>Fuente principal</small><b>Software de mantenimiento</b>
+          <small>Fuente principal</small>
+          <b>Software de mantenimiento</b>
           <span>TEAM FOOD planea, concilia y conserva el historial operativo.</span>
         </div>
-        <div className="v2-profile"><span>Equipo de mantenimiento</span><small>C.E.K GLOBAL INSPECTION</small></div>
+        <div className="v2-profile">
+          <span>Equipo de mantenimiento</span>
+          <small>C.E.K GLOBAL INSPECTION</small>
+        </div>
       </aside>
-      <main className="v2-main" id="contenido-principal">
+      <main className={`v2-main v2-view-${view}`} id="contenido-principal">
         <header className="v2-topbar">
-          <div><span className="v2-kicker">PLANTA BARRANQUILLA</span><h1>{title}</h1><p>{description}</p></div>
+          <div>
+            <span className="v2-kicker">PLANTA BARRANQUILLA</span>
+            <h1>{title}</h1>
+            <p>{description}</p>
+          </div>
           <div className="v2-top-actions">
-            <label>Periodo
-              <select aria-label="Periodo de trabajo" value={month} onChange={(event) => onMonthChange(Number(event.target.value))}>
-                {MONTHS.map((label, index) => <option key={label} value={index + 1}>{label} {year}</option>)}
+            <label>
+              Periodo
+              <select
+                aria-label="Periodo de trabajo"
+                value={month}
+                onChange={(event) => onMonthChange(Number(event.target.value))}
+              >
+                {MONTHS.map((label, index) => (
+                  <option key={label} value={index + 1}>
+                    {label} {year}
+                  </option>
+                ))}
               </select>
             </label>
-            <div className={`v2-health ${health}`} role="status"><i />
-              {health === "ok" ? "Base conectada" : health === "error" ? "Sin conexión" : "Conectando..."}
+            <div className={`v2-health ${health}`} role="status">
+              <i />
+              {health === "ok"
+                ? "Base conectada"
+                : health === "error"
+                  ? "Sin conexión"
+                  : "Conectando..."}
             </div>
           </div>
         </header>
-        <MaintenanceBaseUpload year={year} month={month} />
+
+        {view === "pending" && <PendingDataIndicators year={year} month={month} />}
+        {view === "imports" && <MaintenanceBaseUpload year={year} month={month} />}
         {children}
+        {view === "technicians" && <ShiftSettings year={year} month={month} />}
       </main>
     </div>
   );
