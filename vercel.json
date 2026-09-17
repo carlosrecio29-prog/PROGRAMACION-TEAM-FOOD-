@@ -10,10 +10,15 @@
     "api/maintenance.py": {
       "maxDuration": 60,
       "includeFiles": "backend/**"
+    },
+    "api/shifts.py": {
+      "maxDuration": 60,
+      "includeFiles": "backend/**"
     }
   },
   "routes": [
     { "src": "/api/v2/import-maintenance", "dest": "/api/maintenance.py" },
+    { "src": "/api/v2/shifts(?:/.*)?", "dest": "/api/shifts.py" },
     { "src": "/api/(.*)", "dest": "/api/index.py" },
     { "handle": "filesystem" },
     { "src": "/(.*)", "dest": "/index.html" }
