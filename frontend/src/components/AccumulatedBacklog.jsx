@@ -12,6 +12,36 @@ function fmt(value) {
     maximumFractionDigits: 1,
   });
 }
+function backlogReason(row) {
+  const reason = String(row.motivo || "").toUpperCase();
+  if (reason.includes("RETIRADA DE PROGRAMACIÓN")) {
+    return {
+      label: "CAMBIO DE PROGRAMACIÓN",
+      detail: "Retirada al modificar la programación asignada",
+      tone: "backlog",
+    };
+  }
+  if (reason.includes("NO ENCONTRADA")) {
+    return {
+      label: "NO ENCONTRADA EN CIERRE",
+      detail: "La OT no apareció en el archivo usado para cerrar",
+      tone: "warn",
+    };
+  }
+  if (reason.includes("PENDIENTE DE CIERRE")) {
+    return {
+      label: "NO FINALIZADA",
+      detail: "Programada, pero no terminó al cierre semanal",
+      tone: "warn",
+    };
+  }
+  return {
+    label: reason || "PENDIENTE",
+    detail: "Pendiente de seguimiento",
+    tone: "backlog",
+  };
+}
+
 export default function AccumulatedBacklog({
   areas = [],
   initialOrderId,
@@ -62,8 +92,8 @@ export default function AccumulatedBacklog({
           <span className="v2-kicker">SEGUIMIENTO ACUMULADO</span>
           <h2>Backlog activo hasta finalizar</h2>
           <p>
-            Las OT no finalizadas se marcan como pendientes y se mantienen
-            visibles aunque vuelvan a programarse.
+            Cada OT conserva el motivo por el que entró al backlog para separar
+            cambios de programación de trabajos que el ingeniero no finalizó.
           </p>
         </div>
       </section>
@@ -176,69 +206,71 @@ export default function AccumulatedBacklog({
             <thead>
               <tr>
                 <th>Estado</th>
+                <th>Motivo de ingreso</th>
                 <th>OT</th>
                 <th>Area</th>
                 <th>Equipo</th>
                 <th>Plan</th>
                 <th>H-H</th>
-                <th>Origen</th>
+                <th>Semana origen</th>
                 <th>Antiguedad</th>
                 <th>Reprog.</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
-                <tr key={r.id}>
-                  <td>
-                    <Badge
-                      tone={
-                        r.estado_seguimiento === "PENDIENTE_PROGRAMADA"
-                          ? "warn"
-                          : r.estado_seguimiento === "FINALIZADA"
-                            ? "ok"
-                            : "backlog"
-                      }
-                    >
-                      {r.estado_seguimiento.replaceAll("_", " ")}
-                    </Badge>
-                    <small>{r.ultimo_resultado_cierre || "PENDIENTE"}</small>
-                  </td>
-                  <td>
-                    <b>{r.numero_ot || "SIN ASIGNAR"}</b>
-                  </td>
-                  <td>
-                    <Badge>{r.area_codigo || "—"}</Badge>
-                  </td>
-                  <td>
-                    <b>{r.activo_codigo}</b>
-                    <small>{r.activo_descripcion}</small>
-                  </td>
-                  <td>
-                    <span className="v2-plan">{r.plan_trabajo || "—"}</span>
-                    <small>{r.descripcion_grupo || ""}</small>
-                  </td>
-                  <td>
-                    <b>{fmt(r.hh)}</b>
-                  </td>
-                  <td>
-                    <small>
-                      {r.primera_semana_origen_inicio ||
-                        r.semana_origen_inicio ||
-                        "Sin fecha"}
-                    </small>
-                  </td>
-                  <td>
-                    <b>{number(r.antiguedad_dias)}</b>
-                    <small>dias</small>
-                  </td>
-                  <td>
-                    <b>{number(r.reprogramaciones)}</b>
-                  </td>
-                </tr>
-              ))}
+              {rows.map((r) => {
+                const reason = backlogReason(r);
+                return (
+                  <tr key={r.id}>
+                    <td>
+                      <Badge
+                        tone={
+                          r.estado_seguimiento === "PENDIENTE_PROGRAMADA"
+                            ? "warn"
+                            : r.estado_seguimiento === "FINALIZADA"
+                              ? "ok"
+                              : "backlog"
+                        }
+                      >
+                        {r.estado_seguimiento.replaceAll("_", " ")}
+                      </Badge>
+                      <small>{r.ultimo_resultado_cierre || "PENDIENTE"}</small>
+                    </td>
+                    <td>
+                      <div className="v2-backlog-reason">
+                        <Badge tone={reason.tone}>{reason.label}</Badge>
+                        <small>{reason.detail}</small>
+                      </div>
+                    </td>
+                    <td><b>{r.numero_ot || "SIN ASIGNAR"}</b></td>
+                    <td><Badge>{r.area_codigo || "—"}</Badge></td>
+                    <td>
+                      <b>{r.activo_codigo}</b>
+                      <small>{r.activo_descripcion}</small>
+                    </td>
+                    <td>
+                      <span className="v2-plan">{r.plan_trabajo || "—"}</span>
+                      <small>{r.descripcion_grupo || ""}</small>
+                    </td>
+                    <td><b>{fmt(r.hh)}</b></td>
+                    <td>
+                      <small>
+                        {r.primera_semana_origen_inicio ||
+                          r.semana_origen_inicio ||
+                          "Sin fecha"}
+                      </small>
+                    </td>
+                    <td>
+                      <b>{number(r.antiguedad_dias)}</b>
+                      <small>dias</small>
+                    </td>
+                    <td><b>{number(r.reprogramaciones)}</b></td>
+                  </tr>
+                );
+              })}
               {!rows.length && !loading && (
                 <tr>
-                  <td colSpan="9" className="v2-empty">
+                  <td colSpan="10" className="v2-empty">
                     No hay OT de Backlog con estos filtros.
                   </td>
                 </tr>
