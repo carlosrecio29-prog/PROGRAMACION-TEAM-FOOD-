@@ -48,7 +48,7 @@ export default function MaintenanceBaseUpload({ year, month }) {
   }
 
   return (
-    <details className="v2-panel" style={{ marginBottom: 18 }}>
+    <details className="v2-panel" style={{ marginBottom: 18 }} open>
       <summary style={{ cursor: "pointer", listStyle: "none" }}>
         <div className="v2-section-head" style={{ marginBottom: 0 }}>
           <div>
@@ -59,7 +59,7 @@ export default function MaintenanceBaseUpload({ year, month }) {
             </p>
           </div>
           <span className="v2-primary" style={{ pointerEvents: "none" }}>
-            Abrir cargador
+            Cargador de archivos
           </span>
         </div>
       </summary>
