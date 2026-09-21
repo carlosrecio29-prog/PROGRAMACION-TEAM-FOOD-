@@ -6,12 +6,49 @@ function readError(payload, status) {
 }
 
 export default function MaintenanceBaseUpload({ year, month }) {
+  const [operationMaster, setOperationMaster] = useState(null);
+  const [monthlyOnly, setMonthlyOnly] = useState(null);
+  const [operationResult, setOperationResult] = useState(null);
+  const [monthlyResult, setMonthlyResult] = useState(null);
   const [plans, setPlans] = useState(null);
   const [activities, setActivities] = useState(null);
   const [monthly, setMonthly] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
+
+  async function postOperationMaster() {
+    if (!operationMaster) return setError("Selecciona el Excel Plan de Trabajo.");
+    setBusy(true); setError(""); setOperationResult(null);
+    try {
+      const form = new FormData();
+      form.append("plans", operationMaster);
+      const response = await fetch("/api/v2/import-operation-master", {
+        method: "POST", body: form,
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(readError(payload, response.status));
+      setOperationResult(payload);
+    } catch (e) { setError(e.message); }
+    finally { setBusy(false); }
+  }
+
+  async function postMonthlyOnly() {
+    if (!monthlyOnly) return setError("Selecciona la Lista de Calendario del mes.");
+    setBusy(true); setError(""); setMonthlyResult(null);
+    try {
+      const form = new FormData();
+      form.append("monthly", monthlyOnly);
+      const params = new URLSearchParams({ year, month });
+      const response = await fetch(`/api/v2/import-monthly-calendar?${params}`, {
+        method: "POST", body: form,
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(readError(payload, response.status));
+      setMonthlyResult(payload);
+    } catch (e) { setError(e.message); }
+    finally { setBusy(false); }
+  }
 
   async function upload() {
     if (!plans || !activities || !monthly) {
@@ -39,7 +76,6 @@ export default function MaintenanceBaseUpload({ year, month }) {
       }
       if (!response.ok) throw new Error(readError(payload, response.status));
       setResult(payload);
-      window.setTimeout(() => window.location.reload(), 900);
     } catch (e) {
       setError(e.message || "Error actualizando la base de mantenimiento");
     } finally {
@@ -64,6 +100,38 @@ export default function MaintenanceBaseUpload({ year, month }) {
         </div>
       </summary>
 
+      <div className="v2-panel" style={{ marginTop: 18 }}>
+        <span className="v2-kicker">ETAPA 1 · MAESTRO</span>
+        <h3>Clasificar planes de OPERACIÓN</h3>
+        <p>Sube solo Plan de Trabajo. Los planes cuyo nombre empieza con OPERACIÓN se excluyen de mantenimiento. No se borran OT ni semanas históricas.</p>
+        <input type="file" accept=".xlsx" onChange={(e) => setOperationMaster(e.target.files?.[0] || null)} />
+        <div className="v2-program-review-actions" style={{ marginTop: 12 }}>
+          <button type="button" className="v2-primary" onClick={postOperationMaster} disabled={busy}>Actualizar maestro y exclusiones</button>
+        </div>
+        {operationResult && <div className="v2-success" style={{ marginTop: 12 }}>
+          <b>{operationResult.planes_archivo} planes analizados · {operationResult.planes_operacion_archivo} de OPERACIÓN · {operationResult.planes_mantenimiento_archivo} restantes.</b>
+          <details style={{ marginTop: 8 }}><summary>Ver los {operationResult.planes_operacion_archivo} planes excluidos</summary>
+            <ul>{(operationResult.excluidos_detalle || []).map((x, i) => <li key={i}>{x.grupo} · {x.plan_trabajo} ({x.especialidad})</li>)}</ul>
+          </details>
+        </div>}
+      </div>
+
+      <div className="v2-panel" style={{ marginTop: 18 }}>
+        <span className="v2-kicker">ETAPA 2 · MENSUAL</span>
+        <h3>Cargar Lista de Calendario</h3>
+        <p>Usa el maestro guardado. Las órdenes de OPERACIÓN no entran al PMP de mantenimiento. La reimportación actualiza OT existentes sin borrar programación ni cierres.</p>
+        <input type="file" accept=".xlsx" onChange={(e) => setMonthlyOnly(e.target.files?.[0] || null)} />
+        <div className="v2-program-review-actions" style={{ marginTop: 12 }}>
+          <button type="button" className="v2-primary" onClick={postMonthlyOnly} disabled={busy}>Importar calendario {String(month).padStart(2, "0")}/{year}</button>
+        </div>
+        {monthlyResult && <div className="v2-success" style={{ marginTop: 12 }}>
+          <b>{monthlyResult.pmp_archivo} registros del archivo · {monthlyResult.pmp_excluidos_operacion} excluidos por OPERACIÓN · {monthlyResult.pmp_importados_o_actualizados} importados/actualizados.</b>
+          <p>{monthlyResult.registros_mantenimiento_periodo} registros de mantenimiento vigentes en base. {monthlyResult.registros_operacion_historicos} de OPERACIÓN conservados solo como historia.</p>
+          {monthlyResult.warnings?.length > 0 && <details><summary>Advertencias ({monthlyResult.warnings.length})</summary><ul>{monthlyResult.warnings.map((x,i)=><li key={i}>{x}</li>)}</ul></details>}
+          <button type="button" onClick={() => window.location.reload()}>Actualizar indicadores</button>
+        </div>}
+      </div>
+      <details style={{ marginTop: 18 }}><summary>Carga inicial de los tres Excel (opcional)</summary>
       <div className="v2-quality-grid" style={{ marginTop: 18 }}>
         <label>
           <b>1. Plan de Trabajo</b>
@@ -112,9 +180,10 @@ export default function MaintenanceBaseUpload({ year, month }) {
       {error && <div className="v2-error" style={{ marginTop: 14 }}>{error}</div>}
       {result && (
         <div className="v2-success" style={{ marginTop: 14 }}>
-          Base actualizada: {result.planes} planes · {result.actividades} actividades · {result.registros_pmp} registros PMP · {result.pmp_mecanica} registros MEC. Recargando…
+          Base actualizada: {result.planes} planes · {result.actividades} actividades · {result.pmp_excluidos_operacion} registros excluidos por OPERACIÓN · {result.registros_pmp} registros PMP · {result.pmp_mecanica} registros MEC.
         </div>
       )}
+      </details>
     </details>
   );
 }
