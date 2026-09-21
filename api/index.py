@@ -29,7 +29,7 @@ from backend.services.v2_programming_runtime import (
     export_weekly_excel, export_weekly_pdf,
 )
 from backend.services.v2_closure_service import (
-    V2ClosureError, get_week_closure, close_week_from_calendar,
+    V2ClosureError, get_week_closure, close_week_from_calendar, preview_week_closure,
 )
 from backend.services.v2_backlog_service import get_accumulated_backlog
 from backend.services.programming_service import (
@@ -205,6 +205,21 @@ def v2_backlog(
 def v2_week_closure(programming_id:int):
     try:return get_week_closure(programming_id)
     except V2ClosureError as exc:raise HTTPException(404,str(exc)) from exc
+
+@app.post("/api/v2/programming/{programming_id}/preview-close-file")
+async def v2_preview_close_week_file(
+    programming_id: int,
+    file: UploadFile = File(...),
+):
+    try:
+        return preview_week_closure(
+            programming_id=programming_id, content=await read_upload(file),
+        )
+    except V2ClosureError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except SQLAlchemyError as exc:
+        raise HTTPException(503, "Error al consultar la programación para comparar el cierre") from exc
+
 
 @app.post("/api/v2/programming/{programming_id}/close-file")
 async def v2_close_week_file(
