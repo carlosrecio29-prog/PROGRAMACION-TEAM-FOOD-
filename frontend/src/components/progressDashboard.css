@@ -1,0 +1,29 @@
+.v2-progress-dashboard{gap:18px}
+.v2-progress-dashboard .v2-section-head{align-items:center}
+.v2-progress-month-state{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:8px 0 15px;padding:12px 16px;background:#e9f2fa;border-radius:12px;color:#17365d}
+.v2-progress-month-state span{font-size:.88rem}
+.v2-progress-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:10px 0 16px}
+.v2-progress-metric{display:flex;flex-direction:column;gap:5px;border:1px solid #dce5ef;border-radius:12px;padding:15px;background:#fafcff;min-height:112px}
+.v2-progress-metric span{font-size:.81rem;color:#52657c;font-weight:600}
+.v2-progress-metric strong{font-size:1.85rem;color:#17365d;line-height:1.2}
+.v2-progress-metric small{font-size:.74rem;color:#65758b;line-height:1.5}
+.v2-progress-metric.success{border-left:4px solid #14856d}
+.v2-progress-metric.warning{border-left:4px solid #d19a34}
+.v2-progress-note{padding:10px 14px;background:#f2f6fa;border-radius:9px;font-size:.87rem;line-height:1.55;color:#4b627b}
+.v2-progress-filter{display:flex;flex-direction:column;gap:4px;font-size:.78rem;color:#52657c}
+.v2-progress-filter select{min-width:150px;padding:8px;border:1px solid #d4dfea;border-radius:7px}
+.v2-progress-chart{display:flex;flex-direction:column;gap:13px;margin:17px 0}
+.v2-progress-chart-row{display:grid;grid-template-columns:minmax(160px,230px) minmax(100px,1fr) 105px;gap:14px;align-items:center}
+.v2-progress-chart-label{display:flex;flex-direction:column;gap:4px;font-size:.86rem}
+.v2-progress-chart-label span{font-size:.75rem;color:#586e83}
+.v2-progress-chart-bars{display:flex;flex-direction:column;gap:5px}
+.v2-progress-chart-track{height:11px;background:#edf2f8;border-radius:8px;overflow:hidden}
+.v2-progress-chart-total{height:100%;background:#bed5e6;border-radius:8px}
+.v2-progress-chart-done{height:100%;background:#2f75b5;border-radius:8px}
+.v2-progress-chart-row strong{text-align:right;font-size:.84rem;color:#17365d}
+.v2-progress-chart-legend{font-size:.75rem;color:#64748b;margin:0 0 16px}
+.v2-progress-report{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:15px}
+.v2-progress-report-actions{display:flex;gap:9px;flex-wrap:wrap}
+.v2-progress-dashboard table{font-size:.78rem;white-space:normal}
+.v2-progress-dashboard th,.v2-progress-dashboard td{min-width:62px}
+@media(max-width:750px){.v2-progress-chart-row{grid-template-columns:95px 1fr 70px;gap:7px}.v2-progress-chart-label span{font-size:.66rem}.v2-progress-metric strong{font-size:1.5rem}}
