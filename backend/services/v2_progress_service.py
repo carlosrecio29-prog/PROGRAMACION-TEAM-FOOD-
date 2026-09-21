@@ -25,7 +25,7 @@ def _pct(a: float, b: float) -> float:
 
 
 def aggregate_progress(headers: list[dict[str, Any]], items: list[dict[str, Any]],
-                       pmp_count: int) -> dict[str, Any]:
+                       pmp_count: int, month_period: date | None = None) -> dict[str, Any]:
     """Semana = ejecuciones programadas; mes = OT únicas con último cierre conocido."""
     by_week: dict[int, dict[str, Any]] = {}
     for row in headers:
@@ -127,6 +127,11 @@ def aggregate_progress(headers: list[dict[str, Any]], items: list[dict[str, Any]
         record["progress_ot_pct"] = _pct(record["finalized"], record["programmed"])
         record["progress_hh_pct"] = _pct(record["hh_finalized"], record["hh_programmed"])
 
+    unique["programmed_from_pmp"] = sum(
+        1 for record in latest.values()
+        if month_period is None or record.get("periodo") == month_period
+    )
+    unique["from_prior_backlog"] = unique["programmed"] - unique["programmed_from_pmp"]
     unique["progress_ot_pct"] = _pct(unique["finalized"], unique["programmed"])
     complete = bool(weeks) and all(w["estado"] == "CERRADA" for w in weeks)
     return {
@@ -134,7 +139,7 @@ def aggregate_progress(headers: list[dict[str, Any]], items: list[dict[str, Any]
         "weekly_totals": {**totals, "progress_ot_pct": _pct(totals["finalized"], totals["programmed"]),
                           "progress_hh_pct": _pct(totals["hh_finalized"], totals["hh_programmed"])},
         "monthly": {**unique, "pmp_count": int(pmp_count),
-                    "not_programmed": max(0, int(pmp_count) - unique["programmed"]),
+                    "not_programmed": max(0, int(pmp_count) - unique["programmed_from_pmp"]),
                     "all_weeks_closed": complete, "weeks_total": len(weeks),
                     "weeks_closed": sum(w["estado"] == "CERRADA" for w in weeks)},
         "unresolved": unresolved,
@@ -161,7 +166,7 @@ def get_progress(year: int, month: int) -> dict[str, Any]:
         items = [dict(r) for r in conn.execute(text("""
             SELECT i.programacion_id,i.orden_mantenimiento_id,i.hh_programadas,
                    i.finalizado,i.estado_cierre,i.origen_backlog,
-                   o.numero_ot,o.plan_clave_software,o.especialidad,
+                   o.numero_ot,o.plan_clave_software,o.especialidad,o.periodo,
                    a.codigo AS activo_codigo
             FROM programacion.programacion_item_v2 i
             JOIN programacion.programacion_semanal_v2 s ON s.id=i.programacion_id
@@ -176,7 +181,7 @@ def get_progress(year: int, month: int) -> dict[str, Any]:
             LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
             WHERE o.periodo=:begin AND COALESCE(p.es_operacion,false)=false
         """), {"begin": begin}).scalar_one()
-    return {"year": year, "month": month, **aggregate_progress(headers, items, pmp_count)}
+    return {"year": year, "month": month, **aggregate_progress(headers, items, pmp_count, begin)}
 
 
 def export_progress_pdf(year: int, month: int, programming_id: int | None = None) -> tuple[bytes, str]:
