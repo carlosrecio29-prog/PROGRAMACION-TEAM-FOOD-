@@ -12,6 +12,7 @@ import {
   downloadV2WeeklyReport,
 } from "./api";
 import WeeklyClosure from "./components/WeeklyClosure";
+import ProgressDashboard from "./components/ProgressDashboard";
 import WeeklyProgramming from "./components/WeeklyProgramming";
 import AccumulatedBacklog from "./components/AccumulatedBacklog";
 import AppShell from "./app/AppShell";
@@ -52,20 +53,16 @@ function fmt(v, d = 1) {
     maximumFractionDigits: d,
   });
 }
-function Summary({ data, onGoPending }) {
+function Summary({ data, onGoPending, year, month, onGoMonthly }) {
   const s = data?.summary || {};
   const p = data?.pending || {};
   return (
     <div className="v2-stack">
       <section className="v2-hero">
         <div>
-          <span className="v2-kicker">BASE OPERATIVA · SEPTIEMBRE 2026</span>
-          <h2>Primero completamos la información. Después programamos.</h2>
-          <p>
-            La aplicación usa lo que entrega el software y te muestra únicamente
-            los datos que todavía hacen falta para calcular y programar
-            correctamente.
-          </p>
+          <span className="v2-kicker">BASE OPERATIVA · {String(month).padStart(2, "0")}/{year}</span>
+          <h2>Estado operativo y avance del mantenimiento</h2>
+          <p>Datos maestros, cartera PMP, cumplimiento semanal y cierre del mes.</p>
         </div>
         <button className="v2-primary" onClick={onGoPending}>
           Completar datos pendientes
@@ -108,6 +105,7 @@ function Summary({ data, onGoPending }) {
           <small>requieren completar dato</small>
         </div>
       </section>
+      <ProgressDashboard year={year} month={month} onOpenMonthly={onGoMonthly} />
       <section className="v2-panel">
         <div className="v2-section-head">
           <div>
@@ -1424,7 +1422,7 @@ export default function App() {
     >
         {error && <div className="v2-error">{error}</div>}
         {view === "summary" && (
-          <Summary data={dashboard} onGoPending={() => navigate("pending")} />
+          <Summary data={dashboard} year={year} month={month} onGoPending={() => navigate("pending")} onGoMonthly={() => navigate("monthly")} />
         )}{" "}
         {view === "pending" && (
           <PendingPlans year={year} month={month} onChanged={refresh} />
@@ -1432,6 +1430,7 @@ export default function App() {
         {view === "programming" && (
           <WeeklyProgramming year={year} month={month} dashboard={dashboard} />
         )}{" "}
+        {view === "monthly" && <ProgressDashboard year={year} month={month} full />}
         {view === "closure" && <WeeklyClosure year={year} month={month} onOpenBacklog={(orderId) => { setBacklogOrderId(orderId); navigate("backlog"); }} />}{" "}
         {view === "backlog" && <AccumulatedBacklog areas={dashboard?.areas || []} initialOrderId={backlogOrderId} onClearOrder={() => setBacklogOrderId("")} />}{" "}
         {view === "pmp" && (
