@@ -65,3 +65,25 @@ def test_frontend_shares_week_label_and_previews_before_close():
     assert "w.transition ? 'Transición' : `Semana ${w.weekNumber}`" in source
     assert "previewV2WeekClosure" in source
     assert "Confirmar cierre semanal" in source
+
+
+def test_calendar_requires_expected_columns_and_does_not_silently_close():
+    import io
+    from openpyxl import Workbook
+    import pytest
+    from backend.services.v2_closure_service import _parse_calendar, V2ClosureError
+
+    book = Workbook()
+    sheet = book.active
+    sheet.append(["Orden", "Activo", "PlanTrabajo", "OTRO ESTADO"])
+    sheet.append(["OT-12119-26", "BA-FR-FC-FL01-FT01", "33-ANÁLISIS DE ACEITE", "FINALIZADO"])
+    data = io.BytesIO()
+    book.save(data)
+    with pytest.raises(V2ClosureError, match="Orden, Activo, PlanTrabajo y Estado"):
+        _parse_calendar(data.getvalue())
+
+
+def test_close_rejects_conflicts_in_backend_before_commit():
+    source = (ROOT / "backend/services/v2_closure_service.py").read_text()
+    assert 'if match_reason in {' in source
+    assert "Revisa el archivo en la vista previa antes de cerrar." in source
