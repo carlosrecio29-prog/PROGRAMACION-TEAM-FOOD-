@@ -18,6 +18,7 @@
   },
   "routes": [
     { "src": "/api/v2/import-maintenance", "dest": "/api/maintenance.py" },
+    { "src": "/api/v2/import-operation-master", "dest": "/api/maintenance.py" },
     { "src": "/api/v2/shifts", "dest": "/api/shifts.py" },
     { "src": "/api/v2/shifts/(.*)", "dest": "/api/shifts.py" },
     { "src": "/api/(.*)", "dest": "/api/index.py" },
