@@ -56,6 +56,10 @@ export default function ProgressDashboard({year,month,full=false,onOpenMonthly})
           {loading?"Actualizando...":"Actualizar avance"}
         </button>
       </div>
+      {top.contains_future_week_closures&&<div className="v2-warning" role="note">
+        CIERRE DE PRUEBA / ANTICIPADO: existen semanas cerradas con fecha de fin posterior a hoy.
+        No presentar este informe como cierre operativo definitivo del mes.
+      </div>}
       <div className="v2-progress-month-state">
         <strong>{count(top.weeks_closed)} de {count(top.weeks_total)} programaciones cerradas</strong>
         <span>{top.all_weeks_closed?"Periodo completamente cerrado para las especialidades programadas":"Informe parcial: quedan programaciones sin cierre"}</span>
