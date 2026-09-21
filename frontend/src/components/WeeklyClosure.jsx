@@ -3,6 +3,7 @@ import {monthWeeks,initialWeekIndex} from "../features/planning/monthWeeks.js";
 import {
   getV2WeekProgramming,
   getV2WeekClosure,
+  previewV2WeekClosure,
   uploadV2WeekClosure,
 } from "../api";
 import Badge from "../shared/Badge";
@@ -46,6 +47,8 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
   const [programming, setProgramming] = useState(null);
   const [closure, setClosure] = useState(null);
   const [file, setFile] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [acceptMissing, setAcceptMissing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
@@ -77,8 +80,31 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
     setWeekIndex(initialWeekIndex(weeks));
   }, [month]);
   useEffect(() => {
+    setPreview(null);
+    setAcceptMissing(false);
+    setFile(null);
     load();
   }, [week?.from, week?.to, specialty]);
+
+  async function previewWeek() {
+    const id = programming?.programming?.id;
+    if (!id || !file) {
+      setError("Selecciona una semana programada y la Lista de Calendario actualizada.");
+      return;
+    }
+    try {
+      setUploading(true);
+      setError("");
+      setPreview(null);
+      setAcceptMissing(false);
+      const result = await previewV2WeekClosure(id, file);
+      setPreview(result);
+    } catch (e) {
+      setError(e.message || "No se pudo comparar el calendario.");
+    } finally {
+      setUploading(false);
+    }
+  }
 
   async function closeWeek() {
     const id = programming?.programming?.id;
@@ -90,6 +116,19 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
     }
     if (!file) {
       setError("Selecciona el archivo Excel del calendario/PMP actualizado.");
+      return;
+    }
+    if (!preview || Number(preview.programming?.id) !== Number(id)) {
+      setError("Primero compara el Excel con las OT guardadas; el cierre no se ha procesado.");
+      return;
+    }
+    if (preview.summary?.not_found > 0 && !acceptMissing) {
+      setError("Revisa las OT no encontradas y acepta explícitamente enviarlas a BACKLOG.");
+      return;
+    }
+    if (preview.rows?.some(row => ["EQUIPO_NO_COINCIDE", "PLAN_NO_COINCIDE",
+      "DUPLICADA_EN_CALENDARIO", "OT_AMBIGUA_EN_CALENDARIO"].includes(row.coincidencia))) {
+      setError("Hay discrepancias de equipo, plan u OT duplicadas. Corrige el Excel antes de cerrar.");
       return;
     }
     if (closure?.programming?.estado === "CERRADA") {
@@ -108,6 +147,8 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
         `Cierre realizado: ${number(s.finalized)} finalizadas, ${number(s.pending)} pendientes y ${number(s.not_found)} no encontradas. ${number(s.moved_to_backlog)} OT quedaron en BACKLOG.`,
       );
       setFile(null);
+      setPreview(null);
+      setAcceptMissing(false);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -265,17 +306,61 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
               <input
                 type="file"
                 accept=".xlsx"
-                onChange={(e) => setFile(e.target.files?.[0] || null)}
+                onChange={(e) => {
+                  setFile(e.target.files?.[0] || null);
+                  setPreview(null);
+                  setAcceptMissing(false);
+                  setError("");
+                }}
               />
-              <button
-                type="button"
-                className="v2-primary"
+              <button type="button" className="v2-primary"
                 disabled={!file || uploading || closure?.programming?.estado === "CERRADA"}
-                onClick={closeWeek}
-              >
-                {uploading ? "Comparando..." : closure?.programming?.estado === "CERRADA" ? "Semana ya cerrada" : "Procesar cierre semanal"}
+                onClick={previewWeek}>
+                {uploading ? "Comparando..." : "1. Comparar Excel (sin cerrar)"}
+              </button>
+              <button type="button"
+                disabled={!file || !preview || uploading ||
+                  (preview.summary?.not_found > 0 && !acceptMissing) ||
+                  preview.rows?.some(r => ["EQUIPO_NO_COINCIDE","PLAN_NO_COINCIDE",
+                    "DUPLICADA_EN_CALENDARIO","OT_AMBIGUA_EN_CALENDARIO"].includes(r.coincidencia)) ||
+                  closure?.programming?.estado === "CERRADA"}
+                onClick={closeWeek}>
+                {uploading ? "Procesando..." : "2. Confirmar cierre semanal"}
               </button>
             </div>
+            {preview && (
+              <div className="v2-panel" style={{ marginTop: 12 }}>
+                <span className="v2-kicker">VISTA PREVIA · NO MODIFICA LA BASE</span>
+                <h3>Conciliación de la programación #{preview.programming?.id}</h3>
+                <p><b>{preview.summary?.programmed}</b> OT programadas · <b>{preview.summary?.finalized}</b> finalizadas ·
+                  <b> {preview.summary?.pending}</b> abiertas/pendientes ·
+                  <b> {preview.summary?.not_found}</b> no encontradas o ambiguas.
+                  Archivo: {preview.summary?.calendar_rows} filas.</p>
+                <p>H-H: {fmt(preview.summary?.hh_programmed,2)} programadas · {fmt(preview.summary?.hh_finalized,2)} finalizadas ·
+                  {fmt(preview.summary?.hh_pending,2)} pendientes. Cumplimiento estimado: {fmt(preview.summary?.compliance_pct,1)}%.</p>
+                {preview.summary?.not_found > 0 && (
+                  <label style={{ display:"block", marginBottom:12 }}>
+                    <input type="checkbox" checked={acceptMissing}
+                      onChange={e=>setAcceptMissing(e.target.checked)} />
+                    He revisado las {preview.summary?.not_found} OT no encontradas y acepto trasladarlas a BACKLOG si no tienen conflicto de equipo/plan.
+                  </label>
+                )}
+                <details open={preview.summary?.not_found > 0}>
+                  <summary>Revisar coincidencia y estado de las {preview.rows?.length} OT</summary>
+                  <div className="v2-table-wrap"><table>
+                    <thead><tr><th>OT programada</th><th>Equipo</th><th>Plan</th><th>H-H</th><th>Estado en Excel</th><th>Coincidencia</th><th>Resultado</th></tr></thead>
+                    <tbody>{(preview.rows||[]).map((row,i)=>(
+                      <tr key={i}>
+                        <td><b>{row.numero_ot || "SIN OT"}</b></td><td>{row.activo}</td><td>{row.plan}</td>
+                        <td>{fmt(row.hh,2)}</td><td>{row.estado_excel || "NO ENCONTRADA"}</td>
+                        <td>{row.coincidencia}</td>
+                        <td>{row.finalizado === true ? "FINALIZADA" : row.finalizado === false ? "PENDIENTE → BACKLOG" : "REVISAR"}</td>
+                      </tr>
+                    ))}</tbody>
+                  </table></div>
+                </details>
+              </div>
+            )}
             {file && (
               <div className="v2-success">
                 Archivo seleccionado: {file.name}
