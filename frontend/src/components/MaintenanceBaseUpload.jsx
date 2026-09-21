@@ -119,6 +119,7 @@ export default function MaintenanceBaseUpload({ year, month }) {
       <div className="v2-panel" style={{ marginTop: 18 }}>
         <span className="v2-kicker">ETAPA 2 · MENSUAL</span>
         <h3>Cargar Lista de Calendario</h3>
+        <p><b>Para iniciar la prueba:</b> elige el archivo de septiembre antes de los cierres, con las OT todavía abiertas. Una vez guardada la primera programación, usa únicamente Cierre semanal para los calendarios posteriores.</p>
         <p>Usa el maestro guardado. Las órdenes de OPERACIÓN no entran al PMP de mantenimiento. La reimportación actualiza OT existentes sin borrar programación ni cierres.</p>
         <input type="file" accept=".xlsx" onChange={(e) => setMonthlyOnly(e.target.files?.[0] || null)} />
         <div className="v2-program-review-actions" style={{ marginTop: 12 }}>
@@ -126,7 +127,10 @@ export default function MaintenanceBaseUpload({ year, month }) {
         </div>
         {monthlyResult && <div className="v2-success" style={{ marginTop: 12 }}>
           <b>{monthlyResult.pmp_archivo} registros del archivo · {monthlyResult.pmp_excluidos_operacion} excluidos por OPERACIÓN · {monthlyResult.pmp_importados_o_actualizados} importados/actualizados.</b>
-          <p>{monthlyResult.registros_mantenimiento_periodo} registros de mantenimiento vigentes en base. {monthlyResult.registros_operacion_historicos} de OPERACIÓN conservados solo como historia.</p>
+          <p><b>{monthlyResult.pmp_abiertos_archivo} abiertas</b> · {monthlyResult.pmp_finalizados_archivo} finalizadas dentro del archivo (sin OPERACIÓN).</p>
+          {(monthlyResult.pmp_finalizados_archivo > 0 || monthlyResult.registros_previos_no_en_archivo > 0) &&
+            <div className="v2-warning">Revisa el punto de partida: el archivo contiene OT finalizadas o faltan {monthlyResult.registros_previos_no_en_archivo} órdenes que ya figuraban en la base. No se eliminaron registros anteriores.</div>}
+          <p>{monthlyResult.registros_mantenimiento_periodo} registros de mantenimiento en base, de ellos {monthlyResult.registros_mantenimiento_abiertos} abiertos y {monthlyResult.registros_mantenimiento_finalizados} finalizados · {monthlyResult.registros_operacion_historicos} de OPERACIÓN conservados para historia.</p>
           {monthlyResult.warnings?.length > 0 && <details><summary>Advertencias ({monthlyResult.warnings.length})</summary><ul>{monthlyResult.warnings.map((x,i)=><li key={i}>{x}</li>)}</ul></details>}
           <button type="button" onClick={() => window.location.reload()}>Actualizar indicadores</button>
         </div>}
