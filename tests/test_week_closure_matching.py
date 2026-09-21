@@ -87,3 +87,30 @@ def test_close_rejects_conflicts_in_backend_before_commit():
     source = (ROOT / "backend/services/v2_closure_service.py").read_text()
     assert 'if match_reason in {' in source
     assert "Revisa el archivo en la vista previa antes de cerrar." in source
+
+
+def test_identical_repeat_in_export_is_not_ambiguous():
+    row = sample_calendar()
+    exact, by_ot = _index_calendar([row, row])
+    match, reason = _match_calendar_item(sample_item(), exact, by_ot)
+    assert reason == "OT_EQUIPO_PLAN"
+    assert match["estado"] == "FINALIZADO"
+
+
+def test_different_statuses_on_same_ot_are_not_silently_merged():
+    exact, by_ot = _index_calendar([
+        sample_calendar("ABIERTO"), sample_calendar("FINALIZADO"),
+    ])
+    match, reason = _match_calendar_item(sample_item(), exact, by_ot)
+    assert match is None
+    assert reason == "DUPLICADA_EN_CALENDARIO"
+
+
+def test_preview_separates_real_absences_from_conflicts():
+    source = (ROOT / "backend/services/v2_closure_service.py").read_text()
+    for field in ('"missing"', '"conflicts"', '"blank_states"', '"alternativas_en_excel"'):
+        assert field in source
+    frontend = (ROOT / "frontend/src/components/WeeklyClosure.jsx").read_text()
+    assert "missingRows" in frontend
+    assert "conflictingRows" in frontend
+    assert "closureBlocked" in frontend
