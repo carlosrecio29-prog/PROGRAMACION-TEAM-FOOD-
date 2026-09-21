@@ -449,7 +449,8 @@ def render_progress_fallback(data: dict[str,Any],year:int,month:int,
     _summary(pdf,"INDICADORES",summary,monthly)
     _status_and_progress(pdf,summary)
     _kpi_note(pdf,summary,monthly)
-    pdf.new_page()
+    if pdf.y < 205:
+        pdf.new_page()
     if monthly:
         pdf.section("Alcance del mes")
         pdf.cards([
