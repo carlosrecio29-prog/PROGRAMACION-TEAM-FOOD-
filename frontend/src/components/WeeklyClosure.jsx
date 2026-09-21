@@ -6,6 +6,7 @@ import {
   previewV2WeekClosure,
   uploadV2WeekClosure,
   downloadV2ProgressPdf,
+  getV2ProgressPdfUrl,
 } from "../api";
 import Badge from "../shared/Badge";
 
@@ -255,6 +256,9 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
         <>
           {closure?.programming?.estado === "CERRADA" && (
             <section className="v2-panel" style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+              {error&&<div className="v2-error" role="alert" style={{flexBasis:"100%"}}>
+                <b>Error en el informe:</b> {error}
+              </div>}
               <div><span className="v2-kicker">CIERRE CONFIRMADO</span>
                 <h3>Informe del cierre semanal</h3>
                 <p>Estado final de las OT, HH estimadas y cumplimiento de la programación #{programming.programming.id}.</p>
@@ -262,6 +266,10 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
               <button type="button" className="v2-primary" disabled={exporting} onClick={downloadClosureReport}>
                 {exporting ? "Generando..." : "Descargar informe del cierre PDF"}
               </button>
+              <a href={getV2ProgressPdfUrl(year,month,programming.programming.id)}
+                target="_blank" rel="noopener noreferrer" style={{textDecoration:"underline"}}>
+                Abrir PDF directamente
+              </a>
             </section>
           )}
           <section className="v2-capacity-panel">
