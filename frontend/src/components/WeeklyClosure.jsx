@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import {monthWeeks,initialWeekIndex} from "../features/planning/monthWeeks.js";
 import {
   getV2WeekProgramming,
   getV2WeekClosure,
@@ -38,23 +39,9 @@ function fmt(v, d = 1) {
     maximumFractionDigits: d,
   });
 }
-function monthWeeks(year, month) {
-  const days = new Date(year, month, 0).getDate();
-  const weeks = [];
-  for (let start = 1; start <= days; start += 7) {
-    const end = Math.min(start + 6, days);
-    weeks.push({
-      from: `${year}-${String(month).padStart(2, "0")}-${String(start).padStart(2, "0")}`,
-      to: `${year}-${String(month).padStart(2, "0")}-${String(end).padStart(2, "0")}`,
-      label: `${start}–${end} ${MONTHS[month - 1]}`,
-    });
-  }
-  return weeks;
-}
-
 export default function WeeklyClosure({ year, month, onOpenBacklog }) {
   const weeks = useMemo(() => monthWeeks(year, month), [year, month]);
-  const [weekIndex, setWeekIndex] = useState(0);
+  const [weekIndex, setWeekIndex] = useState(() => initialWeekIndex(weeks));
   const [specialty, setSpecialty] = useState("MEC");
   const [programming, setProgramming] = useState(null);
   const [closure, setClosure] = useState(null);
@@ -87,7 +74,7 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
     }
   }
   useEffect(() => {
-    setWeekIndex(0);
+    setWeekIndex(initialWeekIndex(weeks));
   }, [month]);
   useEffect(() => {
     load();
