@@ -132,8 +132,8 @@ export default function ProgressDashboard({year,month,full=false,onOpenMonthly})
         <Card label="OT distintas programadas" value={count(top.programmed)} extra="Incluye reprogramadas solo una vez"/>
         <Card label="Registros PMP sin programación" value={count(top.not_programmed)} extra="No incluye órdenes heredadas de otros meses"/>
         <Card label="OT cerradas" value={count(top.finalized)} extra={pct(top.progress_ot_pct)+" de las programadas"} tone="success"/>
-        <Card label="OT abiertas en último cierre" value={count(top.pending)} extra="No equivale a toda la cartera sin ejecutar"} tone="warning"/>
-        <Card label="OT sin encontrar / verificar" value={count(top.not_found+top.unchecked)} extra="Conciliación y semanas abiertas"} tone="warning"/>
+        <Card label="OT abiertas en último cierre" value={count(top.pending)} extra="No equivale a toda la cartera sin ejecutar" tone="warning"/>
+        <Card label="OT sin encontrar / verificar" value={count(top.not_found+top.unchecked)} extra="Conciliación y semanas abiertas" tone="warning"/>
       </div>
       <h3>Pendientes y no encontradas del último cierre</h3>
       <div className="v2-table-wrap"><table>
