@@ -32,6 +32,7 @@ from backend.services.v2_closure_service import (
     V2ClosureError, get_week_closure, close_week_from_calendar, preview_week_closure,
 )
 from backend.services.v2_backlog_service import get_accumulated_backlog
+from backend.services.v2_progress_service import get_progress, export_progress_pdf
 from backend.services.programming_service import (
     ProgrammingError, close_programming, programming_detail, programming_history, save_programming,
     export_programming_excel, export_programming_pdf, reset_test_data,
@@ -121,6 +122,27 @@ def v2_status():
 def v2_dashboard(year:int=2026,month:int=Query(9,ge=1,le=12)):
     try:return get_dashboard(year,month)
     except ValueError as exc:raise HTTPException(422,str(exc)) from exc
+
+@app.get("/api/v2/progress")
+def v2_progress(year:int=2026, month:int=Query(9,ge=1,le=12)):
+    try:
+        return get_progress(year,month)
+    except ValueError as exc:
+        raise HTTPException(422,str(exc)) from exc
+
+
+@app.get("/api/v2/progress/report.pdf")
+def v2_progress_report_pdf(year:int=2026,month:int=Query(9,ge=1,le=12),
+                           programming_id:int|None=Query(None,ge=1)):
+    try:
+        content,filename=export_progress_pdf(year,month,programming_id)
+        return StreamingResponse(
+            iter([content]),media_type="application/pdf",
+            headers={"Content-Disposition":f'attachment; filename="{filename}"'}
+        )
+    except ValueError as exc:
+        raise HTTPException(422,str(exc)) from exc
+
 
 @app.get("/api/v2/pending-plans")
 def v2_pending_plans(year:int=2026,month:int=Query(9,ge=1,le=12),specialty:str|None=None):
