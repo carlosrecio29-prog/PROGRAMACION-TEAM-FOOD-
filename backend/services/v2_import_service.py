@@ -13,6 +13,7 @@ from backend.parsers.common import (
     as_datetime,
     cell_by_header,
     header_mapping,
+    is_operation_plan,
     normalize_text,
     workbook_from_bytes,
 )
@@ -209,6 +210,7 @@ def _parse_plans(content:bytes)->list[dict[str,Any]]:
             "grupo":group,
             "descripcion_grupo":cell_by_header(row,m,"DescripcionGrupo"),
             "plan_trabajo":plan,
+            "es_operacion":is_operation_plan(plan),
             "descripcion_plan_trabajo":cell_by_header(row,m,"DescripcionPlanTrabaj","DescripcionPlanTrabajo"),
             "tipo_frecuencia":cell_by_header(row,m,"TipoFrecuencia"),
             "valor_frecuencia":_number(cell_by_header(row,m,"ValorFrecuenci","ValorFrecuencia")),
