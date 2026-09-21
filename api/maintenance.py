@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 
 from backend.config import MAX_UPLOAD_BYTES
-from backend.services.v2_maintenance_import_service import import_maintenance_base
+from backend.services.v2_maintenance_import_service import import_maintenance_base, import_operation_master
 
 app = FastAPI(title="Programación Team Food · Actualización de base")
 
@@ -42,3 +42,13 @@ async def import_maintenance(
         raise HTTPException(422, str(exc)) from exc
     except Exception as exc:
         raise HTTPException(500, f"Error actualizando la base de mantenimiento: {exc}") from exc
+
+
+@app.post("/api/v2/import-operation-master")
+async def import_operation_master_file(plans: UploadFile = File(...)):
+    try:
+        return import_operation_master(plans_content=await read_upload(plans))
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(500, f"Error cargando maestro OPERACIÓN: {exc}") from exc
