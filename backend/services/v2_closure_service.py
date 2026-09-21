@@ -118,7 +118,9 @@ def preview_week_closure(*, programming_id: int, content: bytes) -> dict[str, An
     for item in items:
         match, reason = _match_calendar_item(item, exact, by_ot)
         state = normalize_text(match["estado"]) if match else ""
-        finalized = _is_finalized(state) if match else None
+        if match and not state:
+            reason = "ESTADO_VACIO"
+        finalized = _is_finalized(state) if match and state else None
         hh = float(item["hh_programadas"] or 0)
         summary["hh_programmed"] += hh
         if finalized is True:
@@ -263,7 +265,12 @@ def close_week_from_calendar(
                 not_found_ids.append(int(item["orden_mantenimiento_id"]))
                 continue
 
-            state = normalize_text(matched.get("estado")) or "SIN ESTADO"
+            state = normalize_text(matched.get("estado"))
+            if not state:
+                raise V2ClosureError(
+                    f"OT {item['numero_ot']}: ESTADO_VACIO en el calendario. "
+                    "El archivo no permite decidir entre FINALIZADA o PENDIENTE."
+                )
             finalized = _is_finalized(state)
             conn.execute(text("""
                 UPDATE programacion.programacion_item_v2
