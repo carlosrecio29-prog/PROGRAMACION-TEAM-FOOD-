@@ -125,13 +125,15 @@ def close_week_from_calendar(
 
     with get_engine().begin() as conn:
         programming = conn.execute(text("""
-            SELECT id,semana_inicio,semana_fin,especialidad
+            SELECT id,semana_inicio,semana_fin,especialidad,estado
             FROM programacion.programacion_semanal_v2
             WHERE id=:id
             FOR UPDATE
         """), {"id": programming_id}).mappings().first()
         if not programming:
             raise V2ClosureError("Programación semanal no encontrada")
+        if programming["estado"] == "CERRADA":
+            raise V2ClosureError("Esta semana ya está cerrada; se conserva su cierre y backlog.")
 
         items = [dict(r) for r in conn.execute(text("""
             SELECT pi.id AS item_id,pi.orden_mantenimiento_id,o.numero_ot,
@@ -203,7 +205,6 @@ def close_week_from_calendar(
                   programacion_origen_id=EXCLUDED.programacion_origen_id,
                   especialidad=EXCLUDED.especialidad,motivo=EXCLUDED.motivo,movido_por=EXCLUDED.movido_por,
                   ultimo_resultado_cierre='PENDIENTE',ultimo_cierre_en=now(),
-                  ultimo_cierre_en=now(),
                   movido_en=now(),actualizado_en=now(),ultima_programacion_id=NULL
             """), {
                 "programming_id": programming_id,
