@@ -44,6 +44,98 @@ def _parse_calendar(content: bytes) -> list[dict[str, str]]:
     return rows
 
 
+def _index_calendar(calendar_rows: list[dict[str, str]]):
+    exact = defaultdict(list)
+    by_ot = defaultdict(list)
+    for row in calendar_rows:
+        ot = normalize_text(row["numero_ot"])
+        asset = normalize_text(row["activo"])
+        plan = normalize_text(row["plan"])
+        if ot and ot != "SIN ASIGNAR":
+            by_ot[ot].append(row)
+            if asset and plan:
+                exact[(ot, asset, plan)].append(row)
+    return exact, by_ot
+
+
+def _match_calendar_item(item, exact, by_ot):
+    ot = normalize_text(item.get("numero_ot"))
+    asset = normalize_text(item.get("activo_codigo"))
+    plan = normalize_text(item.get("plan_clave_software"))
+    if not ot or ot == "SIN ASIGNAR":
+        return None, "SIN_NUMERO_OT"
+    candidates = exact.get((ot, asset, plan), [])
+    if len(candidates) == 1:
+        return candidates[0], "OT_EQUIPO_PLAN"
+    if len(candidates) > 1:
+        return None, "DUPLICADA_EN_CALENDARIO"
+    ot_matches = by_ot.get(ot, [])
+    if len(ot_matches) > 1:
+        return None, "OT_AMBIGUA_EN_CALENDARIO"
+    if not ot_matches:
+        return None, "NO_ENCONTRADA"
+    match = ot_matches[0]
+    # No confundir la OT de un equipo o plan con la de otro.
+    if normalize_text(match["activo"]) and normalize_text(match["activo"]) != asset:
+        return None, "EQUIPO_NO_COINCIDE"
+    if normalize_text(match["plan"]) and normalize_text(match["plan"]) != plan:
+        return None, "PLAN_NO_COINCIDE"
+    return match, "SOLO_OT"  # Archivo parcial: no trae equipo y/o plan.
+
+
+def preview_week_closure(*, programming_id: int, content: bytes) -> dict[str, Any]:
+    """Conciliación de solo lectura. No altera estado, programación ni backlog."""
+    calendar_rows = _parse_calendar(content)
+    exact, by_ot = _index_calendar(calendar_rows)
+    with get_engine().connect() as conn:
+        header = conn.execute(text("""
+            SELECT id,semana_inicio,semana_fin,especialidad,estado
+            FROM programacion.programacion_semanal_v2
+            WHERE id=:id
+        """), {"id": programming_id}).mappings().first()
+        if not header:
+            raise V2ClosureError("Programación semanal no encontrada")
+        items = conn.execute(text("""
+            SELECT o.numero_ot,a.codigo AS activo_codigo,o.plan_clave_software,
+                   pi.hh_programadas
+            FROM programacion.programacion_item_v2 pi
+            JOIN programacion.orden_mantenimiento o ON o.id=pi.orden_mantenimiento_id
+            JOIN programacion.activo a ON a.id=o.activo_id
+            WHERE pi.programacion_id=:id ORDER BY pi.id
+        """), {"id": programming_id}).mappings().all()
+    summary = {"programmed": len(items), "finalized": 0, "pending": 0,
+               "not_found": 0, "hh_programmed": 0.0, "hh_finalized": 0.0,
+               "hh_pending": 0.0}
+    rows = []
+    for item in items:
+        match, reason = _match_calendar_item(item, exact, by_ot)
+        state = normalize_text(match["estado"]) if match else ""
+        finalized = _is_finalized(state) if match else None
+        hh = float(item["hh_programadas"] or 0)
+        summary["hh_programmed"] += hh
+        if finalized is True:
+            summary["finalized"] += 1
+            summary["hh_finalized"] += hh
+        elif finalized is False:
+            summary["pending"] += 1
+            summary["hh_pending"] += hh
+        else:
+            summary["not_found"] += 1
+        rows.append({
+            "numero_ot": item["numero_ot"], "activo": item["activo_codigo"],
+            "plan": item["plan_clave_software"], "hh": hh,
+            "estado_excel": state or ("SIN ESTADO" if match else None),
+            "finalizado": finalized, "coincidencia": reason,
+        })
+    for key in ("hh_programmed", "hh_finalized", "hh_pending"):
+        summary[key] = round(summary[key], 2)
+    summary["compliance_pct"] = round(
+        summary["hh_finalized"] / summary["hh_programmed"] * 100, 1
+    ) if summary["hh_programmed"] else 0
+    summary["calendar_rows"] = len(calendar_rows)
+    return {"programming": dict(header), "summary": summary, "rows": rows}
+
+
 def _is_finalized(value: str) -> bool:
     state = normalize_text(value)
     return state.startswith("FINALIZ") or state in {"CERRADO", "CERRADA", "COMPLETADO", "COMPLETADA"}
@@ -112,16 +204,7 @@ def close_week_from_calendar(
 ) -> dict[str, Any]:
     calendar_rows = _parse_calendar(content)
 
-    exact: dict[tuple[str, str, str], list[dict[str, str]]] = defaultdict(list)
-    by_ot: dict[str, list[dict[str, str]]] = defaultdict(list)
-    for row in calendar_rows:
-        ot = normalize_text(row["numero_ot"])
-        asset = normalize_text(row["activo"])
-        plan = normalize_text(row["plan"])
-        if ot:
-            by_ot[ot].append(row)
-        if ot and asset and plan:
-            exact[(ot, asset, plan)].append(row)
+    exact, by_ot = _index_calendar(calendar_rows)
 
     with get_engine().begin() as conn:
         programming = conn.execute(text("""
@@ -152,24 +235,15 @@ def close_week_from_calendar(
         not_found_ids: list[int] = []
 
         for item in items:
-            ot = normalize_text(item.get("numero_ot"))
-            asset = normalize_text(item.get("activo_codigo"))
-            plan = normalize_text(item.get("plan_clave_software"))
-            matched: dict[str, str] | None = None
-
-            exact_matches = exact.get((ot, asset, plan), []) if ot else []
-            if len(exact_matches) == 1:
-                matched = exact_matches[0]
-            elif ot and len(by_ot.get(ot, [])) == 1:
-                matched = by_ot[ot][0]
+            matched, match_reason = _match_calendar_item(item, exact, by_ot)
 
             if matched is None:
                 conn.execute(text("""
                     UPDATE programacion.programacion_item_v2
-                    SET estado_cierre='NO ENCONTRADA EN ARCHIVO',finalizado=NULL,
+                    SET estado_cierre=:reason,finalizado=NULL,
                         verificado_en=now(),cierre_fuente=:filename
                     WHERE id=:item_id
-                """), {"filename": filename, "item_id": item["item_id"]})
+                """), {"filename": filename, "item_id": item["item_id"], "reason": match_reason})
                 not_found_ids.append(int(item["orden_mantenimiento_id"]))
                 continue
 
