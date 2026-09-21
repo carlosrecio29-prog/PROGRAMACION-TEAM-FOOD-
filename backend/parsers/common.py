@@ -28,7 +28,7 @@ def canonical_plan_name(value: Any) -> str:
 def is_operation_plan(value: Any) -> bool:
     """True only when OPERACIÓN is the leading plan label (optional numeric prefix)."""
     canonical = canonical_plan_name(value)
-    return bool(re.match(r"^OPERACION(?=\\s|[-–—:._/|]|$)", canonical))
+    return bool(re.match(r"^OPERACION(?=\s|[-–—:._/|]|$)", canonical))
 
 
 def normalize_order(value: Any) -> str:
