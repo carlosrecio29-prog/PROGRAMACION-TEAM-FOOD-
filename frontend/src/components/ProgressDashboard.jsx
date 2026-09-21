@@ -1,5 +1,5 @@
 import {useEffect,useMemo,useState} from "react";
-import {downloadV2ProgressPdf,getV2Progress} from "../api";
+import {downloadV2ProgressPdf,getV2Progress,getV2ProgressPdfUrl} from "../api";
 import "./progressDashboard.css";
 
 const NAMES = {MEC:"Mecánica",ELE:"Eléctrica",MET:"Metrología",SER:"Servicios"};
@@ -46,6 +46,16 @@ export default function ProgressDashboard({year,month,full=false,onOpenMonthly})
     <button type="button" onClick={()=>setRevision(x=>x+1)}>Reintentar</button>
   </section>;
   return <section className="v2-progress-dashboard v2-stack">
+    {pdfError&&<div className="v2-error" role="alert" style={{
+      position:"sticky",top:8,zIndex:10,padding:16,borderRadius:10
+    }}>
+      <b>No se pudo descargar el PDF:</b> {pdfError}
+      <a href={getV2ProgressPdfUrl(year,month)}
+        target="_blank" rel="noopener noreferrer"
+        style={{display:"inline-block",marginLeft:12,textDecoration:"underline"}}>
+        Abrir PDF mensual directamente
+      </a>
+    </div>}
     <div className="v2-panel">
       <div className="v2-section-head">
         <div><span className="v2-kicker">SEGUIMIENTO DEL PERIODO</span>
@@ -118,7 +128,10 @@ export default function ProgressDashboard({year,month,full=false,onOpenMonthly})
             <td><button type="button" disabled={!!downloading}
               onClick={()=>showReport(w.programming_id)}>
               {downloading===String(w.programming_id)?"Generando...":"PDF semanal"}
-            </button></td>
+            </button>{" "}
+            <a href={getV2ProgressPdfUrl(year,month,w.programming_id)}
+              target="_blank" rel="noopener noreferrer"
+              title="Abrir el PDF directamente en el navegador">Abrir PDF</a></td>
           </tr>)}</tbody>
         </table></div>
       </>}
@@ -156,6 +169,8 @@ export default function ProgressDashboard({year,month,full=false,onOpenMonthly})
           onClick={()=>showReport()}>
           {downloading==="month"?"Generando...":"Descargar informe mensual PDF"}
         </button>
+        <a href={getV2ProgressPdfUrl(year,month)} target="_blank" rel="noopener noreferrer"
+          style={{alignSelf:"center",textDecoration:"underline"}}>Abrir PDF directamente</a>
         {!full&&onOpenMonthly&&<button type="button" onClick={onOpenMonthly}>Ver cierre mensual completo</button>}
       </div>
       {pdfError&&<div className="v2-error" role="alert">{pdfError}</div>}
