@@ -55,7 +55,12 @@ def _parse_calendar(content: bytes) -> list[dict[str, str]]:
 def _index_calendar(calendar_rows: list[dict[str, str]]):
     exact = defaultdict(list)
     by_ot = defaultdict(list)
+    seen = set()
     for row in calendar_rows:
+        normalized_row = tuple(normalize_text(row[key]) for key in ("numero_ot", "activo", "plan", "estado"))
+        if normalized_row in seen:
+            continue  # Duplicado idéntico: no crea una ambigüedad artificial.
+        seen.add(normalized_row)
         ot = normalize_text(row["numero_ot"])
         asset = normalize_text(row["activo"])
         plan = normalize_text(row["plan"])
@@ -112,7 +117,8 @@ def preview_week_closure(*, programming_id: int, content: bytes) -> dict[str, An
             WHERE pi.programacion_id=:id ORDER BY pi.id
         """), {"id": programming_id}).mappings().all()
     summary = {"programmed": len(items), "finalized": 0, "pending": 0,
-               "not_found": 0, "hh_programmed": 0.0, "hh_finalized": 0.0,
+               "not_found": 0, "missing": 0, "conflicts": 0, "blank_states": 0,
+               "hh_programmed": 0.0, "hh_finalized": 0.0,
                "hh_pending": 0.0}
     rows = []
     for item in items:
@@ -131,11 +137,22 @@ def preview_week_closure(*, programming_id: int, content: bytes) -> dict[str, An
             summary["hh_pending"] += hh
         else:
             summary["not_found"] += 1
+            if reason in {"NO_ENCONTRADA", "SIN_NUMERO_OT"}:
+                summary["missing"] += 1
+            elif reason == "ESTADO_VACIO":
+                summary["blank_states"] += 1
+            else:
+                summary["conflicts"] += 1
         rows.append({
             "numero_ot": item["numero_ot"], "activo": item["activo_codigo"],
             "plan": item["plan_clave_software"], "hh": hh,
             "estado_excel": state or ("SIN ESTADO" if match else None),
             "finalizado": finalized, "coincidencia": reason,
+            "alternativas_en_excel": [
+                {"activo": candidate["activo"], "plan": candidate["plan"],
+                 "estado": candidate["estado"]}
+                for candidate in by_ot.get(normalize_text(item["numero_ot"]), [])[:5]
+            ] if finalized is None else [],
         })
     for key in ("hh_programmed", "hh_finalized", "hh_pending"):
         summary[key] = round(summary[key], 2)
@@ -143,6 +160,7 @@ def preview_week_closure(*, programming_id: int, content: bytes) -> dict[str, An
         summary["hh_finalized"] / summary["hh_programmed"] * 100, 1
     ) if summary["hh_programmed"] else 0
     summary["calendar_rows"] = len(calendar_rows)
+    summary["duplicates_identical_ignored"] = len(calendar_rows) - sum(len(matches) for matches in by_ot.values())
     return {"programming": dict(header), "summary": summary, "rows": rows}
 
 
