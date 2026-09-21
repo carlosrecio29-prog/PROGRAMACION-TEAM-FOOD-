@@ -4,6 +4,7 @@ from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 
 from backend.config import MAX_UPLOAD_BYTES
 from backend.services.v2_maintenance_import_service import import_maintenance_base, import_operation_master
+from backend.services.v2_monthly_calendar_import import import_monthly_calendar
 
 app = FastAPI(title="Programación Team Food · Actualización de base")
 
@@ -52,3 +53,19 @@ async def import_operation_master_file(plans: UploadFile = File(...)):
         raise HTTPException(422, str(exc)) from exc
     except Exception as exc:
         raise HTTPException(500, f"Error cargando maestro OPERACIÓN: {exc}") from exc
+
+
+@app.post("/api/v2/import-monthly-calendar")
+async def import_monthly_calendar_file(
+    monthly: UploadFile = File(...),
+    year: int = Query(..., ge=2020, le=2100),
+    month: int = Query(..., ge=1, le=12),
+):
+    try:
+        return import_monthly_calendar(
+            monthly_content=await read_upload(monthly), year=year, month=month,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(500, f"Error importando Lista de Calendario: {exc}") from exc
