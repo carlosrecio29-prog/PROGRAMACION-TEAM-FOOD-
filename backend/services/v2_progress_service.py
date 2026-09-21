@@ -140,7 +140,9 @@ def aggregate_progress(headers: list[dict[str, Any]], items: list[dict[str, Any]
                           "progress_hh_pct": _pct(totals["hh_finalized"], totals["hh_programmed"])},
         "monthly": {**unique, "pmp_count": int(pmp_count),
                     "not_programmed": max(0, int(pmp_count) - unique["programmed_from_pmp"]),
-                    "all_weeks_closed": complete, "weeks_total": len(weeks),
+                    "all_weeks_closed": complete,
+                    "contains_future_week_closures": any(w["estado"] == "CERRADA" and w["semana_fin"] > date.today() for w in weeks),
+                    "weeks_total": len(weeks),
                     "weeks_closed": sum(w["estado"] == "CERRADA" for w in weeks)},
         "unresolved": unresolved,
         "criteria": {
@@ -240,9 +242,12 @@ def export_progress_pdf(year: int, month: int, programming_id: int | None = None
                          ("ROWBACKGROUNDS",(0,1),(-1,-1),[colors.white,pale])]
         table.setStyle(TableStyle(commands))
         return table
+    anticipated = any(w["estado"] == "CERRADA" and w["semana_fin"] > date.today() for w in weeks)
     story = [
         para("TEAM FOODS · C.E.K GLOBAL INSPECTION", centered), Spacer(1,2*mm),
-        Paragraph(title,big),para(subtitle,centered), Spacer(1,7*mm),
+        Paragraph(title,big),para(subtitle,centered),
+        para("CIERRE ANTICIPADO / PRUEBA: contiene semanas futuras respecto a la fecha del reporte.", centered) if anticipated else Spacer(1,1*mm),
+        Spacer(1,7*mm),
     ]
     metrics = [
         ("OT PROGRAMADAS", summary["programmed"]), ("FINALIZADAS", summary["finalized"]),
