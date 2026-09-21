@@ -92,6 +92,10 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
       setError("Selecciona el archivo Excel del calendario/PMP actualizado.");
       return;
     }
+    if (closure?.programming?.estado === "CERRADA") {
+      setError("Esta semana ya fue cerrada. Consulta el resultado; no se reemplazará su cierre.");
+      return;
+    }
     try {
       setUploading(true);
       setError("");
@@ -266,10 +270,10 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
               <button
                 type="button"
                 className="v2-primary"
-                disabled={!file || uploading}
+                disabled={!file || uploading || closure?.programming?.estado === "CERRADA"}
                 onClick={closeWeek}
               >
-                {uploading ? "Comparando..." : "Procesar cierre semanal"}
+                {uploading ? "Comparando..." : closure?.programming?.estado === "CERRADA" ? "Semana ya cerrada" : "Procesar cierre semanal"}
               </button>
             </div>
             {file && (
