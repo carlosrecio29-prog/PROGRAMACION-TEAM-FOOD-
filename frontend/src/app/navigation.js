@@ -8,6 +8,7 @@ export const VIEW_META = {
   programming: ["Programación semanal", "Programa por capacidad, condición y origen de las OT."],
   pmp: ["PMP del mes", "Cartera preventiva exportada desde el software de mantenimiento."],
   closure: ["Cierre semanal", "Reconcilia la programación contra el estado verificado del software."],
+  monthly: ["Cierre mensual", "Avance, cumplimiento, pendientes e informe consolidado del mes."],
   backlog: ["Backlog acumulado", "OT pendientes conservadas hasta confirmar su finalización."],
   pending: ["Completar datos", "Completa sólo los datos que faltan en los planes del periodo."],
   technicians: ["Técnicos", "Personal, turnos, disponibilidad y especialidades."],
@@ -20,7 +21,10 @@ export const NAV_GROUPS = [
     { id: "programming", label: "Programación semanal", code: "PS" },
     { id: "pmp", label: "PMP del mes", code: "PM" },
   ] },
-  { label: "Cierre", items: [{ id: "closure", label: "Cierre semanal", code: "CI" }] },
+  { label: "Cierre", items: [
+    { id: "closure", label: "Cierre semanal", code: "CI" },
+    { id: "monthly", label: "Informe mensual", code: "IM" },
+  ] },
   { label: "Backlog", items: [{ id: "backlog", label: "Seguimiento acumulado", code: "BL" }] },
   { label: "Administración", items: [
     { id: "imports", label: "Cargar Excel", code: "EX" },
