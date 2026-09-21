@@ -222,6 +222,15 @@ export async function getV2Backlog(filters = {}) {
 export async function getV2WeekClosure(programmingId) {
   return check(await fetch(`/api/v2/programming/${programmingId}/closure`));
 }
+export async function previewV2WeekClosure(programmingId, file) {
+  const form = new FormData();
+  form.append("file", file);
+  return check(await fetch(`/api/v2/programming/${programmingId}/preview-close-file`, {
+    method: "POST",
+    body: form,
+  }));
+}
+
 export async function uploadV2WeekClosure(
   programmingId,
   file,
