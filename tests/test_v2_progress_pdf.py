@@ -1,6 +1,7 @@
 from datetime import date
 
 from backend.services import v2_progress_service as progress
+from backend.services import v2_closure_service as closure
 
 
 def fake_progress():
@@ -33,8 +34,20 @@ def fake_progress():
             **progress.aggregate_progress(headers, items, 12, date(2026, 9, 1))}
 
 
+def _fake_week_closure(programming_id):
+    return {"rows": [
+        {"numero_ot": "OT-1", "activo_codigo": "BA-TEST",
+         "plan_trabajo": "PLAN UNO", "estado_cierre": "FINALIZADO",
+         "finalizado": True, "hh_programadas": 2},
+        {"numero_ot": "OT-2", "activo_codigo": "BA-TEST",
+         "plan_trabajo": "PLAN DOS", "estado_cierre": "ABIERTO",
+         "finalizado": False, "hh_programadas": 3},
+    ]}
+
+
 def test_pdf_monthly_and_weekly_are_real_pdf_bytes(monkeypatch):
     monkeypatch.setattr(progress, "get_progress", lambda year, month: fake_progress())
+    monkeypatch.setattr(closure, "get_week_closure", _fake_week_closure)
     monthly, name = progress.export_progress_pdf(2026, 9)
     assert monthly.startswith(b"%PDF-")
     assert len(monthly) > 1000
@@ -71,3 +84,20 @@ def test_pdf_falls_back_if_reportlab_missing(monkeypatch):
         assert content.rstrip().endswith(b"%%EOF")
         assert len(content) > 1000
         assert filename.endswith(".pdf")
+
+
+def test_visual_pdf_contains_kpi_charts_and_technical_sections(monkeypatch):
+    monkeypatch.setattr(progress, "get_progress", lambda year, month: fake_progress())
+    monkeypatch.setattr(closure, "get_week_closure", _fake_week_closure)
+    monthly, _ = progress.export_progress_pdf(2026, 9)
+    weekly, _ = progress.export_progress_pdf(2026, 9, 42)
+    for document in (monthly, weekly):
+        assert document.startswith(b"%PDF-1.4")
+        assert document.rstrip().endswith(b"%%EOF")
+        assert b"INDICADORES PRINCIPALES" in document
+        assert b"CUMPLIMIENTO OT" in document
+        assert b"HH DE OT CERRADAS" in document
+        assert document.count(b"/Type /Page ") >= 2
+    assert b"COMPARATIVO POR ESPECIALIDAD" in monthly
+    assert b"DETALLE" in monthly and b"OT-2" in monthly
+    assert b"DETALLE" in weekly and b"OT-1" in weekly
