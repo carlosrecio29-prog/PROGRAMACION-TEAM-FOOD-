@@ -49,6 +49,10 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [acceptMissing, setAcceptMissing] = useState(false);
+  const problemRows = (preview?.rows || []).filter(row => row.finalizado === null);
+  const missingRows = problemRows.filter(row => ["NO_ENCONTRADA", "SIN_NUMERO_OT"].includes(row.coincidencia));
+  const conflictingRows = problemRows.filter(row => !["NO_ENCONTRADA", "SIN_NUMERO_OT"].includes(row.coincidencia));
+  const closureBlocked = conflictingRows.length > 0 || (missingRows.length > 0 && !acceptMissing);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
@@ -122,13 +126,12 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
       setError("Primero compara el Excel con las OT guardadas; el cierre no se ha procesado.");
       return;
     }
-    if (preview.summary?.not_found > 0 && !acceptMissing) {
-      setError("Revisa las OT no encontradas y acepta explícitamente enviarlas a BACKLOG.");
+    if (missingRows.length > 0 && !acceptMissing) {
+      setError("Marca la casilla para autorizar exclusivamente las OT verdaderamente ausentes.");
       return;
     }
-    if (preview.rows?.some(row => ["EQUIPO_NO_COINCIDE", "PLAN_NO_COINCIDE",
-      "DUPLICADA_EN_CALENDARIO", "OT_AMBIGUA_EN_CALENDARIO", "ESTADO_VACIO"].includes(row.coincidencia))) {
-      setError("Hay discrepancias de equipo, plan, OT duplicadas o estados vacíos. Corrige el Excel antes de cerrar.");
+    if (conflictingRows.length > 0) {
+      setError(`El Excel tiene ${conflictingRows.length} OT con conflicto. Revisa el detalle resaltado; no se envían a backlog como si estuvieran ausentes.`);
       return;
     }
     if (closure?.programming?.estado === "CERRADA") {
@@ -319,10 +322,7 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
                 {uploading ? "Comparando..." : "1. Comparar Excel (sin cerrar)"}
               </button>
               <button type="button"
-                disabled={!file || !preview || uploading ||
-                  (preview.summary?.not_found > 0 && !acceptMissing) ||
-                  preview.rows?.some(r => ["EQUIPO_NO_COINCIDE","PLAN_NO_COINCIDE",
-                    "DUPLICADA_EN_CALENDARIO","OT_AMBIGUA_EN_CALENDARIO","ESTADO_VACIO"].includes(r.coincidencia)) ||
+                disabled={!file || !preview || uploading || closureBlocked ||
                   closure?.programming?.estado === "CERRADA"}
                 onClick={closeWeek}>
                 {uploading ? "Procesando..." : "2. Confirmar cierre semanal"}
@@ -334,26 +334,50 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
                 <h3>Conciliación de la programación #{preview.programming?.id}</h3>
                 <p><b>{preview.summary?.programmed}</b> OT programadas · <b>{preview.summary?.finalized}</b> finalizadas ·
                   <b> {preview.summary?.pending}</b> abiertas/pendientes ·
-                  <b> {preview.summary?.not_found}</b> no encontradas o ambiguas.
+                  <b> {preview.summary?.missing}</b> realmente no encontradas ·
+                  <b> {preview.summary?.conflicts}</b> con conflicto de OT, equipo o plan ·
+                  <b> {preview.summary?.blank_states}</b> sin estado.
                   Archivo: {preview.summary?.calendar_rows} filas.</p>
                 <p>H-H: {fmt(preview.summary?.hh_programmed,2)} programadas · {fmt(preview.summary?.hh_finalized,2)} finalizadas ·
                   {fmt(preview.summary?.hh_pending,2)} pendientes. Cumplimiento estimado: {fmt(preview.summary?.compliance_pct,1)}%.</p>
-                {preview.summary?.not_found > 0 && (
+                {conflictingRows.length > 0 && (
+                  <div className="v2-error" role="alert" style={{ marginBottom: 12 }}>
+                    El cierre está bloqueado por <b>{conflictingRows.length} OT con discrepancias reales</b>.
+                    Marcar la casilla de backlog no resuelve conflictos de equipo, plan, duplicidad
+                    ni estados vacíos. Revisa la tabla de abajo y corrige el archivo de origen.
+                  </div>
+                )}
+                {missingRows.length > 0 && (
                   <label style={{ display:"block", marginBottom:12 }}>
                     <input type="checkbox" checked={acceptMissing}
                       onChange={e=>setAcceptMissing(e.target.checked)} />
-                    He revisado las {preview.summary?.not_found} OT no encontradas y acepto trasladarlas a BACKLOG si no tienen conflicto de equipo/plan.
+                    He revisado las {missingRows.length} OT realmente ausentes y acepto conservarlas
+                    como no encontradas en BACKLOG.
                   </label>
                 )}
-                <details open={preview.summary?.not_found > 0}>
-                  <summary>Revisar coincidencia y estado de las {preview.rows?.length} OT</summary>
+                {missingRows.length > 0 && !acceptMissing && conflictingRows.length === 0 && (
+                  <div className="v2-warning" role="status">Para habilitar Confirmar cierre semanal, marca la casilla anterior.</div>
+                )}
+                {conflictingRows.length === 0 && (missingRows.length === 0 || acceptMissing) && (
+                  <div className="v2-success" role="status">Conciliación revisada: puedes confirmar el cierre semanal.</div>
+                )}
+                <details open={problemRows.length > 0}>
+                  <summary>Ver las {problemRows.length} OT que requieren atención (y el detalle de toda la semana)</summary>
+                  {problemRows.length > 0 && <div className="v2-error" style={{ marginTop:8 }}>
+                    OT a revisar: {problemRows.map(row => row.numero_ot || "SIN OT").join(" · ")}
+                  </div>}
                   <div className="v2-table-wrap"><table>
                     <thead><tr><th>OT programada</th><th>Equipo</th><th>Plan</th><th>H-H</th><th>Estado en Excel</th><th>Coincidencia</th><th>Resultado</th></tr></thead>
                     <tbody>{(preview.rows||[]).map((row,i)=>(
-                      <tr key={i}>
+                      <tr key={i} style={row.finalizado === null ? { background: "rgba(234, 179, 8, 0.12)" } : undefined}>
                         <td><b>{row.numero_ot || "SIN OT"}</b></td><td>{row.activo}</td><td>{row.plan}</td>
                         <td>{fmt(row.hh,2)}</td><td>{row.estado_excel || "NO ENCONTRADA"}</td>
-                        <td>{row.coincidencia}</td>
+                        <td><b>{row.coincidencia}</b>
+                          {row.alternativas_en_excel?.length > 0 && row.finalizado === null &&
+                            <small>Excel: {row.alternativas_en_excel.map(a =>
+                              [a.activo || "SIN EQUIPO", a.plan || "SIN PLAN", a.estado || "SIN ESTADO"].join(" / ")
+                            ).join(" | ")}</small>}
+                        </td>
                         <td>{row.finalizado === true ? "FINALIZADA" : row.finalizado === false ? "PENDIENTE → BACKLOG" : "REVISAR"}</td>
                       </tr>
                     ))}</tbody>
