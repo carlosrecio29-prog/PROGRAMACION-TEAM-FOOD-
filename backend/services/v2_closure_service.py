@@ -25,6 +25,14 @@ def _parse_calendar(content: bytes) -> list[dict[str, str]]:
     wb = workbook_from_bytes(content)
     ws = wb.worksheets[0]
     mapping = header_mapping(ws, 1)
+    required = {"ESTADO", "ACTIVO", "PLANTRABAJO"}
+    if not required.issubset(mapping) or not (
+        {"ORDEN", "OT", "ORDENDETRABAJO"} & set(mapping)
+    ):
+        raise V2ClosureError(
+            "El Excel de cierre debe incluir Orden, Activo, PlanTrabajo y Estado. "
+            "No se cerró ninguna semana."
+        )
     rows: list[dict[str, str]] = []
     for row in ws.iter_rows(min_row=2, values_only=True):
         numero_ot = _scalar(cell_by_header(row, mapping, "Orden", "OT", "Orden de Trabajo"))
@@ -236,6 +244,14 @@ def close_week_from_calendar(
 
         for item in items:
             matched, match_reason = _match_calendar_item(item, exact, by_ot)
+            if match_reason in {
+                "EQUIPO_NO_COINCIDE", "PLAN_NO_COINCIDE",
+                "DUPLICADA_EN_CALENDARIO", "OT_AMBIGUA_EN_CALENDARIO",
+            }:
+                raise V2ClosureError(
+                    f"OT {item['numero_ot']}: {match_reason}. "
+                    "Revisa el archivo en la vista previa antes de cerrar."
+                )
 
             if matched is None:
                 conn.execute(text("""
