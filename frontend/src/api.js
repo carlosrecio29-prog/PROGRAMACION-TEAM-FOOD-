@@ -219,6 +219,33 @@ export async function getV2Backlog(filters = {}) {
   });
   return check(await fetch(`/api/v2/backlog?${qs}`));
 }
+export async function getV2Progress(year = 2026, month = 9) {
+  return check(await fetch(`/api/v2/progress?${new URLSearchParams({year,month})}`));
+}
+
+export async function downloadV2ProgressPdf(year, month, programmingId = null) {
+  const params = new URLSearchParams({year, month});
+  if (programmingId !== null) params.set("programming_id", programmingId);
+  const res = await fetch(`/api/v2/progress/report.pdf?${params}`);
+  if (!res.ok) {
+    let message = `HTTP ${res.status}`;
+    try { const body = await res.json(); message = body.detail || message; } catch {}
+    throw new Error(message);
+  }
+  const blob = await res.blob();
+  const disposition = res.headers.get("content-disposition") || "";
+  const match = disposition.match(/filename="?([^";]+)"?/i);
+  const filename = match?.[1] || `informe_mtto_${year}_${month}.pdf`;
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 export async function getV2WeekClosure(programmingId) {
   return check(await fetch(`/api/v2/programming/${programmingId}/closure`));
 }
