@@ -54,7 +54,7 @@ def test_wrong_asset_or_plan_must_not_be_matched_just_by_ot():
 
 def test_duplicate_calendar_entries_are_ambiguous_not_finalized():
     row = sample_calendar()
-    exact, by_ot = _index_calendar([row, row])
+    exact, by_ot = _index_calendar([row, sample_calendar("ABIERTO")])
     result, reason = _match_calendar_item(sample_item(), exact, by_ot)
     assert result is None
     assert reason == "DUPLICADA_EN_CALENDARIO"
