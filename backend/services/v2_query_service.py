@@ -34,7 +34,7 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
               (SELECT count(*) FROM programacion.plan_trabajo WHERE es_operacion) AS planes_operacion,
               (SELECT count(*) FROM programacion.orden_mantenimiento xo JOIN programacion.plan_trabajo xp ON xp.id=xo.plan_trabajo_id WHERE xo.periodo=:period AND xp.es_operacion) AS registros_operacion_excluidos,
               (SELECT count(*) FROM programacion.planeacion) AS planeaciones,
-              count(*) AS registros_pmp,
+              count(id) AS registros_pmp,
               count(DISTINCT numero_ot) FILTER (WHERE numero_ot IS NOT NULL) AS ot_distintas,
               count(*) FILTER (WHERE numero_ot IS NULL) AS registros_sin_ot,
               count(*) FILTER (WHERE plan_trabajo_id IS NULL) AS registros_sin_plan_maestro,
