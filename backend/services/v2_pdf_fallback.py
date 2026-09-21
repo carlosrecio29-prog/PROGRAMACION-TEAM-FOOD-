@@ -8,6 +8,8 @@ from __future__ import annotations
 from datetime import date
 from math import cos, pi, sin
 from typing import Any
+from pathlib import Path
+from base64 import b64decode
 
 NAVY = (.075, .153, .278)
 BLUE = (.145, .420, .700)
@@ -59,6 +61,11 @@ class _PDF:
         self.subtitle = subtitle
         self.tag = tag
         self.page_number = 0
+        try:
+            encoded = (Path(__file__).resolve().parents[1] / "assets" / "cek_logo.b64").read_text()
+            self.logo_jpeg = b64decode(encoded)
+        except (OSError, ValueError):
+            self.logo_jpeg = None
         self.new_page()
 
     def emit(self, command):
@@ -96,7 +103,10 @@ class _PDF:
         self.rect(0, 531, 8, 64, BLUE)
         self.text(31, 573, "TEAM FOODS   /   C.E.K GLOBAL INSPECTION", 10, WHITE, True)
         self.text(31, 547, self.title, 17, WHITE, True)
-        self.text(810 - len(self.tag)*5.3, 551, self.tag, 9, SKY, True)
+        self.text(690, 551, self.tag, 9, SKY, True)
+        if self.logo_jpeg:
+            self.rect(763, 539, 49, 49, WHITE)
+            self.emit("q 43 0 0 43 766 542 cm /Logo Do Q")
         self.rect(0, 0, self.W, 37, PALE)
         self.text(31, 15, self.subtitle, 8, GRAY)
         self.text(768, 15, "PÁGINA %02d" % self.page_number, 8, NAVY, True)
@@ -263,14 +273,24 @@ class _PDF:
             return len(objects)
         normal=add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>")
         bold=add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>")
+        logo = None
+        if self.logo_jpeg:
+            logo = add(
+                b"<< /Type /XObject /Subtype /Image /Width 140 /Height 140 "
+                b"/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length "
+                + str(len(self.logo_jpeg)).encode() + b" >>\nstream\n"
+                + self.logo_jpeg + b"\nendstream"
+            )
         pages=add(b"")
         refs=[]
         for stream in self.pages:
             content=add(b"<< /Length %d >>\nstream\n"%len(stream)+stream+b"\nendstream")
+            xobject = (b" /XObject << /Logo "+str(logo).encode()+b" 0 R >>") if logo else b""
             refs.append(add(
                 b"<< /Type /Page /Parent "+str(pages).encode()+b" 0 R "
                 b"/MediaBox [0 0 842 595] /Resources << /Font << /F1 "
-                +str(normal).encode()+b" 0 R /F2 "+str(bold).encode()+b" 0 R >> >> "
+                +str(normal).encode()+b" 0 R /F2 "+str(bold).encode()
+                +b" 0 R >>"+xobject+b" >> "
                 +b"/Contents "+str(content).encode()+b" 0 R >>"
             ))
         objects[pages-1]=b"<< /Type /Pages /Count %d /Kids [%s] >>"%(
