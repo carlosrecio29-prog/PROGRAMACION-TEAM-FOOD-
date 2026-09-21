@@ -89,9 +89,9 @@ export default function MaintenanceBaseUpload({ year, month }) {
         <div className="v2-section-head" style={{ marginBottom: 0 }}>
           <div>
             <span className="v2-kicker">ACTUALIZAR BASE DE MANTENIMIENTO</span>
-            <h3 style={{ marginBottom: 4 }}>Cargar los 3 Excel del software</h3>
+            <h3 style={{ marginBottom: 4 }}>Preparar la prueba de septiembre</h3>
             <p style={{ margin: 0 }}>
-              Plan de Trabajo + Actividades + Lista de Calendario / PMP.
+              Primero el maestro, luego el calendario inicial. Los siguientes calendarios se usan en Cierre semanal.
             </p>
           </div>
           <span className="v2-primary" style={{ pointerEvents: "none" }}>
@@ -135,7 +135,7 @@ export default function MaintenanceBaseUpload({ year, month }) {
           <button type="button" onClick={() => window.location.reload()}>Actualizar indicadores</button>
         </div>}
       </div>
-      <details style={{ marginTop: 18 }}><summary>Carga inicial de los tres Excel (opcional)</summary>
+      <details style={{ marginTop: 18 }}><summary>Carga inicial de los tres Excel (solo si necesitas reconstruir la base; no usar después de programar)</summary>
       <div className="v2-quality-grid" style={{ marginTop: 18 }}>
         <label>
           <b>1. Plan de Trabajo</b>
