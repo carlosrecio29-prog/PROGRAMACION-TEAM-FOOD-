@@ -71,6 +71,11 @@ function Summary({ data, onGoPending }) {
           Completar datos pendientes
         </button>
       </section>
+      <div className="v2-success" style={{ marginBottom: 12 }}>
+        Planes OPERACIÓN excluidos: <b>{number(s.planes_operacion)}</b> ·
+        Registros OPERACIÓN fuera del PMP: <b>{number(s.registros_operacion_excluidos)}</b>.
+        No se incluyen en las HH ni en los pendientes de mantenimiento.
+      </div>
       <section className="v2-kpis">
         <div>
           <span>Registros PMP</span>
