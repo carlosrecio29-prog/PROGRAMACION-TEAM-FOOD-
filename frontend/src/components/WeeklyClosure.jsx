@@ -156,7 +156,7 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
                 className={weekIndex === i ? "active" : ""}
                 onClick={() => setWeekIndex(i)}
               >
-                <b>Semana {i + 1}</b>
+                <b>{w.transition ? 'Transición' : `Semana ${w.weekNumber}`}</b>
                 <span>{w.label}</span>
               </button>
             ))}
