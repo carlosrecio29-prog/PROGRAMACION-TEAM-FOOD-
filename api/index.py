@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+import logging
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from sqlalchemy.exc import SQLAlchemyError
 from fastapi.middleware.cors import CORSMiddleware
@@ -142,6 +143,14 @@ def v2_progress_report_pdf(year:int=2026,month:int=Query(9,ge=1,le=12),
         )
     except ValueError as exc:
         raise HTTPException(422,str(exc)) from exc
+    except Exception as exc:
+        logging.exception("Error al generar el informe PDF de mantenimiento")
+        raise HTTPException(
+            500,
+            "No fue posible generar el PDF en el servidor "
+            f"({type(exc).__name__}). Abre el enlace PDF directamente y comparte "
+            "el mensaje de error para diagnosticarlo."
+        ) from exc
 
 
 @app.get("/api/v2/pending-plans")
