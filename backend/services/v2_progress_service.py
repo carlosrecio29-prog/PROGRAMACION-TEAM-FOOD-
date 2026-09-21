@@ -187,13 +187,19 @@ def get_progress(year: int, month: int) -> dict[str, Any]:
 
 
 def export_progress_pdf(year: int, month: int, programming_id: int | None = None) -> tuple[bytes, str]:
-    from reportlab.lib import colors
-    from reportlab.lib.enums import TA_CENTER
-    from reportlab.lib.pagesizes import A4, landscape
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.units import mm
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
-    from reportlab.graphics.shapes import Drawing, Rect, String
+    try:
+        from reportlab.lib import colors
+        from reportlab.lib.enums import TA_CENTER
+        from reportlab.lib.pagesizes import A4, landscape
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import mm
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+        from reportlab.graphics.shapes import Drawing, Rect, String
+    except ModuleNotFoundError:
+        # Vercel may publish the FastAPI function without the optional PDF package.
+        # Preserve the export using the Python-standard-library renderer.
+        from backend.services.v2_pdf_fallback import render_progress_fallback
+        return render_progress_fallback(get_progress(year, month), year, month, programming_id)
 
     data = get_progress(year, month)
     weeks = data["weeks"]
