@@ -76,7 +76,7 @@ def get_accumulated_backlog(
             JOIN programacion.orden_mantenimiento o ON o.id=b.orden_mantenimiento_id
             JOIN programacion.activo a ON a.id=o.activo_id
             LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
-            WHERE {where}
+            WHERE {where} AND COALESCE(p.es_operacion,false)=false
             ORDER BY b.primera_semana_origen_inicio ASC,b.movido_en ASC,o.numero_ot NULLS LAST
             LIMIT :limit
         """), params).mappings()]
