@@ -65,7 +65,7 @@ export default function ProgressDashboard({year,month,full=false,onOpenMonthly})
         <Card label="OT finalizadas al último cierre" value={count(top.finalized)} extra={pct(top.progress_ot_pct)+" de OT únicas"} tone="success"/>
         <Card label="OT pendientes" value={count(top.pending)} extra="Último cierre del periodo" tone="warning"/>
         <Card label="No encontradas" value={count(top.not_found)} extra="Requieren conciliación" tone="warning"/>
-        <Card label="PMP de mantenimiento" value={count(top.pmp_count)} extra="Incluye OT que nunca se programaron"/>
+        <Card label="Registros PMP" value={count(top.pmp_count)} extra="Mantenimiento del mes, sin OPERACIÓN"/>
         <Card label="HH estimadas finalizadas" value={hh(totals.hh_finalized)} extra={"De "+hh(totals.hh_programmed)+" HH programadas en semanas"} tone="success"/>
       </div>
       <div className="v2-progress-note">
@@ -124,9 +124,9 @@ export default function ProgressDashboard({year,month,full=false,onOpenMonthly})
         <h3>Cómo terminó el mes</h3><p>Resultado de cada orden distinta según su última programación del periodo.</p>
       </div></div>
       <div className="v2-progress-metrics">
-        <Card label="Cartera PMP" value={count(top.pmp_count)} extra="OT de mantenimiento en el calendario"/>
+        <Card label="Registros PMP mantenimiento" value={count(top.pmp_count)} extra="Incluye órdenes no programadas"/>
         <Card label="OT distintas programadas" value={count(top.programmed)} extra="Incluye reprogramadas solo una vez"/>
-        <Card label="OT sin programación" value={count(top.not_programmed)} extra="Del PMP inicial del mes"/>
+        <Card label="Registros PMP sin programación" value={count(top.not_programmed)} extra="No incluye órdenes heredadas de otros meses"/>
         <Card label="OT cerradas" value={count(top.finalized)} extra={pct(top.progress_ot_pct)+" de las programadas"} tone="success"/>
         <Card label="OT abiertas en último cierre" value={count(top.pending)} extra="No equivale a toda la cartera sin ejecutar"} tone="warning"/>
         <Card label="OT sin encontrar / verificar" value={count(top.not_found+top.unchecked)} extra="Conciliación y semanas abiertas"} tone="warning"/>
