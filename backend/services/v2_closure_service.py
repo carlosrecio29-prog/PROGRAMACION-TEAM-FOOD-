@@ -160,7 +160,8 @@ def preview_week_closure(*, programming_id: int, content: bytes) -> dict[str, An
         summary["hh_finalized"] / summary["hh_programmed"] * 100, 1
     ) if summary["hh_programmed"] else 0
     summary["calendar_rows"] = len(calendar_rows)
-    summary["duplicates_identical_ignored"] = len(calendar_rows) - sum(len(matches) for matches in by_ot.values())
+    rows_with_ot = sum(1 for row in calendar_rows if normalize_text(row["numero_ot"]) not in {"", "SIN ASIGNAR"})
+    summary["duplicates_identical_ignored"] = rows_with_ot - sum(len(matches) for matches in by_ot.values())
     return {"programming": dict(header), "summary": summary, "rows": rows}
 
 
