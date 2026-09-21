@@ -5,6 +5,7 @@ import {
   getV2WeekClosure,
   previewV2WeekClosure,
   uploadV2WeekClosure,
+  downloadV2ProgressPdf,
 } from "../api";
 import Badge from "../shared/Badge";
 
@@ -57,6 +58,7 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [exporting, setExporting] = useState(false);
   const week = weeks[Math.min(weekIndex, weeks.length - 1)] || weeks[0];
 
   async function load() {
@@ -159,6 +161,19 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
     }
   }
 
+  async function downloadClosureReport() {
+    const id = programming?.programming?.id;
+    if (!id) return;
+    try {
+      setExporting(true); setError("");
+      await downloadV2ProgressPdf(year, month, id);
+    } catch (e) {
+      setError(e.message || "No se pudo generar el informe de cierre.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   const rows = closure?.rows || [];
   const summary = closure?.summary || {};
   const finalized = number(summary.finalized);
@@ -238,6 +253,17 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
 
       {programming?.programming?.id && (
         <>
+          {closure?.programming?.estado === "CERRADA" && (
+            <section className="v2-panel" style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+              <div><span className="v2-kicker">CIERRE CONFIRMADO</span>
+                <h3>Informe del cierre semanal</h3>
+                <p>Estado final de las OT, HH estimadas y cumplimiento de la programación #{programming.programming.id}.</p>
+              </div>
+              <button type="button" className="v2-primary" disabled={exporting} onClick={downloadClosureReport}>
+                {exporting ? "Generando..." : "Descargar informe del cierre PDF"}
+              </button>
+            </section>
+          )}
           <section className="v2-capacity-panel">
             <div className="v2-capacity-cards">
               <div>
