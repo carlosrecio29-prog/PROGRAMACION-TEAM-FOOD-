@@ -18,6 +18,63 @@ from backend.services.v2_import_service import (
 )
 
 
+PLAN_UPSERT_SQL = """INSERT INTO programacion.plan_trabajo(
+          grupo,descripcion_grupo,plan_trabajo,descripcion_plan_trabajo,tipo_frecuencia,
+          valor_frecuencia,tiempo_ejecucion_min,numero_personas,tiempo_parada_min,
+          especialidad,orden_tipo,estado,habilitado,fila_origen,es_operacion
+        ) VALUES(
+          :grupo,:descripcion_grupo,:plan_trabajo,:descripcion_plan_trabajo,:tipo_frecuencia,
+          :valor_frecuencia,:tiempo_ejecucion_min,:numero_personas,:tiempo_parada_min,
+          :especialidad,:orden_tipo,:estado,:habilitado,:fila_origen,:es_operacion
+        )
+        ON CONFLICT (grupo,plan_trabajo) DO UPDATE SET
+          descripcion_grupo=EXCLUDED.descripcion_grupo,
+          descripcion_plan_trabajo=EXCLUDED.descripcion_plan_trabajo,
+          tipo_frecuencia=EXCLUDED.tipo_frecuencia,
+          valor_frecuencia=EXCLUDED.valor_frecuencia,
+          tiempo_ejecucion_min=EXCLUDED.tiempo_ejecucion_min,
+          numero_personas=EXCLUDED.numero_personas,
+          tiempo_parada_min=EXCLUDED.tiempo_parada_min,
+          especialidad=EXCLUDED.especialidad,
+          orden_tipo=EXCLUDED.orden_tipo,
+          estado=EXCLUDED.estado,
+          habilitado=EXCLUDED.habilitado,
+          es_operacion=EXCLUDED.es_operacion,
+          fila_origen=EXCLUDED.fila_origen,
+          actualizado_en=now()
+"""
+
+
+def import_operation_master(*, plans_content: bytes) -> dict[str, Any]:
+    """Actualiza el maestro sin reemplazar PMP ni tocar programación histórica."""
+    plans = _parse_plans(plans_content)
+    if not plans:
+        raise ValueError("El archivo Plan de Trabajo no contiene registros válidos")
+    with get_engine().begin() as conn:
+        conn.execute(text(PLAN_UPSERT_SQL), plans)
+        total_catalog = conn.execute(text(
+            "SELECT count(*) FROM programacion.plan_trabajo WHERE es_operacion"
+        )).scalar_one()
+        historic_orders = conn.execute(text("""
+            SELECT count(*) FROM programacion.orden_mantenimiento o
+            JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
+            WHERE p.es_operacion
+        """)).scalar_one()
+    excluded = [p for p in plans if p["es_operacion"]]
+    return {
+        "ok": True,
+        "planes_archivo": len(plans),
+        "planes_operacion_archivo": len(excluded),
+        "planes_mantenimiento_archivo": len(plans) - len(excluded),
+        "planes_operacion_catalogo": total_catalog,
+        "ordenes_historicas_operacion": historic_orders,
+        "excluidos_detalle": [
+            {"grupo": p["grupo"], "plan_trabajo": p["plan_trabajo"], "especialidad": p["especialidad"]}
+            for p in excluded
+        ],
+    }
+
+
 def _parse_activities(content: bytes) -> tuple[list[dict[str, Any]], int]:
     wb = workbook_from_bytes(content)
     ws = wb.worksheets[0]
@@ -98,31 +155,14 @@ def import_maintenance_base(
                 "No se reemplazó la base para proteger la programación existente."
             )
 
-        conn.execute(text("""INSERT INTO programacion.plan_trabajo(
-          grupo,descripcion_grupo,plan_trabajo,descripcion_plan_trabajo,tipo_frecuencia,
-          valor_frecuencia,tiempo_ejecucion_min,numero_personas,tiempo_parada_min,
-          especialidad,orden_tipo,estado,habilitado,fila_origen
-        ) VALUES(
-          :grupo,:descripcion_grupo,:plan_trabajo,:descripcion_plan_trabajo,:tipo_frecuencia,
-          :valor_frecuencia,:tiempo_ejecucion_min,:numero_personas,:tiempo_parada_min,
-          :especialidad,:orden_tipo,:estado,:habilitado,:fila_origen
-        )
-        ON CONFLICT (grupo,plan_trabajo) DO UPDATE SET
-          descripcion_grupo=EXCLUDED.descripcion_grupo,
-          descripcion_plan_trabajo=EXCLUDED.descripcion_plan_trabajo,
-          tipo_frecuencia=EXCLUDED.tipo_frecuencia,
-          valor_frecuencia=EXCLUDED.valor_frecuencia,
-          tiempo_ejecucion_min=EXCLUDED.tiempo_ejecucion_min,
-          numero_personas=EXCLUDED.numero_personas,
-          tiempo_parada_min=EXCLUDED.tiempo_parada_min,
-          especialidad=EXCLUDED.especialidad,
-          orden_tipo=EXCLUDED.orden_tipo,
-          estado=EXCLUDED.estado,
-          habilitado=EXCLUDED.habilitado,
-          fila_origen=EXCLUDED.fila_origen,
-          actualizado_en=now()
-        """), plans)
+        conn.execute(text(PLAN_UPSERT_SQL), plans)
 
+        excluded_plan_keys = {
+            _plan_key(row["grupo"], row["plan_trabajo"])
+            for row in conn.execute(text(
+                "SELECT grupo,plan_trabajo FROM programacion.plan_trabajo WHERE es_operacion"
+            )).mappings()
+        }
         plan_map = {
             _plan_key(row["grupo"], row["plan_trabajo"]): int(row["id"])
             for row in conn.execute(text(
@@ -196,7 +236,11 @@ def import_maintenance_base(
         missing_assets = 0
         missing_order_plans = 0
         ambiguous_planning = 0
+        omitted_operation = 0
         for row in monthly:
+            if normalize_text(row["plan_clave_software"]) in excluded_plan_keys:
+                omitted_operation += 1
+                continue
             asset_id = asset_map.get(normalize_text(row["activo_codigo"]))
             if asset_id is None:
                 missing_assets += 1
@@ -267,7 +311,7 @@ def import_maintenance_base(
           (SELECT count(*) FROM programacion.plan_trabajo_actividad) actividades,
           (SELECT count(*) FROM programacion.planeacion WHERE plan_trabajo_id IS NOT NULL) planeaciones_enlazadas,
           (SELECT count(*) FROM programacion.planeacion WHERE plan_trabajo_id IS NULL) planeaciones_sin_enlace,
-          (SELECT count(*) FROM programacion.orden_mantenimiento WHERE periodo=:period) registros_pmp,
+          (SELECT count(*) FROM programacion.orden_mantenimiento o LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id WHERE o.periodo=:period AND COALESCE(p.es_operacion,false)=false) registros_pmp,
           (SELECT count(DISTINCT numero_ot) FROM programacion.orden_mantenimiento WHERE periodo=:period AND numero_ot IS NOT NULL) ot_distintas,
           (SELECT count(*) FROM programacion.orden_mantenimiento WHERE periodo=:period AND especialidad='MEC') pmp_mecanica
         """), {"period": period}).mappings().one()
@@ -281,6 +325,8 @@ def import_maintenance_base(
         "actividades_duplicadas_omitidas": duplicate_activities,
         "actividades_sin_plan_maestro": missing_activity_plans,
         "pmp_archivo": len(monthly),
+        "pmp_excluidos_operacion": omitted_operation,
+        "planes_operacion_catalogo": len(excluded_plan_keys),
         "pmp_omitidos_por_activo_faltante": missing_assets,
         "ordenes_sin_plan_maestro": missing_order_plans,
         "registros_pmp_con_planeacion_ambigua": ambiguous_planning,
