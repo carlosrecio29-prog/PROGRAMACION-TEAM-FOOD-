@@ -22,6 +22,24 @@ def import_monthly_calendar(*, monthly_content: bytes, year: int, month: int) ->
     warnings: list[str] = []
 
     with get_engine().begin() as conn:
+        programmed_count = conn.execute(text("""
+            SELECT count(*)
+            FROM programacion.programacion_item_v2 pi
+            JOIN programacion.orden_mantenimiento o ON o.id=pi.orden_mantenimiento_id
+            WHERE o.periodo=:period
+        """), {"period": period}).scalar_one()
+        if programmed_count:
+            raise ValueError(
+                "Ya existen OT de este mes en programación semanal. "
+                "No vuelvas a importar el calendario inicial: "
+                "usa Cierre semanal para las listas posteriores y conserva el historial."
+            )
+        previous_keys = set(conn.execute(text("""
+            SELECT o.source_key
+            FROM programacion.orden_mantenimiento o
+            LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
+            WHERE o.periodo=:period AND COALESCE(p.es_operacion,false)=false
+        """), {"period": period}).scalars().all())
         plans = {
             normalize_text(f"{p['grupo']}-{p['plan_trabajo']}"): p
             for p in conn.execute(text(
@@ -49,6 +67,8 @@ def import_monthly_calendar(*, monthly_content: bytes, year: int, month: int) ->
         missing_plan = 0
         missing_asset = 0
         ambiguous_planning = 0
+        open_in_file = 0
+        finalized_in_file = 0
         for row in monthly:
             plan_key = normalize_text(row["plan_clave_software"])
             plan = plans.get(plan_key)
@@ -99,6 +119,11 @@ def import_monthly_calendar(*, monthly_content: bytes, year: int, month: int) ->
                 ])
             )
             occurrence[identity_base] += 1
+            state = normalize_text(row.get("estado"))
+            if state == "ABIERTO":
+                open_in_file += 1
+            elif state.startswith("FINALIZ") or state in {"CERRADO", "CERRADA", "COMPLETADO", "COMPLETADA"}:
+                finalized_in_file += 1
             inserted.append({
                 **row,
                 "source_key": _order_source_key(period, row, occurrence[identity_base]),
@@ -109,6 +134,13 @@ def import_monthly_calendar(*, monthly_content: bytes, year: int, month: int) ->
                 "plan_trabajo_id": int(plan["id"]) if plan else None,
             })
 
+        previous_not_in_file = len(previous_keys - {r["source_key"] for r in inserted})
+        if previous_not_in_file:
+            warnings.append(
+                f"{previous_not_in_file} órdenes anteriores de mantenimiento no aparecen "
+                "en este archivo; se conservan y requieren conciliación antes de dar "
+                "por limpia la cartera inicial."
+            )
         if inserted:
             conn.execute(text("""
                 INSERT INTO programacion.orden_mantenimiento(
@@ -135,7 +167,11 @@ def import_monthly_calendar(*, monthly_content: bytes, year: int, month: int) ->
                 count(*) FILTER (WHERE COALESCE(p.es_operacion,false)=false)
                     AS registros_mantenimiento_periodo,
                 count(*) FILTER (WHERE COALESCE(p.es_operacion,false)=true)
-                    AS registros_operacion_historicos
+                    AS registros_operacion_historicos,
+                count(*) FILTER (WHERE COALESCE(p.es_operacion,false)=false AND o.estado='ABIERTO')
+                    AS registros_mantenimiento_abiertos,
+                count(*) FILTER (WHERE COALESCE(p.es_operacion,false)=false AND upper(COALESCE(o.estado,'')) LIKE 'FINALIZ%')
+                    AS registros_mantenimiento_finalizados
             FROM programacion.orden_mantenimiento o
             LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
             WHERE o.periodo=:period
@@ -147,6 +183,9 @@ def import_monthly_calendar(*, monthly_content: bytes, year: int, month: int) ->
         "pmp_archivo": len(monthly),
         "pmp_excluidos_operacion": excluded,
         "pmp_importados_o_actualizados": len(inserted),
+        "pmp_abiertos_archivo": open_in_file,
+        "pmp_finalizados_archivo": finalized_in_file,
+        "registros_previos_no_en_archivo": previous_not_in_file,
         "pmp_omitidos_por_activo_faltante": missing_asset,
         "ordenes_sin_plan_maestro": missing_plan,
         "registros_pmp_con_planeacion_ambigua": ambiguous_planning,
