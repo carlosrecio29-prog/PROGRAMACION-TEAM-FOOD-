@@ -127,8 +127,8 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
       return;
     }
     if (preview.rows?.some(row => ["EQUIPO_NO_COINCIDE", "PLAN_NO_COINCIDE",
-      "DUPLICADA_EN_CALENDARIO", "OT_AMBIGUA_EN_CALENDARIO"].includes(row.coincidencia))) {
-      setError("Hay discrepancias de equipo, plan u OT duplicadas. Corrige el Excel antes de cerrar.");
+      "DUPLICADA_EN_CALENDARIO", "OT_AMBIGUA_EN_CALENDARIO", "ESTADO_VACIO"].includes(row.coincidencia))) {
+      setError("Hay discrepancias de equipo, plan, OT duplicadas o estados vacíos. Corrige el Excel antes de cerrar.");
       return;
     }
     if (closure?.programming?.estado === "CERRADA") {
@@ -322,7 +322,7 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
                 disabled={!file || !preview || uploading ||
                   (preview.summary?.not_found > 0 && !acceptMissing) ||
                   preview.rows?.some(r => ["EQUIPO_NO_COINCIDE","PLAN_NO_COINCIDE",
-                    "DUPLICADA_EN_CALENDARIO","OT_AMBIGUA_EN_CALENDARIO"].includes(r.coincidencia)) ||
+                    "DUPLICADA_EN_CALENDARIO","OT_AMBIGUA_EN_CALENDARIO","ESTADO_VACIO"].includes(r.coincidencia)) ||
                   closure?.programming?.estado === "CERRADA"}
                 onClick={closeWeek}>
                 {uploading ? "Procesando..." : "2. Confirmar cierre semanal"}
