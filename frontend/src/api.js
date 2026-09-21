@@ -223,27 +223,40 @@ export async function getV2Progress(year = 2026, month = 9) {
   return check(await fetch(`/api/v2/progress?${new URLSearchParams({year,month})}`));
 }
 
+export function getV2ProgressPdfUrl(year, month, programmingId = null) {
+  const params = new URLSearchParams({ year, month });
+  if (programmingId !== null && programmingId !== undefined) {
+    params.set("programming_id", programmingId);
+  }
+  return `/api/v2/progress/report.pdf?${params}`;
+}
+
 export async function downloadV2ProgressPdf(year, month, programmingId = null) {
-  const params = new URLSearchParams({year, month});
-  if (programmingId !== null) params.set("programming_id", programmingId);
-  const res = await fetch(`/api/v2/progress/report.pdf?${params}`);
+  const url = getV2ProgressPdfUrl(year, month, programmingId);
+  // Validar la respuesta antes de activar la descarga; así un 500 no queda
+  // oculto ni se entrega como archivo PDF vacío.
+  const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) {
     let message = `HTTP ${res.status}`;
     try { const body = await res.json(); message = body.detail || message; } catch {}
     throw new Error(message);
   }
   const blob = await res.blob();
+  if (blob.size < 8 || !blob.type.includes("pdf")) {
+    throw new Error("El servidor no devolvió un PDF válido. Usa 'Abrir PDF directamente' para diagnosticarlo.");
+  }
   const disposition = res.headers.get("content-disposition") || "";
   const match = disposition.match(/filename="?([^";]+)"?/i);
   const filename = match?.[1] || `informe_mtto_${year}_${month}.pdf`;
-  const url = URL.createObjectURL(blob);
+  const objectUrl = URL.createObjectURL(blob);
   const link = document.createElement("a");
-  link.href = url;
+  link.href = objectUrl;
   link.download = filename;
   document.body.appendChild(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(url);
+  // Revocar de inmediato puede cancelar la descarga en algunos navegadores.
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
 }
 
 export async function getV2WeekClosure(programmingId) {
