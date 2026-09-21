@@ -26,11 +26,13 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
                      p.tiempo_ejecucion_min,p.requiere_parada
               FROM programacion.orden_mantenimiento o
               LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
-              WHERE o.periodo=:period
+              WHERE o.periodo=:period AND COALESCE(p.es_operacion,false)=false
             )
             SELECT
               (SELECT count(*) FROM programacion.activo) AS activos,
-              (SELECT count(*) FROM programacion.plan_trabajo) AS planes,
+              (SELECT count(*) FROM programacion.plan_trabajo WHERE NOT es_operacion) AS planes,
+              (SELECT count(*) FROM programacion.plan_trabajo WHERE es_operacion) AS planes_operacion,
+              (SELECT count(*) FROM programacion.orden_mantenimiento xo JOIN programacion.plan_trabajo xp ON xp.id=xo.plan_trabajo_id WHERE xo.periodo=:period AND xp.es_operacion) AS registros_operacion_excluidos,
               (SELECT count(*) FROM programacion.planeacion) AS planeaciones,
               count(*) AS registros_pmp,
               count(DISTINCT numero_ot) FILTER (WHERE numero_ot IS NOT NULL) AS ot_distintas,
@@ -75,7 +77,7 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
               ) AS planes_pendientes
             FROM programacion.orden_mantenimiento o
             JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
-            WHERE o.periodo=:period
+            WHERE o.periodo=:period AND COALESCE(p.es_operacion,false)=false
         """),{"period":period}).mappings().one()
 
         specialties=[dict(r) for r in conn.execute(text("""
@@ -92,7 +94,7 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
               ),0),2) AS hh_calculables
             FROM programacion.orden_mantenimiento o
             LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
-            WHERE o.periodo=:period
+            WHERE o.periodo=:period AND COALESCE(p.es_operacion,false)=false
             GROUP BY COALESCE(o.especialidad,'SIN')
             ORDER BY especialidad
         """),{"period":period}).mappings()]
@@ -155,7 +157,7 @@ def get_pending_plans(year:int,month:int,specialty:str|None=None)->dict[str,Any]
               count(DISTINCT o.numero_ot) FILTER (WHERE o.numero_ot IS NOT NULL) AS ot_distintas
             FROM programacion.plan_trabajo p
             JOIN programacion.orden_mantenimiento o ON o.plan_trabajo_id=p.id
-            WHERE o.periodo=:period
+            WHERE o.periodo=:period AND COALESCE(p.es_operacion,false)=false
               AND (
                 p.numero_personas_efectivo IS NULL
                 OR p.tiempo_parada_efectivo_min IS NULL
@@ -283,7 +285,7 @@ def get_pmp(
     period=_period(year,month)
     limit=max(1,min(limit,1000))
     params={"period":period,"limit":limit}
-    clauses=["o.periodo=:period"]
+    clauses=["o.periodo=:period", "COALESCE(p.es_operacion,false)=false"]
 
     if specialty:
         specialty=specialty.upper()
