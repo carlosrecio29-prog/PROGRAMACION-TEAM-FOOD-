@@ -51,3 +51,23 @@ def test_pdf_unknown_week_rejected(monkeypatch):
     monkeypatch.setattr(progress, "get_progress", lambda year, month: fake_progress())
     with pytest.raises(ValueError, match="no corresponde"):
         progress.export_progress_pdf(2026, 9, 999)
+
+
+def test_pdf_falls_back_if_reportlab_missing(monkeypatch):
+    import builtins
+
+    monkeypatch.setattr(progress, "get_progress", lambda year, month: fake_progress())
+    original_import = builtins.__import__
+
+    def without_reportlab(name, *args, **kwargs):
+        if name == "reportlab" or name.startswith("reportlab."):
+            raise ModuleNotFoundError("No module named 'reportlab'", name="reportlab")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", without_reportlab)
+    for programming_id in (None, 42):
+        content, filename = progress.export_progress_pdf(2026, 9, programming_id)
+        assert content.startswith(b"%PDF-1.4")
+        assert content.rstrip().endswith(b"%%EOF")
+        assert len(content) > 1000
+        assert filename.endswith(".pdf")
