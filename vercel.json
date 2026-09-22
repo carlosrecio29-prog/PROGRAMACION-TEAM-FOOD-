@@ -17,13 +17,44 @@
     }
   },
   "routes": [
-    { "src": "/api/v2/import-maintenance", "dest": "/api/maintenance.py" },
-    { "src": "/api/v2/import-operation-master", "dest": "/api/maintenance.py" },
-    { "src": "/api/v2/import-monthly-calendar", "dest": "/api/maintenance.py" },
-    { "src": "/api/v2/shifts", "dest": "/api/shifts.py" },
-    { "src": "/api/v2/shifts/(.*)", "dest": "/api/shifts.py" },
-    { "src": "/api/(.*)", "dest": "/api/index.py" },
-    { "handle": "filesystem" },
-    { "src": "/(.*)", "dest": "/index.html" }
+    {
+      "src": "/api/v2/import-maintenance",
+      "dest": "/api/maintenance.py"
+    },
+    {
+      "src": "/api/v2/import-operation-master",
+      "dest": "/api/maintenance.py"
+    },
+    {
+      "src": "/api/v2/import-monthly-calendar",
+      "dest": "/api/maintenance.py"
+    },
+    {
+      "src": "/api/v2/advance-stops/preview",
+      "dest": "/api/maintenance.py"
+    },
+    {
+      "src": "/api/v2/advance-stops/export.xlsx",
+      "dest": "/api/maintenance.py"
+    },
+    {
+      "src": "/api/v2/shifts",
+      "dest": "/api/shifts.py"
+    },
+    {
+      "src": "/api/v2/shifts/(.*)",
+      "dest": "/api/shifts.py"
+    },
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/index.py"
+    },
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
   ]
 }
