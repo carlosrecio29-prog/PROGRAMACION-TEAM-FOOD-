@@ -6,6 +6,7 @@ del maestro vigente; una OT ausente no significa que el plan sea incorrecto.
 from __future__ import annotations
 
 from collections import Counter
+import re
 from datetime import date
 from io import BytesIO
 from typing import Any
@@ -17,7 +18,7 @@ from sqlalchemy import text
 
 from backend.database import get_engine
 from backend.parsers.common import (
-    cell_by_header, header_mapping, normalize_key, normalize_text, workbook_from_bytes
+    header_mapping, normalize_text, workbook_from_bytes, is_operation_plan
 )
 from backend.services.v2_import_service import _parse_monthly
 
@@ -47,24 +48,44 @@ def _read_calendar(content: bytes) -> list[dict[str, Any]]:
     return records
 
 
+def _plan_match_key(value: Any) -> str:
+    """Ignore presentation spaces around dashes, but never erase words."""
+    return re.sub(r"\\s*[-–—]\\s*", "-", normalize_text(value))
+
+
 def classify_advance(rows: list[dict[str, Any]], plans: dict, assets: dict,
                      period: date) -> dict[str, Any]:
     result: list[dict[str, Any]] = []
     excluded = 0
     counts = Counter()
     no_ot = 0
+    reasons = Counter()
+    normalized_plans: dict[str, list[dict[str, Any]]] = {}
+    for original_key, candidate in plans.items():
+        normalized_plans.setdefault(_plan_match_key(original_key), []).append(candidate)
     for entry in rows:
         pkey = normalize_text(entry["plan_clave_software"])
         plan = plans.get(pkey)
-        if plan and plan["es_operacion"]:
+        if plan is None:
+            matches = normalized_plans.get(_plan_match_key(pkey), [])
+            if len(matches) == 1:
+                plan = matches[0]
+        if (plan and plan["es_operacion"]) or (
+            plan is None and is_operation_plan(pkey.split("-",1)[-1])
+        ):
             excluded += 1
             continue
         asset = assets.get(normalize_text(entry["activo_codigo"]))
         stop = plan["tiempo_parada_efectivo_min"] if plan else None
-        if stop is None:
+        reason = ""
+        if not plan:
             condition = "SIN DEFINIR"
-            observation = ("Plan no encontrado en el maestro" if not plan
-                           else "TiempoParada sin definir en el maestro")
+            reason = "PLAN NO ENCONTRADO"
+            observation = "El PlanTrabajo no coincide con un plan del maestro"
+        elif stop is None:
+            condition = "SIN DEFINIR"
+            reason = "TIEMPO PARADA VACÍO"
+            observation = "Plan encontrado, pero TiempoParada no fue definido en el software ni en la app"
         elif float(stop) > 0:
             condition = "EQUIPO DETENIDO"
             observation = ""
@@ -73,7 +94,10 @@ def classify_advance(rows: list[dict[str, Any]], plans: dict, assets: dict,
             observation = "TiempoParada = 0: no requiere parada"
         else:
             condition = "SIN DEFINIR"
+            reason = "TIEMPO PARADA INVÁLIDO"
             observation = "TiempoParada negativo: corregir el maestro"
+        if reason:
+            reasons[reason] += 1
         if not asset:
             observation = (observation + "; " if observation else "") + "Equipo no encontrado en el maestro"
         ot = normalize_text(entry.get("numero_ot_raw"))
@@ -103,6 +127,7 @@ def classify_advance(rows: list[dict[str, Any]], plans: dict, assets: dict,
             "personas": float(people) if people is not None else None,
             "hh_estimadas": hh,
             "condicion": condition,
+            "motivo_sin_definir": reason,
             "observacion": observation,
         }
         result.append(record)
@@ -121,6 +146,9 @@ def classify_advance(rows: list[dict[str, Any]], plans: dict, assets: dict,
         "operando": counts["OPERANDO"],
         "sin_definir": counts["SIN DEFINIR"],
         "sin_ot": no_ot,
+        "sin_definir_por_plan": reasons["PLAN NO ENCONTRADO"],
+        "sin_definir_por_tiempo": reasons["TIEMPO PARADA VACÍO"],
+        "sin_definir_por_invalido": reasons["TIEMPO PARADA INVÁLIDO"],
         "filas": result,
         "criterios": {
             "parada": "TiempoParada efectivo > 0: EQUIPO DETENIDO; = 0: OPERANDO; ausente o plan sin maestro: SIN DEFINIR.",
@@ -172,6 +200,7 @@ COLUMNS = [
     ("HH estimadas", "hh_estimadas", 16),
     ("Cronograma planeación", "cronograma_planeacion", 30),
     ("Fila Excel original", "fila_origen", 20),
+    ("Motivo SIN DEFINIR", "motivo_sin_definir", 30),
     ("Observación", "observacion", 54),
     ("Fecha propuesta parada", "fecha_propuesta", 23),
     ("Ventana o turno", "ventana_parada", 24),
