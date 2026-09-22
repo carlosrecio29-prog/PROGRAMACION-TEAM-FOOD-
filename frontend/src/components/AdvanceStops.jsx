@@ -27,6 +27,7 @@ export default function AdvanceStops({ year, month }) {
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [condition, setCondition] = useState("EQUIPO DETENIDO");
+  const [reason, setReason] = useState("");
   const [specialty, setSpecialty] = useState("");
   const [search, setSearch] = useState("");
 
@@ -59,6 +60,7 @@ export default function AdvanceStops({ year, month }) {
   )).sort(), [preview]);
   const visible = useMemo(() => (preview?.filas || []).filter(row => {
     if (condition && row.condicion !== condition) return false;
+    if (reason && row.motivo_sin_definir !== reason) return false;
     if (specialty && row.especialidad !== specialty) return false;
     if (search) {
       const text = [row.numero_ot, row.activo_codigo, row.activo_descripcion,
@@ -67,7 +69,7 @@ export default function AdvanceStops({ year, month }) {
       if (!text.includes(search.trim().toLowerCase())) return false;
     }
     return true;
-  }), [preview, condition, specialty, search]);
+  }), [preview, condition, reason, specialty, search]);
 
   async function exportFile() {
     if (!file || !preview || loading || downloading) return;
@@ -115,6 +117,7 @@ export default function AdvanceStops({ year, month }) {
             onChange={e => {
               setFile(e.target.files?.[0] || null);
               setCondition("EQUIPO DETENIDO");
+              setReason("");
               setSpecialty("");
               setSearch("");
             }}/>
@@ -146,19 +149,19 @@ export default function AdvanceStops({ year, month }) {
       </div>
       <div className="advance-stop-cards">
         <button type="button" className={condition === "EQUIPO DETENIDO" ? "active stopped" : "stopped"}
-          onClick={() => setCondition("EQUIPO DETENIDO")}>
+          onClick={() => { setCondition("EQUIPO DETENIDO"); setReason(""); }}>
           <small>REQUIEREN PARADA</small><strong>{num(preview.equipo_detenido)}</strong><span>Equipo detenido</span>
         </button>
         <button type="button" className={condition === "OPERANDO" ? "active running" : "running"}
-          onClick={() => setCondition("OPERANDO")}>
+          onClick={() => { setCondition("OPERANDO"); setReason(""); }}>
           <small>NO REQUIEREN PARADA</small><strong>{num(preview.operando)}</strong><span>Operando</span>
         </button>
         <button type="button" className={condition === "SIN DEFINIR" ? "active unknown" : "unknown"}
-          onClick={() => setCondition("SIN DEFINIR")}>
+          onClick={() => { setCondition("SIN DEFINIR"); setReason(""); }}>
           <small>REVISAR CON PLANEADOR</small><strong>{num(preview.sin_definir)}</strong><span>Sin definir</span>
         </button>
         <button type="button" className={!condition ? "active" : ""}
-          onClick={() => setCondition("")}>
+          onClick={() => { setCondition(""); setReason(""); }}>
           <small>REGISTROS DE MANTENIMIENTO</small><strong>{num(preview.total_mantenimiento)}</strong><span>Ver todos</span>
         </button>
       </div>
@@ -169,7 +172,23 @@ export default function AdvanceStops({ year, month }) {
         hasta que el planeador confirme el maestro. El Excel conserva <b>todas</b>
         las actividades, aunque filtres la pantalla.
       </div>
+      {preview.sin_definir > 0 && <div className="advance-stop-note" role="status">
+        <b>¿Por qué aparecen SIN DEFINIR?</b> El sistema diferencia
+        <b> {num(preview.sin_definir_por_tiempo)} actividades</b> cuyo plan existe,
+        pero tiene TiempoParada vacío;
+        <b> {num(preview.sin_definir_por_plan)}</b> cuyo plan no coincide con el maestro
+        y <b>{num(preview.sin_definir_por_invalido)}</b> con tiempo inválido.
+        No se asume parada ni operación hasta revisar el dato correcto.
+      </div>}
       <div className="advance-stop-filters">
+        {condition === "SIN DEFINIR" && <label>Motivo de revisión
+          <select value={reason} onChange={e => setReason(e.target.value)}>
+            <option value="">Todos los motivos</option>
+            <option value="TIEMPO PARADA VACÍO">TiempoParada vacío en maestro</option>
+            <option value="PLAN NO ENCONTRADO">Plan no encontrado</option>
+            <option value="TIEMPO PARADA INVÁLIDO">TiempoParada inválido</option>
+          </select>
+        </label>}
         <label>Especialidad
           <select value={specialty} onChange={e => setSpecialty(e.target.value)}>
             <option value="">Todas</option>
@@ -188,7 +207,7 @@ export default function AdvanceStops({ year, month }) {
           <thead><tr>
             <th>Condición</th><th>OT</th><th>Especialidad</th><th>Área</th>
             <th>Equipo</th><th>Criticidad</th><th>Plan de trabajo</th>
-            <th>Tiempo parada</th><th>HH est.</th><th>Observación</th>
+            <th>Tiempo parada</th><th>HH est.</th><th>Motivo</th><th>Observación</th>
           </tr></thead>
           <tbody>
             {visible.slice(0, 300).map((row, i) => <tr key={row.fila_origen + "-" + i}>
@@ -205,9 +224,10 @@ export default function AdvanceStops({ year, month }) {
               <td>{row.tiempo_parada_min === null ? "Sin definir" :
                 decimal(row.tiempo_parada_min) + " min"}</td>
               <td>{decimal(row.hh_estimadas)}</td>
+              <td>{row.motivo_sin_definir || "—"}</td>
               <td>{row.observacion || "—"}</td>
             </tr>)}
-            {!visible.length && <tr><td colSpan="10">No hay actividades para estos filtros.</td></tr>}
+            {!visible.length && <tr><td colSpan="11">No hay actividades para estos filtros.</td></tr>}
           </tbody>
         </table>
       </div>
