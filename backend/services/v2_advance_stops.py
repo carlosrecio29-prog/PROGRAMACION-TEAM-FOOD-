@@ -50,7 +50,7 @@ def _read_calendar(content: bytes) -> list[dict[str, Any]]:
 
 def _plan_match_key(value: Any) -> str:
     """Ignore presentation spaces around dashes, but never erase words."""
-    return re.sub(r"\s*[-–—]\s*", "-", normalize_text(value))
+    return re.sub(r"\\s*[-–—]\\s*", "-", normalize_text(value))
 
 
 def classify_advance(rows: list[dict[str, Any]], plans: dict, assets: dict,
@@ -60,34 +60,16 @@ def classify_advance(rows: list[dict[str, Any]], plans: dict, assets: dict,
     counts = Counter()
     no_ot = 0
     reasons = Counter()
-    normalized_plans: dict[str, dict[int, dict[str, Any]]] = {}
+    normalized_plans: dict[str, list[dict[str, Any]]] = {}
     for original_key, candidate in plans.items():
-        aliases = [original_key]
-        # El software exporta unas veces PlanTrabajo y otras
-        # DescripcionPlanTrabaj. Sólo aceptar una descripción si
-        # identifica un plan único del MISMO grupo.
-        description = candidate.get("descripcion_plan_trabajo")
-        if description:
-            aliases.append(f"{candidate.get('grupo', '')}-{description}")
-        for alias in aliases:
-            normalized_plans.setdefault(_plan_match_key(alias), {})[
-                id(candidate)
-            ] = candidate
+        normalized_plans.setdefault(_plan_match_key(original_key), []).append(candidate)
     for entry in rows:
         pkey = normalize_text(entry["plan_clave_software"])
         plan = plans.get(pkey)
-        candidates = normalized_plans.get(_plan_match_key(pkey), {})
-        ambiguous_alias = plan is None and len(candidates) > 1
-        if plan is None and len(candidates) == 1:
-            plan = next(iter(candidates.values()))
-        plan_maestro = (
-            f"{plan['grupo']}-{plan['plan_trabajo']}" if plan else ""
-        )
-        tipo_coincidencia = (
-            "SIN MAESTRO" if not plan else
-            "PLAN TRABAJO" if _plan_match_key(pkey) == _plan_match_key(plan_maestro)
-            else "DESCRIPCIÓN DEL PLAN"
-        )
+        if plan is None:
+            matches = normalized_plans.get(_plan_match_key(pkey), [])
+            if len(matches) == 1:
+                plan = matches[0]
         if (plan and plan["es_operacion"]) or (
             plan is None and is_operation_plan(pkey)
         ):
@@ -96,14 +78,10 @@ def classify_advance(rows: list[dict[str, Any]], plans: dict, assets: dict,
         asset = assets.get(normalize_text(entry["activo_codigo"]))
         stop = plan["tiempo_parada_efectivo_min"] if plan else None
         reason = ""
-        if ambiguous_alias:
-            condition = "SIN DEFINIR"
-            reason = "PLAN AMBIGUO"
-            observation = "Hay varios planes del mismo grupo con esa descripción; validar plan exacto"
-        elif not plan:
+        if not plan:
             condition = "SIN DEFINIR"
             reason = "PLAN NO ENCONTRADO"
-            observation = "Ni PlanTrabajo ni su descripción coinciden con el maestro"
+            observation = "El PlanTrabajo no coincide con un plan del maestro"
         elif stop is None:
             condition = "SIN DEFINIR"
             reason = "TIEMPO PARADA VACÍO"
@@ -140,8 +118,6 @@ def classify_advance(rows: list[dict[str, Any]], plans: dict, assets: dict,
             "area_codigo": (asset or {}).get("area_codigo") or "",
             "criticidad": (asset or {}).get("criticidad") or "",
             "plan_clave_software": entry["plan_clave_software"],
-            "plan_maestro": plan_maestro,
-            "tipo_coincidencia": tipo_coincidencia,
             "descripcion_plan": (plan or {}).get("descripcion_plan_trabajo") or "",
             "grupo": (plan or {}).get("grupo") or "",
             "especialidad": entry.get("especialidad") or (plan or {}).get("especialidad") or "SIN ESPECIALIDAD",
@@ -171,7 +147,6 @@ def classify_advance(rows: list[dict[str, Any]], plans: dict, assets: dict,
         "sin_definir": counts["SIN DEFINIR"],
         "sin_ot": no_ot,
         "sin_definir_por_plan": reasons["PLAN NO ENCONTRADO"],
-        "sin_definir_por_ambiguo": reasons["PLAN AMBIGUO"],
         "sin_definir_por_tiempo": reasons["TIEMPO PARADA VACÍO"],
         "sin_definir_por_invalido": reasons["TIEMPO PARADA INVÁLIDO"],
         "filas": result,
@@ -216,9 +191,7 @@ COLUMNS = [
     ("Criticidad", "criticidad", 14),
     ("Equipo", "activo_codigo", 25),
     ("Descripción equipo", "activo_descripcion", 39),
-    ("Plan del calendario", "plan_clave_software", 54),
-    ("Plan maestro identificado", "plan_maestro", 54),
-    ("Coincidencia", "tipo_coincidencia", 23),
+    ("Plan de trabajo", "plan_clave_software", 54),
     ("Descripción plan", "descripcion_plan", 41),
     ("Grupo", "grupo", 14),
     ("Tiempo parada (min)", "tiempo_parada_min", 18),
@@ -277,7 +250,6 @@ def export_advance_excel(result: dict[str, Any]) -> tuple[bytes, str]:
         (25,"PLAN NO ENCONTRADO","sin_definir_por_plan"),
         (26,"TIEMPO PARADA VACÍO EN MAESTRO","sin_definir_por_tiempo"),
         (27,"TIEMPO PARADA INVÁLIDO","sin_definir_por_invalido"),
-        (28,"PLAN AMBIGUO","sin_definir_por_ambiguo"),
     ]:
         overview.cell(n,1,label)
         overview.cell(n,2,result.get(key,0))
