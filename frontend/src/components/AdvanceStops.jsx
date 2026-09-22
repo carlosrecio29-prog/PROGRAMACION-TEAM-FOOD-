@@ -177,6 +177,7 @@ export default function AdvanceStops({ year, month }) {
         <b> {num(preview.sin_definir_por_tiempo)} actividades</b> cuyo plan existe,
         pero tiene TiempoParada vacío;
         <b> {num(preview.sin_definir_por_plan)}</b> cuyo plan no coincide con el maestro
+        <b> {num(preview.sin_definir_por_ambiguo)}</b> con coincidencia ambigua
         y <b>{num(preview.sin_definir_por_invalido)}</b> con tiempo inválido.
         No se asume parada ni operación hasta revisar el dato correcto.
       </div>}
@@ -186,6 +187,7 @@ export default function AdvanceStops({ year, month }) {
             <option value="">Todos los motivos</option>
             <option value="TIEMPO PARADA VACÍO">TiempoParada vacío en maestro</option>
             <option value="PLAN NO ENCONTRADO">Plan no encontrado</option>
+            <option value="PLAN AMBIGUO">Plan ambiguo</option>
             <option value="TIEMPO PARADA INVÁLIDO">TiempoParada inválido</option>
           </select>
         </label>}
