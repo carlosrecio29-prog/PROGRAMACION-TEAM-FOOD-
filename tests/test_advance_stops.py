@@ -117,3 +117,31 @@ def test_no_write_sql_in_preview_service():
     for word in ("INSERT INTO programacion.", "UPDATE programacion.",
                  "DELETE FROM programacion."):
         assert word not in source
+
+
+def test_plan_spacing_variation_matches_and_operation_is_excluded():
+    plans = sample_plans()
+    plans["27-OPERACION - RUTINA ELECTRICA"] = {
+        "grupo":"27", "plan_trabajo":"OPERACION - RUTINA ELECTRICA",
+        "es_operacion":True, "tiempo_parada_efectivo_min":None,
+    }
+    entries = [
+        {**sample_rows()[0], "plan_clave_software": "44 - RUTINA MEC"},
+        {**sample_rows()[0], "fila_origen":8,
+         "plan_clave_software": "27-OPERACION -RUTINA ELECTRICA"},
+        {**sample_rows()[0], "fila_origen":9,
+         "plan_clave_software": "28-OPERACION - RUTINA NO ESTA EN MAESTRO"},
+    ]
+    r=classify_advance(entries,plans,sample_assets(),date(2026,10,1))
+    assert r["equipo_detenido"] == 1
+    assert r["excluidos_operacion"] == 2
+    assert r["sin_definir"] == 0
+
+
+def test_distinguishes_missing_plan_from_missing_downtime():
+    r=classify_advance(sample_rows(),sample_plans(),sample_assets(),date(2026,10,1))
+    assert r["sin_definir_por_tiempo"] == 1
+    assert r["sin_definir_por_plan"] == 1
+    reasons={row["motivo_sin_definir"] for row in r["filas"]}
+    assert "PLAN NO ENCONTRADO" in reasons
+    assert "TIEMPO PARADA VACÍO" in reasons
