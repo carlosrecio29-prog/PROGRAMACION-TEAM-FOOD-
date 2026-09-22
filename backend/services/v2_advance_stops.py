@@ -71,7 +71,7 @@ def classify_advance(rows: list[dict[str, Any]], plans: dict, assets: dict,
             if len(matches) == 1:
                 plan = matches[0]
         if (plan and plan["es_operacion"]) or (
-            plan is None and is_operation_plan(pkey.split("-",1)[-1])
+            plan is None and is_operation_plan(pkey)
         ):
             excluded += 1
             continue
