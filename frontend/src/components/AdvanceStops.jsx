@@ -177,7 +177,6 @@ export default function AdvanceStops({ year, month }) {
         <b> {num(preview.sin_definir_por_tiempo)} actividades</b> cuyo plan existe,
         pero tiene TiempoParada vacío;
         <b> {num(preview.sin_definir_por_plan)}</b> cuyo plan no coincide con el maestro
-        <b> {num(preview.sin_definir_por_ambiguo)}</b> con coincidencia ambigua
         y <b>{num(preview.sin_definir_por_invalido)}</b> con tiempo inválido.
         No se asume parada ni operación hasta revisar el dato correcto.
       </div>}
@@ -187,7 +186,6 @@ export default function AdvanceStops({ year, month }) {
             <option value="">Todos los motivos</option>
             <option value="TIEMPO PARADA VACÍO">TiempoParada vacío en maestro</option>
             <option value="PLAN NO ENCONTRADO">Plan no encontrado</option>
-            <option value="PLAN AMBIGUO">Plan ambiguo</option>
             <option value="TIEMPO PARADA INVÁLIDO">TiempoParada inválido</option>
           </select>
         </label>}
@@ -208,8 +206,7 @@ export default function AdvanceStops({ year, month }) {
         <table>
           <thead><tr>
             <th>Condición</th><th>OT</th><th>Especialidad</th><th>Área</th>
-            <th>Equipo</th><th>Criticidad</th><th>Plan del calendario</th>
-            <th>Plan maestro identificado</th><th>Coincidencia</th>
+            <th>Equipo</th><th>Criticidad</th><th>Plan de trabajo</th>
             <th>Tiempo parada</th><th>HH est.</th><th>Motivo</th><th>Observación</th>
           </tr></thead>
           <tbody>
@@ -224,15 +221,13 @@ export default function AdvanceStops({ year, month }) {
               <td title={row.activo_descripcion}>{row.activo_codigo}</td>
               <td>{row.criticidad || "—"}</td>
               <td title={row.descripcion_plan}>{row.plan_clave_software}</td>
-              <td>{row.plan_maestro || "—"}</td>
-              <td>{row.tipo_coincidencia || "—"}</td>
               <td>{row.tiempo_parada_min === null ? "Sin definir" :
                 decimal(row.tiempo_parada_min) + " min"}</td>
               <td>{decimal(row.hh_estimadas)}</td>
               <td>{row.motivo_sin_definir || "—"}</td>
               <td>{row.observacion || "—"}</td>
             </tr>)}
-            {!visible.length && <tr><td colSpan="13">No hay actividades para estos filtros.</td></tr>}
+            {!visible.length && <tr><td colSpan="11">No hay actividades para estos filtros.</td></tr>}
           </tbody>
         </table>
       </div>
