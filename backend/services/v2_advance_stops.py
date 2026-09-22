@@ -244,6 +244,17 @@ def export_advance_excel(result: dict[str, Any]) -> tuple[bytes, str]:
     overview["A20"]="Este Excel NO altera PMP, programaciones, cierres ni backlog."
     overview["A21"]="HH son estimaciones del plan, no horas reales."
     overview["A22"]="Columnas amarillas: el planeador puede proponer fecha, ventana, área y estado de coordinación."
+    overview["A24"]="DIAGNÓSTICO DE SIN DEFINIR"
+    overview["A24"].font=Font(bold=True,color=navy,size=12)
+    for n,label,key in [
+        (25,"PLAN NO ENCONTRADO","sin_definir_por_plan"),
+        (26,"TIEMPO PARADA VACÍO EN MAESTRO","sin_definir_por_tiempo"),
+        (27,"TIEMPO PARADA INVÁLIDO","sin_definir_por_invalido"),
+    ]:
+        overview.cell(n,1,label)
+        overview.cell(n,2,result.get(key,0))
+        overview.cell(n,1).font=Font(bold=True,color=navy)
+        overview.cell(n,1).fill=PatternFill("solid",fgColor=pale)
     overview.column_dimensions["A"].width=76
     overview.column_dimensions["B"].width=22
     overview.sheet_properties.pageSetUpPr.fitToPage=True
