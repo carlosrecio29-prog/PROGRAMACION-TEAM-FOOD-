@@ -13,6 +13,7 @@ import {
 } from "./api";
 import WeeklyClosure from "./components/WeeklyClosure";
 import ProgressDashboard from "./components/ProgressDashboard";
+import AdvanceStops from "./components/AdvanceStops";
 import WeeklyProgramming from "./components/WeeklyProgramming";
 import AccumulatedBacklog from "./components/AccumulatedBacklog";
 import AppShell from "./app/AppShell";
@@ -1427,6 +1428,7 @@ export default function App() {
         {view === "pending" && (
           <PendingPlans year={year} month={month} onChanged={refresh} />
         )}{" "}
+        {view === "advanceStops" && <AdvanceStops year={year} month={month} />}
         {view === "programming" && (
           <WeeklyProgramming year={year} month={month} dashboard={dashboard} />
         )}{" "}
