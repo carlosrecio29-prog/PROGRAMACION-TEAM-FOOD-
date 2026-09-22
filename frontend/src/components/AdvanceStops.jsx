@@ -165,6 +165,15 @@ export default function AdvanceStops({ year, month }) {
           <small>REGISTROS DE MANTENIMIENTO</small><strong>{num(preview.total_mantenimiento)}</strong><span>Ver todos</span>
         </button>
       </div>
+      {preview.maestro_planes_operando === 0 && <div className="v2-warning" role="alert">
+        <b>ATENCIÓN: el maestro no registra ningún TiempoParada = 0.</b>{" "}
+        {num(preview.maestro_planes_sin_tiempo_parada)} planes de mantenimiento
+        tienen el tiempo de parada vacío en la base actual. Por eso este análisis
+        no puede identificar actividades OPERANDO aunque el Excel las contenga.
+        <b> Vacío no significa 0.</b> Debes restaurar los ceros desde un Plan de
+        Trabajo que los incluya o confirmar la condición con el planeador.
+        No se han supuesto tiempos para completar el listado.
+      </div>}
       <div className="advance-stop-note">
         {num(preview.total_archivo)} filas del archivo · {num(preview.sin_ot)} actividades sin número de OT ·
         {num(preview.excluidos_operacion)} registros de OPERACIÓN excluidos.
