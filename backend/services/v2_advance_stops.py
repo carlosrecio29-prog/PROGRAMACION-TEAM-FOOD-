@@ -170,6 +170,11 @@ COLUMNS = [
     ("Cronograma planeación", "cronograma_planeacion", 30),
     ("Fila Excel original", "fila_origen", 20),
     ("Observación", "observacion", 54),
+    ("Fecha propuesta parada", "fecha_propuesta", 23),
+    ("Ventana o turno", "ventana_parada", 24),
+    ("Responsable área", "responsable_area", 25),
+    ("Estado coordinación", "estado_coordinacion", 28),
+    ("Comentarios planeador", "comentarios_planeador", 44),
 ]
 
 
@@ -206,6 +211,7 @@ def export_advance_excel(result: dict[str, Any]) -> tuple[bytes, str]:
     overview["A19"]="La ausencia de número de OT no impide la revisión anticipada."
     overview["A20"]="Este Excel NO altera PMP, programaciones, cierres ni backlog."
     overview["A21"]="HH son estimaciones del plan, no horas reales."
+    overview["A22"]="Columnas amarillas: el planeador puede proponer fecha, ventana, área y estado de coordinación."
     overview.column_dimensions["A"].width=76
     overview.column_dimensions["B"].width=22
     overview.sheet_properties.pageSetUpPr.fitToPage=True
@@ -243,18 +249,35 @@ def export_advance_excel(result: dict[str, Any]) -> tuple[bytes, str]:
         for idx,entry in enumerate(subset,5):
             for col,(_,key,_) in enumerate(COLUMNS,1):
                 value=entry.get(key)
+                if key=="estado_coordinacion" and condition=="EQUIPO DETENIDO":
+                    value="PENDIENTE DE COORDINAR"
                 # Evitar que contenido importado del software ejecute fórmulas al abrir Excel.
                 if isinstance(value,str) and value.lstrip().startswith(("=","+","-","@")):
                     value="'"+value
                 cell=ws.cell(idx,col,value)
                 cell.alignment=Alignment(vertical="top",wrap_text=key in (
                     "descripcion_plan","plan_clave_software","observacion"))
-                if idx%2==0:
+                if key in {"fecha_propuesta","ventana_parada","responsable_area",
+                           "estado_coordinacion","comentarios_planeador"}:
+                    cell.fill=PatternFill("solid",fgColor="FFF3D9")
+                elif idx%2==0:
                     cell.fill=PatternFill("solid",fgColor=color)
                 if key in ("hh_estimadas","personas","tiempo_parada_min","tiempo_ejecucion_min"):
                     cell.number_format="0.00"
             ws.row_dimensions[idx].height=23
         ws.auto_filter.ref=f"A4:{end_letter}{max(4,len(subset)+4)}"
+        if condition=="EQUIPO DETENIDO" and subset:
+            from openpyxl.worksheet.datavalidation import DataValidation
+            coordination = DataValidation(
+                type="list",
+                formula1='"PENDIENTE DE COORDINAR,COORDINADA,REPROGRAMAR"',
+                allow_blank=True,
+            )
+            ws.add_data_validation(coordination)
+            status_column = next(i for i,(_,key,_) in enumerate(COLUMNS,1)
+                                 if key=="estado_coordinacion")
+            letter = get_column_letter(status_column)
+            coordination.add(f"{letter}5:{letter}{len(subset)+4}")
         ws.page_setup.orientation="landscape"
         ws.sheet_properties.pageSetUpPr.fitToPage=True
     out=BytesIO()
