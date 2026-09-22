@@ -175,6 +175,13 @@ def test_calendar_uses_description_alias_from_uploaded_master():
     assert result["equipo_detenido"] == 2
     assert result["sin_definir_por_plan"] == 0
     assert {r["tiempo_parada_min"] for r in result["filas"]} == {20,60}
+    assert {r["tipo_coincidencia"] for r in result["filas"]} == {
+        "DESCRIPCIÓN DEL PLAN"
+    }
+    assert {r["plan_maestro"] for r in result["filas"]} == {
+        "200-MANTENIMIENTO",
+        "109-COMPARACION MEDIDA CON PATRON PARA SENSOR DE TEMPERATURA SEMESTRAL",
+    }
 
 
 def test_description_alias_never_guesses_ambiguous_plan():
