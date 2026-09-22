@@ -60,16 +60,26 @@ def classify_advance(rows: list[dict[str, Any]], plans: dict, assets: dict,
     counts = Counter()
     no_ot = 0
     reasons = Counter()
-    normalized_plans: dict[str, list[dict[str, Any]]] = {}
+    normalized_plans: dict[str, dict[int, dict[str, Any]]] = {}
     for original_key, candidate in plans.items():
-        normalized_plans.setdefault(_plan_match_key(original_key), []).append(candidate)
+        aliases = [original_key]
+        # El software exporta unas veces PlanTrabajo y otras
+        # DescripcionPlanTrabaj. Sólo aceptar una descripción si
+        # identifica un plan único del MISMO grupo.
+        description = candidate.get("descripcion_plan_trabajo")
+        if description:
+            aliases.append(f"{candidate.get('grupo', '')}-{description}")
+        for alias in aliases:
+            normalized_plans.setdefault(_plan_match_key(alias), {})[
+                id(candidate)
+            ] = candidate
     for entry in rows:
         pkey = normalize_text(entry["plan_clave_software"])
         plan = plans.get(pkey)
-        if plan is None:
-            matches = normalized_plans.get(_plan_match_key(pkey), [])
-            if len(matches) == 1:
-                plan = matches[0]
+        candidates = normalized_plans.get(_plan_match_key(pkey), {})
+        ambiguous_alias = plan is None and len(candidates) > 1
+        if plan is None and len(candidates) == 1:
+            plan = next(iter(candidates.values()))
         if (plan and plan["es_operacion"]) or (
             plan is None and is_operation_plan(pkey)
         ):
@@ -78,10 +88,14 @@ def classify_advance(rows: list[dict[str, Any]], plans: dict, assets: dict,
         asset = assets.get(normalize_text(entry["activo_codigo"]))
         stop = plan["tiempo_parada_efectivo_min"] if plan else None
         reason = ""
-        if not plan:
+        if ambiguous_alias:
+            condition = "SIN DEFINIR"
+            reason = "PLAN AMBIGUO"
+            observation = "Hay varios planes del mismo grupo con esa descripción; validar plan exacto"
+        elif not plan:
             condition = "SIN DEFINIR"
             reason = "PLAN NO ENCONTRADO"
-            observation = "El PlanTrabajo no coincide con un plan del maestro"
+            observation = "Ni PlanTrabajo ni su descripción coinciden con el maestro"
         elif stop is None:
             condition = "SIN DEFINIR"
             reason = "TIEMPO PARADA VACÍO"
@@ -147,6 +161,7 @@ def classify_advance(rows: list[dict[str, Any]], plans: dict, assets: dict,
         "sin_definir": counts["SIN DEFINIR"],
         "sin_ot": no_ot,
         "sin_definir_por_plan": reasons["PLAN NO ENCONTRADO"],
+        "sin_definir_por_ambiguo": reasons["PLAN AMBIGUO"],
         "sin_definir_por_tiempo": reasons["TIEMPO PARADA VACÍO"],
         "sin_definir_por_invalido": reasons["TIEMPO PARADA INVÁLIDO"],
         "filas": result,
@@ -250,6 +265,7 @@ def export_advance_excel(result: dict[str, Any]) -> tuple[bytes, str]:
         (25,"PLAN NO ENCONTRADO","sin_definir_por_plan"),
         (26,"TIEMPO PARADA VACÍO EN MAESTRO","sin_definir_por_tiempo"),
         (27,"TIEMPO PARADA INVÁLIDO","sin_definir_por_invalido"),
+        (28,"PLAN AMBIGUO","sin_definir_por_ambiguo"),
     ]:
         overview.cell(n,1,label)
         overview.cell(n,2,result.get(key,0))
