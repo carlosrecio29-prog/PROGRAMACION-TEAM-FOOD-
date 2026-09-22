@@ -208,7 +208,8 @@ export default function AdvanceStops({ year, month }) {
         <table>
           <thead><tr>
             <th>Condición</th><th>OT</th><th>Especialidad</th><th>Área</th>
-            <th>Equipo</th><th>Criticidad</th><th>Plan de trabajo</th>
+            <th>Equipo</th><th>Criticidad</th><th>Plan del calendario</th>
+            <th>Plan maestro identificado</th><th>Coincidencia</th>
             <th>Tiempo parada</th><th>HH est.</th><th>Motivo</th><th>Observación</th>
           </tr></thead>
           <tbody>
@@ -223,13 +224,15 @@ export default function AdvanceStops({ year, month }) {
               <td title={row.activo_descripcion}>{row.activo_codigo}</td>
               <td>{row.criticidad || "—"}</td>
               <td title={row.descripcion_plan}>{row.plan_clave_software}</td>
+              <td>{row.plan_maestro || "—"}</td>
+              <td>{row.tipo_coincidencia || "—"}</td>
               <td>{row.tiempo_parada_min === null ? "Sin definir" :
                 decimal(row.tiempo_parada_min) + " min"}</td>
               <td>{decimal(row.hh_estimadas)}</td>
               <td>{row.motivo_sin_definir || "—"}</td>
               <td>{row.observacion || "—"}</td>
             </tr>)}
-            {!visible.length && <tr><td colSpan="11">No hay actividades para estos filtros.</td></tr>}
+            {!visible.length && <tr><td colSpan="13">No hay actividades para estos filtros.</td></tr>}
           </tbody>
         </table>
       </div>
