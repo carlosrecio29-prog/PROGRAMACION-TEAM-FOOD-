@@ -80,6 +80,14 @@ def classify_advance(rows: list[dict[str, Any]], plans: dict, assets: dict,
         ambiguous_alias = plan is None and len(candidates) > 1
         if plan is None and len(candidates) == 1:
             plan = next(iter(candidates.values()))
+        plan_maestro = (
+            f"{plan['grupo']}-{plan['plan_trabajo']}" if plan else ""
+        )
+        tipo_coincidencia = (
+            "SIN MAESTRO" if not plan else
+            "PLAN TRABAJO" if _plan_match_key(pkey) == _plan_match_key(plan_maestro)
+            else "DESCRIPCIÓN DEL PLAN"
+        )
         if (plan and plan["es_operacion"]) or (
             plan is None and is_operation_plan(pkey)
         ):
@@ -132,6 +140,8 @@ def classify_advance(rows: list[dict[str, Any]], plans: dict, assets: dict,
             "area_codigo": (asset or {}).get("area_codigo") or "",
             "criticidad": (asset or {}).get("criticidad") or "",
             "plan_clave_software": entry["plan_clave_software"],
+            "plan_maestro": plan_maestro,
+            "tipo_coincidencia": tipo_coincidencia,
             "descripcion_plan": (plan or {}).get("descripcion_plan_trabajo") or "",
             "grupo": (plan or {}).get("grupo") or "",
             "especialidad": entry.get("especialidad") or (plan or {}).get("especialidad") or "SIN ESPECIALIDAD",
@@ -206,7 +216,9 @@ COLUMNS = [
     ("Criticidad", "criticidad", 14),
     ("Equipo", "activo_codigo", 25),
     ("Descripción equipo", "activo_descripcion", 39),
-    ("Plan de trabajo", "plan_clave_software", 54),
+    ("Plan del calendario", "plan_clave_software", 54),
+    ("Plan maestro identificado", "plan_maestro", 54),
+    ("Coincidencia", "tipo_coincidencia", 23),
     ("Descripción plan", "descripcion_plan", 41),
     ("Grupo", "grupo", 14),
     ("Tiempo parada (min)", "tiempo_parada_min", 18),
