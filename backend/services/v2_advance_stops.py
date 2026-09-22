@@ -180,7 +180,20 @@ def preview_advance_stops(*, content: bytes, year: int, month: int) -> dict[str,
                 FROM programacion.activo
             """)).mappings()
         }
-    return classify_advance(rows, plans, assets, period)
+    result = classify_advance(rows, plans, assets, period)
+    # Sin alterar el maestro, mostrar cuándo el resultado OPERANDO = 0
+    # obedece a que NO existe ningún tiempo de parada = 0 en la fuente.
+    maintenance = [p for p in plans.values() if not p["es_operacion"]]
+    result["maestro_planes"] = len(maintenance)
+    result["maestro_planes_operando"] = sum(
+        p["tiempo_parada_efectivo_min"] is not None
+        and float(p["tiempo_parada_efectivo_min"]) == 0
+        for p in maintenance
+    )
+    result["maestro_planes_sin_tiempo_parada"] = sum(
+        p["tiempo_parada_efectivo_min"] is None for p in maintenance
+    )
+    return result
 
 
 COLUMNS = [
