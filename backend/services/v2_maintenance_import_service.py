@@ -34,7 +34,9 @@ PLAN_UPSERT_SQL = """INSERT INTO programacion.plan_trabajo(
           valor_frecuencia=EXCLUDED.valor_frecuencia,
           tiempo_ejecucion_min=EXCLUDED.tiempo_ejecucion_min,
           numero_personas=EXCLUDED.numero_personas,
-          tiempo_parada_min=EXCLUDED.tiempo_parada_min,
+          -- Un blanco en un nuevo export NO equivale a 0 ni debe borrar
+          -- un TiempoParada previamente registrado; conservar incluso el 0.
+          tiempo_parada_min=COALESCE(EXCLUDED.tiempo_parada_min, plan_trabajo.tiempo_parada_min),
           especialidad=EXCLUDED.especialidad,
           orden_tipo=EXCLUDED.orden_tipo,
           estado=EXCLUDED.estado,
