@@ -68,9 +68,12 @@ def classify_advance(rows: list[dict[str, Any]], plans: dict, assets: dict,
         elif float(stop) > 0:
             condition = "EQUIPO DETENIDO"
             observation = ""
-        else:
+        elif float(stop) == 0:
             condition = "OPERANDO"
             observation = "TiempoParada = 0: no requiere parada"
+        else:
+            condition = "SIN DEFINIR"
+            observation = "TiempoParada negativo: corregir el maestro"
         if not asset:
             observation = (observation + "; " if observation else "") + "Equipo no encontrado en el maestro"
         ot = normalize_text(entry.get("numero_ot_raw"))
