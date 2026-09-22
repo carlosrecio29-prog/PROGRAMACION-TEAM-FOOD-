@@ -219,6 +219,48 @@ export async function getV2Backlog(filters = {}) {
   });
   return check(await fetch(`/api/v2/backlog?${qs}`));
 }
+export async function previewAdvanceStops(file, year, month, signal) {
+  const form = new FormData();
+  form.append("monthly", file);
+  const params = new URLSearchParams({ year, month });
+  return check(await fetch(`/api/v2/advance-stops/preview?${params}`, {
+    method: "POST",
+    body: form,
+    signal,
+  }));
+}
+
+export async function downloadAdvanceStopsExcel(file, year, month) {
+  const form = new FormData();
+  form.append("monthly", file);
+  const params = new URLSearchParams({ year, month });
+  const response = await fetch(`/api/v2/advance-stops/export.xlsx?${params}`, {
+    method: "POST",
+    body: form,
+  });
+  if (!response.ok) {
+    let detail = `HTTP ${response.status}`;
+    try {
+      const payload = await response.json();
+      detail = payload.detail || detail;
+    } catch {}
+    throw new Error(detail);
+  }
+  const blob = await response.blob();
+  if (!blob.size) throw new Error("El servidor no devolvió el Excel solicitado.");
+  const objectUrl = URL.createObjectURL(blob);
+  const disposition = response.headers.get("content-disposition") || "";
+  const name = disposition.match(/filename="?([^";]+)"?/i)?.[1]
+    || `anticipacion_paradas_${year}_${String(month).padStart(2,"0")}.xlsx`;
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = name;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+}
+
 export async function getV2Progress(year = 2026, month = 9) {
   return check(await fetch(`/api/v2/progress?${new URLSearchParams({year,month})}`));
 }
