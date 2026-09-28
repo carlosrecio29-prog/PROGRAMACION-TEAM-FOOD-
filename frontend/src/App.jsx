@@ -166,9 +166,6 @@ function PendingPlans({ year, month, onChanged }) {
   const [search, setSearch] = useState("");
   const [draft, setDraft] = useState({});
   const [saving, setSaving] = useState(null);
-  const [scheduleFile, setScheduleFile] = useState(null);
-  const [uploadingSchedule, setUploadingSchedule] = useState(false);
-  const [scheduleResult, setScheduleResult] = useState(null);
   const [error, setError] = useState("");
   const load = () =>
     getV2PendingPlans(year, month, spec)
@@ -395,6 +392,9 @@ function Technicians({ year, month, onChanged }) {
   const [data, setData] = useState(null);
   const [draft, setDraft] = useState({});
   const [saving, setSaving] = useState(null);
+  const [scheduleFile, setScheduleFile] = useState(null);
+  const [uploadingSchedule, setUploadingSchedule] = useState(false);
+  const [scheduleResult, setScheduleResult] = useState(null);
   const [error, setError] = useState("");
   const load = () =>
     getV2Technicians(year, month)
