@@ -30,6 +30,10 @@
       "dest": "/api/maintenance.py"
     },
     {
+      "src": "/api/v2/import-technician-schedule",
+      "dest": "/api/maintenance.py"
+    },
+    {
       "src": "/api/v2/advance-stops/preview",
       "dest": "/api/maintenance.py"
     },
