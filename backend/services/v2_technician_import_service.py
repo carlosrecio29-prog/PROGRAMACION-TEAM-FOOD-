@@ -52,13 +52,8 @@ def import_technician_schedule(*, content: bytes, year: int, month: int) -> dict
                 continue
             db_rows.append({**row, "tecnico_id": tech_id})
 
-        # Reimportar octubre reemplaza únicamente la programación de técnicos
-        # de octubre. No toca otros meses ni el maestro de mantenimiento.
-        deleted = conn.execute(text("""
-            DELETE FROM programacion.programacion_tecnico
-            WHERE date_trunc('month',fecha)::date=:period
-        """), {"period": period}).rowcount or 0
-
+        # El piloto de octubre parte vacío. Se insertan/actualizan fechas
+        # del archivo sin borrar otros registros ni otros meses.
         if db_rows:
             conn.execute(text("""
                 INSERT INTO programacion.programacion_tecnico(
@@ -89,7 +84,7 @@ def import_technician_schedule(*, content: bytes, year: int, month: int) -> dict
         "periodo": str(period),
         "tecnicos_archivo": len(technicians),
         "registros_archivo": len(schedule),
-        "registros_mes_reemplazados": int(deleted),
+        "registros_procesados": len(db_rows),
         "tecnicos_sin_enlace": len(missing),
         **dict(stats),
         "warnings": warnings[:100],
