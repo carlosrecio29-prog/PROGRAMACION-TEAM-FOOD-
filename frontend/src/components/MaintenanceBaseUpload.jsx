@@ -89,7 +89,7 @@ export default function MaintenanceBaseUpload({ year, month }) {
         <div className="v2-section-head" style={{ marginBottom: 0 }}>
           <div>
             <span className="v2-kicker">ACTUALIZAR BASE DE MANTENIMIENTO</span>
-            <h3 style={{ marginBottom: 4 }}>Preparar la prueba de septiembre</h3>
+            <h3 style={{ marginBottom: 4 }}>Arranque piloto · octubre 2026</h3>
             <p style={{ margin: 0 }}>
               Primero el maestro, luego el calendario inicial. Los siguientes calendarios se usan en Cierre semanal.
             </p>
@@ -119,7 +119,7 @@ export default function MaintenanceBaseUpload({ year, month }) {
       <div className="v2-panel" style={{ marginTop: 18 }}>
         <span className="v2-kicker">ETAPA 2 · MENSUAL</span>
         <h3>Cargar Lista de Calendario</h3>
-        <p><b>Para iniciar la prueba:</b> elige el archivo de septiembre antes de los cierres, con las OT todavía abiertas. Una vez guardada la primera programación, usa únicamente Cierre semanal para los calendarios posteriores.</p>
+        <p><b>Para iniciar el piloto:</b> carga la Lista de Calendario de octubre antes de generar la primera programación semanal. Puede venir con las OT abiertas. Después de guardar programaciones, usa Cierre semanal para los calendarios de seguimiento.</p>
         <p>Usa el maestro guardado. Las órdenes de OPERACIÓN no entran al PMP de mantenimiento. La reimportación actualiza OT existentes sin borrar programación ni cierres.</p>
         <input type="file" accept=".xlsx" onChange={(e) => setMonthlyOnly(e.target.files?.[0] || null)} />
         <div className="v2-program-review-actions" style={{ marginTop: 12 }}>
