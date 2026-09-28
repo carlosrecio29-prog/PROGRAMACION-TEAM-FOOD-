@@ -5,6 +5,7 @@ import {
   getV2PendingPlans,
   saveV2PlanComplement,
   getV2Technicians,
+  uploadV2TechnicianSchedule,
   saveV2TechnicianComplement,
   getV2Pmp,
   getV2WeekProgramming,
@@ -15,6 +16,7 @@ import WeeklyClosure from "./components/WeeklyClosure";
 import ProgressDashboard from "./components/ProgressDashboard";
 import AdvanceStops from "./components/AdvanceStops";
 import WeeklyProgramming from "./components/WeeklyProgramming";
+import MaintenanceBaseUpload from "./components/MaintenanceBaseUpload";
 import AccumulatedBacklog from "./components/AccumulatedBacklog";
 import AppShell from "./app/AppShell";
 import { navigationIds } from "./app/navigation";
@@ -164,6 +166,9 @@ function PendingPlans({ year, month, onChanged }) {
   const [search, setSearch] = useState("");
   const [draft, setDraft] = useState({});
   const [saving, setSaving] = useState(null);
+  const [scheduleFile, setScheduleFile] = useState(null);
+  const [uploadingSchedule, setUploadingSchedule] = useState(false);
+  const [scheduleResult, setScheduleResult] = useState(null);
   const [error, setError] = useState("");
   const load = () =>
     getV2PendingPlans(year, month, spec)
@@ -414,6 +419,22 @@ function Technicians({ year, month, onChanged }) {
       setSaving(null);
     }
   }
+  async function uploadSchedule() {
+    if (!scheduleFile) return setError("Selecciona la programación mensual de técnicos.");
+    setUploadingSchedule(true);
+    setScheduleResult(null);
+    setError("");
+    try {
+      const result = await uploadV2TechnicianSchedule(scheduleFile, year, month);
+      setScheduleResult(result);
+      await load();
+      onChanged?.();
+    } catch (e) {
+      setError(e.message || "No se pudo cargar la programación de técnicos.");
+    } finally {
+      setUploadingSchedule(false);
+    }
+  }
   return (
     <section className="v2-panel">
       <div className="v2-section-head">
@@ -436,6 +457,29 @@ function Technicians({ year, month, onChanged }) {
             0}{" "}
           pendientes
         </Badge>
+      </div>
+      <div className="v2-panel" style={{ marginBottom: 16 }}>
+        <span className="v2-kicker">CARGA DEL MES</span>
+        <h3>Programación de técnicos · {String(month).padStart(2, "0")}/{year}</h3>
+        <p>Sube el Excel que contiene la hoja <b>PROGRAMACION DE TECNICOS</b>. Para el piloto de octubre se insertan o actualizan los turnos por técnico y fecha sin modificar otros meses.</p>
+        <div className="v2-program-review-actions">
+          <input type="file" accept=".xlsx" onChange={(e) => {
+            setScheduleFile(e.target.files?.[0] || null);
+            setScheduleResult(null);
+          }} />
+          <button type="button" className="v2-primary" onClick={uploadSchedule}
+            disabled={!scheduleFile || uploadingSchedule}>
+            {uploadingSchedule ? "Cargando programación..." : "Cargar programación de técnicos"}
+          </button>
+        </div>
+        {scheduleResult && <div className="v2-success" style={{ marginTop: 12 }}>
+          <b>{scheduleResult.tecnicos} técnicos · {scheduleResult.registros} registros de calendario · {fmt(scheduleResult.hh_disponibles, 1)} H-H disponibles.</b>
+          <p>{scheduleResult.ausencias} registros de ausencia · {scheduleResult.tecnicos_sin_enlace} técnicos sin enlace.</p>
+          {scheduleResult.warnings?.length > 0 && <details>
+            <summary>Advertencias ({scheduleResult.warnings.length})</summary>
+            <ul>{scheduleResult.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul>
+          </details>}
+        </div>}
       </div>
       {error && <div className="v2-error">{error}</div>}
       <div className="v2-table-wrap">
@@ -1386,7 +1430,7 @@ export default function App() {
     return navigationIds().includes(requested) ? requested : "summary";
   });
   const [year] = useState(2026);
-  const [month, setMonth] = useState(9);
+  const [month, setMonth] = useState(10);
   const [dashboard, setDashboard] = useState(null);
   const [health, setHealth] = useState("checking");
   const [error, setError] = useState("");
@@ -1440,6 +1484,9 @@ export default function App() {
         )}{" "}
         {view === "technicians" && (
           <Technicians year={year} month={month} onChanged={refresh} />
+        )}
+        {view === "imports" && (
+          <MaintenanceBaseUpload year={year} month={month} />
         )}
     </AppShell>
   );
