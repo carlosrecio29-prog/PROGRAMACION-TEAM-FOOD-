@@ -7,6 +7,7 @@ from backend.config import MAX_UPLOAD_BYTES
 from backend.services.v2_maintenance_import_service import import_maintenance_base, import_operation_master
 from backend.services.v2_monthly_calendar_import import import_monthly_calendar
 from backend.services.v2_advance_stops import preview_advance_stops, export_advance_excel
+from backend.services.v2_technician_import_service import import_technician_schedule
 
 app = FastAPI(title="Programación Team Food · Actualización de base")
 
@@ -107,3 +108,21 @@ async def advance_stops_excel(
         )
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
+
+
+@app.post("/api/v2/import-technician-schedule")
+async def import_technician_schedule_file(
+    schedule: UploadFile = File(...),
+    year: int = Query(..., ge=2020, le=2100),
+    month: int = Query(..., ge=1, le=12),
+):
+    try:
+        return import_technician_schedule(
+            content=await read_upload(schedule), year=year, month=month,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            500, f"Error importando programación de técnicos: {exc}"
+        ) from exc
