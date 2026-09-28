@@ -142,14 +142,14 @@ export async function savePlanDefinition(planId, payload) {
   );
 }
 
-export async function getV2Dashboard(year = 2026, month = 9) {
+export async function getV2Dashboard(year = 2026, month = 10) {
   return check(
     await fetch(`/api/v2/dashboard?${new URLSearchParams({ year, month })}`),
   );
 }
 export async function getV2PendingPlans(
   year = 2026,
-  month = 9,
+  month = 10,
   specialty = "",
 ) {
   const qs = new URLSearchParams({ year, month });
@@ -165,7 +165,17 @@ export async function saveV2PlanComplement(planId, payload) {
     }),
   );
 }
-export async function getV2Technicians(year = 2026, month = 9) {
+export async function uploadV2TechnicianSchedule(file, year, month) {
+  const form = new FormData();
+  form.append("schedule", file);
+  const params = new URLSearchParams({ year, month });
+  return check(await fetch(`/api/v2/import-technician-schedule?${params}`, {
+    method: "POST",
+    body: form,
+  }));
+}
+
+export async function getV2Technicians(year = 2026, month = 10) {
   return check(
     await fetch(`/api/v2/technicians?${new URLSearchParams({ year, month })}`),
   );
@@ -181,7 +191,7 @@ export async function saveV2TechnicianComplement(technicianId, specialty) {
 }
 export async function getV2Pmp({
   year = 2026,
-  month = 9,
+  month = 10,
   specialty = "",
   area = "",
   search = "",
@@ -261,7 +271,7 @@ export async function downloadAdvanceStopsExcel(file, year, month) {
   window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
 }
 
-export async function getV2Progress(year = 2026, month = 9) {
+export async function getV2Progress(year = 2026, month = 10) {
   return check(await fetch(`/api/v2/progress?${new URLSearchParams({year,month})}`));
 }
 
