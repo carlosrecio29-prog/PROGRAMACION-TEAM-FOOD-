@@ -75,6 +75,37 @@ def _capacity(conn,date_from:date,date_to:date,specialty:str)->dict[str,Any]:
     }
 
 
+def refresh_open_program_capacities(conn)->int:
+    rows=conn.execute(text("""
+        SELECT id,semana_inicio,semana_fin,especialidad
+        FROM programacion.programacion_semanal_v2
+        WHERE estado<>'CERRADA'
+    """)).mappings().all()
+    updated=0
+    for row in rows:
+        capacity=_capacity(
+            conn,
+            row["semana_inicio"],
+            row["semana_fin"],
+            row["especialidad"],
+        )
+        conn.execute(text("""
+            UPDATE programacion.programacion_semanal_v2
+            SET hh_disponibles=:available,
+                hh_objetivo=:target,
+                hh_reserva=:reserve,
+                actualizado_en=now()
+            WHERE id=:id
+        """),{
+            "available":capacity["available"],
+            "target":capacity["target"],
+            "reserve":capacity["reserve"],
+            "id":row["id"],
+        })
+        updated+=1
+    return updated
+
+
 def get_week_programming(*,date_from:date,date_to:date,specialty:str)->dict[str,Any]:
     specialty=_validate_week(date_from,date_to,specialty)
     with get_engine().connect() as conn:
