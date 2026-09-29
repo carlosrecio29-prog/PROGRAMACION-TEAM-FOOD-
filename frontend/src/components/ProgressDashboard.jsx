@@ -10,9 +10,14 @@ const pct = x => x === null || x === undefined ? "Por verificar" : number(x).toL
 const dateLabel = s => s ? s.split("-").reverse().join("/") : "—";
 
 function Card({label,value,extra,tone=""}){
-  return <div className={"v2-progress-metric " + tone}>
-    <span>{label}</span><strong>{value}</strong><small>{extra}</small>
-  </div>;
+  return <article className={"v2-progress-metric " + tone}>
+    <div className="v2-progress-metric-top">
+      <span>{label}</span>
+      <i aria-hidden="true" />
+    </div>
+    <strong>{value}</strong>
+    <small>{extra}</small>
+  </article>;
 }
 
 export default function ProgressDashboard({year,month,full=false,onOpenMonthly}){
@@ -34,6 +39,7 @@ export default function ProgressDashboard({year,month,full=false,onOpenMonthly})
   const weeks=useMemo(()=> (data?.weeks||[]).filter(row=>!specialty||row.especialidad===specialty),[data,specialty]);
   const top=data?.monthly||{};
   const totals=data?.weekly_totals||{};
+  const overallProgress=Math.max(0,Math.min(100,number(top.progress_ot_pct||0)));
   const showReport=async(programmingId=null)=>{
     const key=programmingId===null?"month":String(programmingId);
     try{setDownloading(key);setPdfError("");await downloadV2ProgressPdf(year,month,programmingId);}
@@ -56,85 +62,140 @@ export default function ProgressDashboard({year,month,full=false,onOpenMonthly})
         Abrir PDF mensual directamente
       </a>
     </div>}
-    <div className="v2-panel">
+    <div className="v2-panel v2-progress-overview-panel">
       <div className="v2-section-head">
-        <div><span className="v2-kicker">SEGUIMIENTO DEL PERIODO</span>
+        <div>
+          <span className="v2-kicker">SEGUIMIENTO DEL PERIODO</span>
           <h3>{full?"Informe general de cierre mensual":"Avance de programación y cierres"}</h3>
-          <p>Basado en las programaciones y cierres guardados, no en los Excel cargados por separado.</p>
+          <p>Lectura ejecutiva del avance registrado en programación, cierres y H-H estimadas.</p>
         </div>
-        <button type="button" onClick={()=>setRevision(x=>x+1)} disabled={loading}>
+        <button type="button" className="v2-progress-refresh" onClick={()=>setRevision(x=>x+1)} disabled={loading}>
           {loading?"Actualizando...":"Actualizar avance"}
         </button>
       </div>
+
       {top.contains_future_week_closures&&<div className="v2-warning" role="note">
         CIERRE DE PRUEBA / ANTICIPADO: existen semanas cerradas con fecha de fin posterior a hoy.
         No presentar este informe como cierre operativo definitivo del mes.
       </div>}
-      <div className="v2-progress-month-state">
-        <strong>{count(top.weeks_closed)} de {count(top.weeks_total)} programaciones cerradas</strong>
-        <span>{top.all_weeks_closed?"Periodo completamente cerrado para las especialidades programadas":"Informe parcial: quedan programaciones sin cierre"}</span>
+
+      <div className="v2-progress-overview">
+        <div className="v2-progress-focus">
+          <div className="v2-progress-ring" style={{"--progress":overallProgress+"%"}}>
+            <div>
+              <strong>{pct(top.progress_ot_pct)}</strong>
+              <span>OT finalizadas</span>
+            </div>
+          </div>
+          <div className="v2-progress-focus-copy">
+            <span className="v2-kicker">ESTADO GENERAL</span>
+            <h4>{count(top.weeks_closed)} de {count(top.weeks_total)} programaciones cerradas</h4>
+            <p>{top.all_weeks_closed
+              ?"Periodo completamente cerrado para las especialidades programadas."
+              :"Informe parcial: aún quedan programaciones sin cierre."}</p>
+            <div className="v2-progress-focus-tags">
+              <span><b>{count(top.programmed)}</b> OT programadas</span>
+              <span><b>{count(top.finalized)}</b> finalizadas</span>
+              <span><b>{count(top.pending)}</b> pendientes</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="v2-progress-metrics">
+          <Card label="OT únicas programadas" value={count(top.programmed)} extra="Sin duplicar OT reprogramadas"/>
+          <Card label="OT finalizadas" value={count(top.finalized)} extra={pct(top.progress_ot_pct)+" de OT únicas"} tone="success"/>
+          <Card label="OT pendientes" value={count(top.pending)} extra="Según el último cierre del período" tone="warning"/>
+          <Card label="No encontradas" value={count(top.not_found)} extra="Requieren conciliación" tone={number(top.not_found)?"danger":""}/>
+          <Card label="Registros PMP" value={count(top.pmp_count)} extra="Mantenimiento del mes, sin OPERACIÓN"/>
+          <Card label="H-H finalizadas est." value={hh(totals.hh_finalized)} extra={"De "+hh(totals.hh_programmed)+" H-H programadas"} tone="success"/>
+        </div>
       </div>
-      <div className="v2-progress-metrics">
-        <Card label="OT únicas programadas" value={count(top.programmed)} extra="Sin duplicar OT reprogramadas"/>
-        <Card label="OT finalizadas al último cierre" value={count(top.finalized)} extra={pct(top.progress_ot_pct)+" de OT únicas"} tone="success"/>
-        <Card label="OT pendientes" value={count(top.pending)} extra="Último cierre del periodo" tone="warning"/>
-        <Card label="No encontradas" value={count(top.not_found)} extra="Requieren conciliación" tone="warning"/>
-        <Card label="Registros PMP" value={count(top.pmp_count)} extra="Mantenimiento del mes, sin OPERACIÓN"/>
-        <Card label="HH estimadas finalizadas" value={hh(totals.hh_finalized)} extra={"De "+hh(totals.hh_programmed)+" HH programadas en semanas"} tone="success"/>
-      </div>
+
       <div className="v2-progress-note">
-        <b>Dos formas de medir:</b> el consolidado superior cuenta cada OT una vez según su último
-        cierre del periodo; el análisis semanal de abajo cuenta cada vez que fue programada.
-        Las HH son estimadas, no horas reales ejecutadas.
+        <b>Criterio del tablero:</b> el consolidado superior cuenta cada OT una vez según su último cierre del período.
+        El análisis semanal cuenta cada vez que fue programada. Las H-H mostradas son estimadas, no horas reales ejecutadas.
       </div>
     </div>
-    <section className="v2-panel">
+    <section className="v2-panel v2-progress-trend-panel">
       <div className="v2-section-head">
-        <div><span className="v2-kicker">TENDENCIA SEMANAL</span><h3>Avance por especialidad</h3>
-          <p>Cierres de jueves a miércoles · OT programadas frente a finalizadas y H-H estimadas.</p></div>
-        <label className="v2-progress-filter">Especialidad
+        <div>
+          <span className="v2-kicker">TENDENCIA SEMANAL</span>
+          <h3>Avance por especialidad</h3>
+          <p>Cortes de jueves a miércoles · OT programadas frente a finalizadas.</p>
+        </div>
+        <label className="v2-progress-filter">
+          <span>Especialidad</span>
           <select value={specialty} onChange={e=>setSpecialty(e.target.value)}>
-            <option value="">Todas</option>
+            <option value="">Todas las especialidades</option>
             {Object.entries(NAMES).map(([code,name])=><option key={code} value={code}>{name}</option>)}
           </select>
         </label>
       </div>
-      {weeks.length===0?<p>Aún no hay programaciones de este periodo para el filtro elegido.</p>:<>
-        <div className="v2-progress-chart" aria-label="Avance semanal por OT programadas y finalizadas">
-          {weeks.map(week=><div className="v2-progress-chart-row" key={week.programming_id}>
-            <div className="v2-progress-chart-label">
-              <b>{NAMES[week.especialidad]||week.especialidad}</b>
-              <span>{dateLabel(week.week_from)} – {dateLabel(week.week_to)}</span>
+
+      {weeks.length===0
+        ? <div className="v2-progress-empty">
+            <b>Aún no hay programación para este filtro.</b>
+            <span>La tendencia aparecerá a medida que se guarden y cierren semanas.</span>
+          </div>
+        : <>
+          <div className="v2-progress-chart" aria-label="Avance semanal por OT programadas y finalizadas">
+            {weeks.map(week=>{
+              const closed=week.estado==="CERRADA";
+              const progress=Math.max(0,Math.min(100,number(week.progress_ot_pct||0)));
+              return <div className="v2-progress-chart-row" key={week.programming_id}>
+                <div className="v2-progress-chart-label">
+                  <div>
+                    <b>{NAMES[week.especialidad]||week.especialidad}</b>
+                    <span className={"v2-progress-status "+(closed?"closed":"open")}>{closed?"Cerrada":"Abierta"}</span>
+                  </div>
+                  <span>{dateLabel(week.week_from)} – {dateLabel(week.week_to)}</span>
+                </div>
+                <div className="v2-progress-week-body">
+                  <div className="v2-progress-week-copy">
+                    <span>{count(week.programmed)} OT programadas</span>
+                    <span>{closed?count(week.finalized)+" finalizadas":"Pendiente de cierre"}</span>
+                  </div>
+                  <div className="v2-progress-chart-track">
+                    <div className="v2-progress-chart-done" style={{width:(closed?progress:0)+"%"}}/>
+                  </div>
+                </div>
+                <strong>{closed?pct(week.progress_ot_pct):"—"}</strong>
+              </div>;
+            })}
+          </div>
+
+          <details className="v2-progress-detail">
+            <summary>
+              <span>
+                <b>Ver detalle semanal completo</b>
+                <small>OT, backlog, H-H y reportes por corte</small>
+              </span>
+            </summary>
+            <div className="v2-table-wrap">
+              <table>
+                <thead><tr><th>Corte</th><th>Especialidad</th><th>Estado</th><th>Programadas</th><th>Finalizadas</th>
+                  <th>Pendientes</th><th>No encontradas</th><th>Backlog programado</th><th>HH prog.</th><th>HH fin. est.</th><th>OT %</th><th>HH %</th><th>Reporte</th></tr></thead>
+                <tbody>{weeks.map(w=><tr key={w.programming_id}>
+                  <td>{dateLabel(w.week_from)} – {dateLabel(w.week_to)}</td>
+                  <td><b>{NAMES[w.especialidad]||w.especialidad}</b></td>
+                  <td><span className={"v2-progress-status "+(w.estado==="CERRADA"?"closed":"open")}>{w.estado}</span></td>
+                  <td>{count(w.programmed)}</td><td>{w.estado==="CERRADA"?count(w.finalized):"—"}</td>
+                  <td>{w.estado==="CERRADA"?count(w.pending):"—"}</td><td>{w.estado==="CERRADA"?count(w.not_found):"—"}</td>
+                  <td>{count(w.origin_backlog)}</td><td>{hh(w.hh_programmed)}</td>
+                  <td>{w.estado==="CERRADA"?hh(w.hh_finalized):"—"}</td>
+                  <td>{pct(w.progress_ot_pct)}</td><td>{pct(w.progress_hh_pct)}</td>
+                  <td><div className="v2-progress-row-actions">
+                    <button type="button" disabled={!!downloading} onClick={()=>showReport(w.programming_id)}>
+                      {downloading===String(w.programming_id)?"Generando...":"PDF"}
+                    </button>
+                    <a href={getV2ProgressPdfUrl(year,month,w.programming_id)} target="_blank" rel="noopener noreferrer">Abrir</a>
+                  </div></td>
+                </tr>)}</tbody>
+              </table>
             </div>
-            <div className="v2-progress-chart-bars">
-              <div className="v2-progress-chart-track"><div className="v2-progress-chart-total" style={{width:"100%"}}/></div>
-              <div className="v2-progress-chart-track"><div className="v2-progress-chart-done"
-                style={{width:Math.min(100,number(week.progress_ot_pct||0))+"%"}}/></div>
-            </div>
-            <strong>{week.estado==="CERRADA"?pct(week.progress_ot_pct):"Sin cierre"}</strong>
-          </div>)}
-        </div>
-        <div className="v2-progress-chart-legend">Barra clara: OT programadas (100% de la semana). Barra azul: OT finalizadas de esa semana.</div>
-        <div className="v2-table-wrap"><table>
-          <thead><tr><th>Corte</th><th>Especialidad</th><th>Estado</th><th>Programadas</th><th>Finalizadas</th>
-            <th>Pendientes</th><th>No encontradas</th><th>Backlog programado</th><th>HH prog.</th><th>HH fin. est.</th><th>OT %</th><th>HH %</th><th>Reporte</th></tr></thead>
-          <tbody>{weeks.map(w=><tr key={w.programming_id}>
-            <td>{dateLabel(w.week_from)} – {dateLabel(w.week_to)}</td><td>{NAMES[w.especialidad]||w.especialidad}</td>
-            <td>{w.estado}</td><td>{count(w.programmed)}</td><td>{w.estado==="CERRADA"?count(w.finalized):"—"}</td>
-            <td>{w.estado==="CERRADA"?count(w.pending):"—"}</td><td>{w.estado==="CERRADA"?count(w.not_found):"—"}</td>
-            <td>{count(w.origin_backlog)}</td><td>{hh(w.hh_programmed)}</td>
-            <td>{w.estado==="CERRADA"?hh(w.hh_finalized):"—"}</td>
-            <td>{pct(w.progress_ot_pct)}</td><td>{pct(w.progress_hh_pct)}</td>
-            <td><button type="button" disabled={!!downloading}
-              onClick={()=>showReport(w.programming_id)}>
-              {downloading===String(w.programming_id)?"Generando...":"PDF semanal"}
-            </button>{" "}
-            <a href={getV2ProgressPdfUrl(year,month,w.programming_id)}
-              target="_blank" rel="noopener noreferrer"
-              title="Abrir el PDF directamente en el navegador">Abrir PDF</a></td>
-          </tr>)}</tbody>
-        </table></div>
-      </>}
+          </details>
+        </>
+      }
     </section>
     {full&&<section className="v2-panel">
       <div className="v2-section-head"><div><span className="v2-kicker">CONSOLIDADO MENSUAL</span>
