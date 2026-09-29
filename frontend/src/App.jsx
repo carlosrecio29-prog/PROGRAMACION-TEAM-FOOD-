@@ -20,6 +20,7 @@ import MaintenanceBaseUpload from "./components/MaintenanceBaseUpload";
 import TechnicianSchedule from "./components/TechnicianSchedule";
 import AccumulatedBacklog from "./components/AccumulatedBacklog";
 import OperationExclusions from "./components/OperationExclusions";
+import MonthlyClose from "./components/MonthlyClose";
 import AppShell from "./app/AppShell";
 import { navigationIds } from "./app/navigation";
 import Badge from "./shared/Badge";
@@ -101,7 +102,7 @@ function Summary({ data, onNavigate, year, month }) {
     { id: "advanceStops", title: "Preparar paradas", text: "Revisar actividades con equipo detenido", icon: "calendar" },
     { id: "programming", title: "Programación semanal", text: "Seleccionar y guardar actividades", icon: "tools" },
     { id: "closure", title: "Cierre semanal", text: "Conciliar OT contra el calendario", icon: "check" },
-    { id: "monthly", title: "Informe mensual", text: "Ver cumplimiento y descargar informe", icon: "report" },
+    { id: "monthly", title: "Cierre mensual", text: "Validar, consolidar y formalizar el cierre del mes", icon: "report" },
     { id: "imports", title: "Cargar Excel", text: "Actualizar archivos del período", icon: "calendar" },
   ];
   return (
@@ -1635,7 +1636,7 @@ export default function App() {
         {view === "programming" && (
           <WeeklyProgramming year={year} month={month} dashboard={dashboard} />
         )}{" "}
-        {view === "monthly" && <ProgressDashboard year={year} month={month} full />}
+        {view === "monthly" && <MonthlyClose year={year} month={month} />}
         {view === "closure" && <WeeklyClosure year={year} month={month} onOpenBacklog={(orderId) => { setBacklogOrderId(orderId); navigate("backlog"); }} />}{" "}
         {view === "backlog" && <AccumulatedBacklog areas={dashboard?.areas || []} initialOrderId={backlogOrderId} onClearOrder={() => setBacklogOrderId("")} />}{" "}
         {view === "operationExclusions" && (
