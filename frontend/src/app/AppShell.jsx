@@ -148,6 +148,7 @@ export default function AppShell({
   )?.label || "";
   const [openGroup, setOpenGroup] = useState(activeGroup);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [hoverGroup, setHoverGroup] = useState("");
 
   useEffect(() => {
     if (activeGroup) setOpenGroup(activeGroup);
@@ -205,15 +206,25 @@ export default function AppShell({
             }
 
             return (
-              <div className={`tf-side-section ${hasActiveItem ? "has-active" : ""}`} key={group.label}>
+              <div
+                className={`tf-side-section ${hasActiveItem ? "has-active" : ""}`}
+                key={group.label}
+                onMouseEnter={() => {
+                  if (!sidebarOpen) setHoverGroup(group.label);
+                }}
+                onMouseLeave={() => {
+                  if (!sidebarOpen) setHoverGroup("");
+                }}
+              >
                 <button
                   type="button"
                   className={`tf-side-root tf-side-group ${hasActiveItem ? "is-active" : ""}`}
-                  aria-expanded={isOpen}
+                  aria-expanded={sidebarOpen ? isOpen : hoverGroup === group.label}
                   title={!sidebarOpen ? group.label : undefined}
                   onClick={() => {
                     if (!sidebarOpen) {
                       setSidebarOpen(true);
+                      setHoverGroup("");
                       setOpenGroup(group.label);
                       return;
                     }
@@ -224,6 +235,35 @@ export default function AppShell({
                   <span className="tf-side-label">{group.label}</span>
                   <span className={`tf-side-chevron ${isOpen ? "is-open" : ""}`} aria-hidden="true">›</span>
                 </button>
+
+                {!sidebarOpen && hoverGroup === group.label && (
+                  <div className="tf-side-flyout" role="menu" aria-label={group.label}>
+                    <div className="tf-side-flyout-head">
+                      <span className="tf-side-flyout-icon"><SidebarIcon type={group.label} /></span>
+                      <b>{group.label}</b>
+                    </div>
+                    <div className="tf-side-flyout-items">
+                      {group.items.map((item) => (
+                        <button
+                          type="button"
+                          key={item.id}
+                          className={`tf-side-flyout-item ${view === item.id ? "is-active" : ""}`}
+                          role="menuitem"
+                          onClick={() => {
+                            onNavigate(item.id);
+                            setHoverGroup("");
+                          }}
+                        >
+                          <span className="tf-side-flyout-item-icon"><SubmenuIcon id={item.id} /></span>
+                          <span>{item.label}</span>
+                          {item.indicator && Number(indicators[item.indicator]) > 0 && (
+                            <i>{indicators[item.indicator]}</i>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {sidebarOpen && isOpen && (
                   <div className="tf-side-submenu">
