@@ -77,6 +77,14 @@ function SubmenuIcon({ id }) {
     );
   }
 
+  if (id === "operationExclusions") {
+    return (
+      <svg {...common}>
+        <path d="M4 3h16v18H4V3Zm2 2v14h12V5H6Zm2 4h8v2H8V9Zm0 4h5v2H8v-2Zm7.6 1.2 1.4 1.4-4.6 4.6-2.4-2.4 1.4-1.4 1 1 3.2-3.2Z" />
+      </svg>
+    );
+  }
+
   if (id === "closure") {
     return (
       <svg {...common}>
