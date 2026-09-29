@@ -918,3 +918,147 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
     align-items:flex-start;
   }
 }
+
+
+/* === PROGRAMACIÓN MENSUAL DE TÉCNICOS === */
+.technician-planning{gap:14px}
+.technician-planning-head{position:relative}
+.technician-planning-actions{
+  display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:12px
+}
+.technician-planning-actions>button:not(.v2-primary),
+.technician-excel-actions button{
+  border:1px solid var(--line);background:#fff;color:#294056;border-radius:8px;
+  padding:9px 12px;font-size:9px;font-weight:850
+}
+.technician-planning-actions>button:hover:not(:disabled),
+.technician-excel-actions button:hover:not(:disabled){background:#f3f7fa;border-color:#b9cad9}
+.technician-planning-actions button:disabled,
+.technician-excel-actions button:disabled{opacity:.5;cursor:not-allowed}
+
+.technician-capacity-summary{overflow:hidden}
+.technician-capacity-grid{
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px
+}
+.technician-capacity-grid>article{
+  border:1px solid var(--line);border-radius:11px;background:#f9fbfd;padding:11px
+}
+.technician-capacity-grid dl{margin:10px 0 0;display:grid;gap:5px}
+.technician-capacity-grid dl>div{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  border-top:1px solid #e7edf2;padding-top:5px
+}
+.technician-capacity-grid dt{font-size:7.5px;color:#697b8d;font-weight:800}
+.technician-capacity-grid dd{margin:0;font-size:11px;font-weight:900;color:#1e3852}
+.technician-capacity-grid .preventive dd{color:#176c9d}
+.technician-capacity-grid .corrective dd{color:#9a6421}
+
+.technician-grid-title{align-items:flex-end}
+.technician-grid-help{
+  flex:0 0 auto;color:#6e8296;font-size:8px;font-weight:800;
+  background:#f2f6f9;border:1px solid #dde6ee;border-radius:999px;padding:6px 9px
+}
+.technician-grid-wrap{
+  overflow:auto;max-width:100%;max-height:680px;
+  border:1px solid #d9e2ea;border-radius:11px;background:#fff
+}
+.technician-grid{
+  border-collapse:separate;border-spacing:0;min-width:2100px;width:max-content;
+  font-size:9px
+}
+.technician-grid th,.technician-grid td{
+  border-right:1px solid #e4e9ee;border-bottom:1px solid #e7ecf1;
+  padding:0;text-align:center;background:#fff
+}
+.technician-grid thead th{
+  position:sticky;top:0;z-index:8;height:46px;min-width:48px;
+  background:#eef4f8;color:#324a61;padding:4px 3px
+}
+.technician-grid thead th>span{
+  display:block;font-size:7px;color:#718498;font-weight:850;line-height:1
+}
+.technician-grid thead th>b{
+  display:block;margin-top:4px;font-size:10px;color:#213b55
+}
+.technician-grid thead th.saturday{background:#e5eef5}
+.technician-grid thead th.sunday{background:#15283d;color:#fff}
+.technician-grid thead th.sunday>span,.technician-grid thead th.sunday>b{color:#fff}
+
+.technician-grid .sticky-col{position:sticky;z-index:7;text-align:left}
+.technician-grid thead .sticky-col{z-index:12}
+.technician-grid .tech-col{
+  left:0;min-width:188px;width:188px;padding:7px 9px;background:#fff
+}
+.technician-grid .specialty-col{
+  left:188px;min-width:58px;width:58px;padding:6px;background:#f8fafc;text-align:center
+}
+.technician-grid thead .tech-col,.technician-grid thead .specialty-col{
+  background:#dfeaf3
+}
+.technician-grid .tech-col b{
+  display:block;font-size:8.5px;color:#1c334b;white-space:nowrap
+}
+.technician-grid .tech-col small{
+  display:block;margin-top:2px;font-size:7px;color:#8896a5
+}
+.tech-specialty{
+  display:inline-grid;place-items:center;min-width:34px;height:25px;border-radius:7px;
+  background:#e7f0f7;color:#27628d;font-size:7.5px;font-weight:950
+}
+.tech-specialty.missing{background:#fff1d6;color:#9b6b1e}
+
+.shift-cell{min-width:48px;width:48px;height:38px;background:#fff!important}
+.shift-cell.sunday{background:#f5f6f8!important}
+.shift-cell select{
+  appearance:none;-webkit-appearance:none;
+  width:100%;height:37px;border:0!important;border-radius:0!important;padding:0 2px!important;
+  text-align:center;text-align-last:center;background:transparent!important;
+  box-shadow:none!important;font-size:8px!important;font-weight:900!important;color:#223a52!important;
+  cursor:pointer
+}
+.shift-cell.t1{background:#dcefd9!important}
+.shift-cell.t2{background:#e3def4!important}
+.shift-cell.t3{background:#f8e2ca!important}
+.shift-cell.t12{background:#ec7a64!important}
+.shift-cell.t37{background:#fff260!important}
+.shift-cell.t56{background:#63dade!important}
+.shift-cell.absence{background:#eceff2!important}
+.shift-cell.t12 select{color:#532315!important}
+.shift-cell.t37 select{color:#594d00!important}
+.shift-cell.t56 select{color:#064f54!important}
+
+.technician-grid .month-total{
+  min-width:70px;width:70px;padding:6px;background:#f3f7fa!important;
+  position:sticky;right:0;z-index:6
+}
+.technician-grid thead .month-total{z-index:11;background:#dfeaf3!important}
+.technician-grid .month-total b{font-size:9px;color:#1f4f72}
+
+.technician-specialty-list{display:grid;gap:7px}
+.technician-specialty-list>div{
+  display:grid;grid-template-columns:minmax(180px,1fr) 180px auto;align-items:center;gap:9px;
+  padding:8px 10px;border:1px solid #e1e7ed;border-radius:9px;background:#fbfcfd
+}
+.technician-specialty-list span>b{display:block;font-size:9px}
+.technician-specialty-list span>small{display:block;font-size:7.5px;color:var(--muted);margin-top:2px}
+
+.technician-excel-backup{
+  display:flex;align-items:center;justify-content:space-between;gap:20px
+}
+.technician-excel-backup h3{margin:4px 0 4px;font-size:15px}
+.technician-excel-backup p{margin:0;color:var(--muted);font-size:9px;max-width:760px;line-height:1.45}
+.technician-excel-actions{display:flex;align-items:center;gap:8px;flex:0 0 auto}
+.technician-excel-actions input{max-width:240px}
+
+@media(max-width:1150px){
+  .technician-capacity-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .technician-excel-backup{align-items:flex-start;flex-direction:column}
+  .technician-excel-actions{width:100%;flex-wrap:wrap}
+}
+@media(max-width:700px){
+  .technician-capacity-grid{grid-template-columns:1fr}
+  .technician-grid-help{display:none}
+  .technician-specialty-list>div{grid-template-columns:1fr}
+  .technician-grid .tech-col{min-width:155px;width:155px}
+  .technician-grid .specialty-col{left:155px}
+}
