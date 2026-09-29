@@ -19,6 +19,7 @@ import WeeklyProgramming from "./components/WeeklyProgramming";
 import MaintenanceBaseUpload from "./components/MaintenanceBaseUpload";
 import TechnicianSchedule from "./components/TechnicianSchedule";
 import AccumulatedBacklog from "./components/AccumulatedBacklog";
+import OperationExclusions from "./components/OperationExclusions";
 import AppShell from "./app/AppShell";
 import { navigationIds } from "./app/navigation";
 import Badge from "./shared/Badge";
@@ -1598,6 +1599,9 @@ export default function App() {
         {view === "monthly" && <ProgressDashboard year={year} month={month} full />}
         {view === "closure" && <WeeklyClosure year={year} month={month} onOpenBacklog={(orderId) => { setBacklogOrderId(orderId); navigate("backlog"); }} />}{" "}
         {view === "backlog" && <AccumulatedBacklog areas={dashboard?.areas || []} initialOrderId={backlogOrderId} onClearOrder={() => setBacklogOrderId("")} />}{" "}
+        {view === "operationExclusions" && (
+          <OperationExclusions year={year} month={month} />
+        )}{" "}
         {view === "pmp" && (
           <Pmp year={year} month={month} dashboard={dashboard} />
         )}{" "}
