@@ -1237,3 +1237,68 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
   .operation-exclusion-kpis{grid-template-columns:1fr}
   .operation-exclusion-filters{grid-template-columns:1fr}
 }
+
+
+/* Detalle fila a fila de actividades OPERACIÓN excluidas */
+.operation-detail-badges{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:6px;
+  flex-wrap:wrap;
+}
+.operation-detail-table table{min-width:1500px}
+.operation-detail-table td{
+  vertical-align:top;
+  line-height:1.35;
+}
+.operation-detail-table td:nth-child(3){
+  min-width:170px;
+}
+.operation-detail-table td:nth-child(4){
+  min-width:260px;
+}
+.operation-detail-table td:nth-child(5){
+  min-width:390px;
+}
+.operation-detail-table td:nth-child(6){
+  min-width:250px;
+}
+.operation-equipment-code,
+.operation-ot{
+  display:block;
+  color:#193c59;
+  white-space:nowrap;
+}
+.operation-catalog-details>summary{
+  cursor:pointer;
+  list-style:none;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+}
+.operation-catalog-details>summary::-webkit-details-marker{display:none}
+.operation-catalog-details>summary span{
+  display:grid;
+  gap:3px;
+}
+.operation-catalog-details>summary b{
+  font-size:11px;
+  color:#24425d;
+}
+.operation-catalog-details>summary small{
+  font-size:8px;
+  color:#7a8b9b;
+}
+.operation-catalog-details>summary::after{
+  content:"›";
+  font-size:20px;
+  line-height:1;
+  color:#6f8294;
+  transform:rotate(90deg);
+  transition:transform .18s ease;
+}
+.operation-catalog-details[open]>summary::after{
+  transform:rotate(-90deg);
+}
