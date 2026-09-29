@@ -24,14 +24,15 @@ def test_operation_prefix_does_not_match_elsewhere_or_as_word_part():
 def test_v2_reader_uses_operation_master_flag():
     source = (ROOT / "backend/services/v2_maintenance_import_service.py").read_text()
     assert "pmp_excluidos_operacion" in source
-    assert 'if normalize_text(row["plan_clave_software"]) in excluded_plan_keys' in source
+    assert 'is_operation_plan(row["plan_clave_software"])' in source
+    assert "excluded_plan_keys" in source
     assert "es_operacion=EXCLUDED.es_operacion" in source
 
 
 def test_monthly_import_never_deletes_existing_programming():
     source = (ROOT / "backend/services/v2_monthly_calendar_import.py").read_text()
     assert "ON CONFLICT(source_key) DO UPDATE" in source
-    assert "DELETE FROM" not in source
+    assert "DELETE FROM programacion.orden_mantenimiento" not in source
     assert "TRUNCATE" not in source
 
 
@@ -102,3 +103,15 @@ def test_monthly_plan_does_not_guess_ambiguous_description():
     plan, match_type = _resolve_plan("90-RUTINA SEMANAL", primary, descriptions)
     assert plan is None
     assert match_type == "DESCRIPCION_AMBIGUA"
+
+
+def test_plan_parser_classifies_operation_from_description_too():
+    source = (ROOT / "backend/services/v2_import_service.py").read_text()
+    assert "is_operation_plan(plan) or is_operation_plan(description)" in source
+
+
+def test_monthly_import_persists_equipment_level_operation_exclusions():
+    source = (ROOT / "backend/services/v2_monthly_calendar_import.py").read_text()
+    assert "operacion_exclusion_detalle_v2" in source
+    assert '"activo_codigo": _scalar(row.get("activo_codigo"))' in source
+    assert '"fila_origen": int(row["fila_origen"])' in source
