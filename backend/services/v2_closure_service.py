@@ -64,12 +64,10 @@ def _index_calendar(calendar_rows: list[dict[str, str]]):
         ot = normalize_text(row["numero_ot"])
         asset = normalize_text(row["activo"])
         plan = normalize_text(row["plan"])
-        if asset and plan:
-            # Las filas sin OT también se indexan por EQUIPO + PLAN.
-            # Se usa una clave OT vacía para no alterar la estructura existente.
-            exact[(ot if ot and ot != "SIN ASIGNAR" else "", asset, plan)].append(row)
         if ot and ot != "SIN ASIGNAR":
             by_ot[ot].append(row)
+            if asset and plan:
+                exact[(ot, asset, plan)].append(row)
     return exact, by_ot
 
 
@@ -77,19 +75,8 @@ def _match_calendar_item(item, exact, by_ot):
     ot = normalize_text(item.get("numero_ot"))
     asset = normalize_text(item.get("activo_codigo"))
     plan = normalize_text(item.get("plan_clave_software"))
-    specialty = normalize_text(item.get("especialidad"))
-
     if not ot or ot == "SIN ASIGNAR":
-        # Metrología queda explícitamente fuera de esta regla por ahora.
-        # MEC/ELE/SER sí pueden cerrarse por coincidencia exacta EQUIPO + PLAN.
-        if specialty == "MET":
-            return None, "SIN_NUMERO_OT"
-        candidates = exact.get(("", asset, plan), [])
-        if len(candidates) == 1:
-            return candidates[0], "EQUIPO_PLAN_SIN_OT"
-        if len(candidates) > 1:
-            return None, "EQUIPO_PLAN_AMBIGUO_SIN_OT"
-        return None, "NO_ENCONTRADA_SIN_OT"
+        return None, "SIN_NUMERO_OT"
 
     candidates = exact.get((ot, asset, plan), [])
     if len(candidates) == 1:
@@ -123,8 +110,8 @@ def preview_week_closure(*, programming_id: int, content: bytes) -> dict[str, An
         if not header:
             raise V2ClosureError("Programación semanal no encontrada")
         items = conn.execute(text("""
-            SELECT o.numero_ot,o.especialidad,a.codigo AS activo_codigo,o.plan_clave_software,
-                   pi.hh_programadas
+            SELECT pi.id AS item_id,pi.orden_mantenimiento_id,o.numero_ot,o.especialidad,
+                   a.codigo AS activo_codigo,o.plan_clave_software,pi.hh_programadas
             FROM programacion.programacion_item_v2 pi
             JOIN programacion.orden_mantenimiento o ON o.id=pi.orden_mantenimiento_id
             JOIN programacion.activo a ON a.id=o.activo_id
@@ -158,6 +145,8 @@ def preview_week_closure(*, programming_id: int, content: bytes) -> dict[str, An
             else:
                 summary["conflicts"] += 1
         rows.append({
+            "programacion_item_id": int(item["item_id"]),
+            "orden_mantenimiento_id": int(item["orden_mantenimiento_id"]),
             "numero_ot": item["numero_ot"], "activo": item["activo_codigo"],
             "plan": item["plan_clave_software"], "hh": hh,
             "estado_excel": state or ("SIN ESTADO" if match else None),
@@ -244,10 +233,36 @@ def close_week_from_calendar(
     content: bytes,
     filename: str,
     closed_by: str | None = None,
+    manual_resolutions: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     calendar_rows = _parse_calendar(content)
 
     exact, by_ot = _index_calendar(calendar_rows)
+
+    resolution_map: dict[int, dict[str, Any]] = {}
+    for raw in manual_resolutions or []:
+        try:
+            order_id = int(raw.get("orden_mantenimiento_id"))
+        except (TypeError, ValueError):
+            raise V2ClosureError("Resolución manual inválida: falta el identificador de la actividad.")
+        if order_id in resolution_map:
+            raise V2ClosureError(f"La actividad {order_id} tiene más de una resolución manual.")
+        assigned_ot = _scalar(raw.get("numero_ot"))
+        manual_state = normalize_text(raw.get("estado_manual"))
+        if assigned_ot and manual_state:
+            raise V2ClosureError(
+                "Para una actividad sin OT usa solo una opción: asignar OT o definir el estado manual."
+            )
+        if manual_state and manual_state not in {"FINALIZADA", "PENDIENTE"}:
+            raise V2ClosureError(
+                "El estado manual de una actividad sin OT solo puede ser FINALIZADA o PENDIENTE."
+            )
+        if not assigned_ot and not manual_state:
+            continue
+        resolution_map[order_id] = {
+            "numero_ot": assigned_ot or None,
+            "estado_manual": manual_state or None,
+        }
 
     with get_engine().begin() as conn:
         programming = conn.execute(text("""
@@ -278,11 +293,62 @@ def close_week_from_calendar(
         not_found_ids: list[int] = []
 
         for item in items:
-            matched, match_reason = _match_calendar_item(item, exact, by_ot)
+            original_ot = normalize_text(item.get("numero_ot"))
+            manual_state = None
+            assigned_ot = None
+
+            if not original_ot or original_ot == "SIN ASIGNAR":
+                resolution = resolution_map.get(int(item["orden_mantenimiento_id"]))
+                if not resolution:
+                    raise V2ClosureError(
+                        f"Actividad sin OT · {item['activo_codigo']} · {item['plan_clave_software']}: "
+                        "debes asignar una OT o definir manualmente si quedó FINALIZADA o PENDIENTE."
+                    )
+
+                assigned_ot = resolution.get("numero_ot")
+                manual_state = resolution.get("estado_manual")
+
+                if assigned_ot:
+                    duplicate = conn.execute(text("""
+                        SELECT id
+                        FROM programacion.orden_mantenimiento
+                        WHERE id<>:order_id
+                          AND numero_ot IS NOT NULL
+                          AND upper(btrim(numero_ot))=upper(btrim(:numero_ot))
+                        LIMIT 1
+                    """), {
+                        "order_id": item["orden_mantenimiento_id"],
+                        "numero_ot": assigned_ot,
+                    }).first()
+                    if duplicate:
+                        raise V2ClosureError(
+                            f"La OT {assigned_ot} ya está asociada a otra actividad en la base."
+                        )
+                    lookup_item = {**item, "numero_ot": assigned_ot}
+                    matched, match_reason = _match_calendar_item(lookup_item, exact, by_ot)
+                    if matched is None:
+                        raise V2ClosureError(
+                            f"La OT {assigned_ot} indicada para {item['activo_codigo']} no pudo validarse "
+                            f"contra el Excel de cierre ({match_reason})."
+                        )
+                    conn.execute(text("""
+                        UPDATE programacion.orden_mantenimiento
+                        SET numero_ot=:numero_ot,actualizado_en=now()
+                        WHERE id=:order_id
+                    """), {
+                        "numero_ot": assigned_ot,
+                        "order_id": item["orden_mantenimiento_id"],
+                    })
+                    item["numero_ot"] = assigned_ot
+                else:
+                    matched = {"estado": manual_state}
+                    match_reason = "ESTADO_MANUAL_SIN_OT"
+            else:
+                matched, match_reason = _match_calendar_item(item, exact, by_ot)
+
             if match_reason in {
                 "EQUIPO_NO_COINCIDE", "PLAN_NO_COINCIDE",
                 "DUPLICADA_EN_CALENDARIO", "OT_AMBIGUA_EN_CALENDARIO",
-                "EQUIPO_PLAN_AMBIGUO_SIN_OT",
             }:
                 raise V2ClosureError(
                     f"{'OT ' + str(item['numero_ot']) if item.get('numero_ot') else 'Actividad sin OT'}: {match_reason}. "
@@ -306,11 +372,16 @@ def close_week_from_calendar(
                     "El archivo no permite decidir entre FINALIZADA o PENDIENTE."
                 )
             finalized = _is_finalized(state)
+            closure_source = (
+                f"{filename} · RESOLUCIÓN MANUAL"
+                if match_reason == "ESTADO_MANUAL_SIN_OT"
+                else filename
+            )
             conn.execute(text("""
                 UPDATE programacion.programacion_item_v2
                 SET estado_cierre=:state,finalizado=:finalized,verificado_en=now(),cierre_fuente=:filename
                 WHERE id=:item_id
-            """), {"state": state, "finalized": finalized, "filename": filename, "item_id": item["item_id"]})
+            """), {"state": state, "finalized": finalized, "filename": closure_source, "item_id": item["item_id"]})
             conn.execute(text("""
                 UPDATE programacion.orden_mantenimiento
                 SET estado=:state,actualizado_en=now()
