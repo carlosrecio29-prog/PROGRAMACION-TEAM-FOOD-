@@ -343,11 +343,15 @@ export async function uploadV2WeekClosure(
   programmingId,
   file,
   closedBy = "",
+  manualResolutions = [],
 ) {
   const qs = new URLSearchParams();
   if (closedBy) qs.set("closed_by", closedBy);
   const form = new FormData();
   form.append("file", file);
+  if (manualResolutions.length) {
+    form.append("manual_resolutions", JSON.stringify(manualResolutions));
+  }
   return check(
     await fetch(`/api/v2/programming/${programmingId}/close-file${qs.size ? `?${qs}` : ""}`, {
       method: "POST",
