@@ -1784,7 +1784,7 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
 
 /* === AJUSTE FINAL · ENCABEZADOS DE MÓDULO ALINEADOS A LA IZQUIERDA === */
 .v2-module-topbar{
-  padding-left:10px!important;
+  padding-left:4px!important;
 }
 .v2-module-topbar-copy{
   margin:0!important;
@@ -1807,11 +1807,11 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
 }
 @media(max-width:900px){
   .v2-module-topbar{
-    padding-left:9px!important;
+    padding-left:4px!important;
   }
 }
 @media(max-width:650px){
   .v2-module-topbar{
-    padding-left:8px!important;
+    padding-left:4px!important;
   }
 }
