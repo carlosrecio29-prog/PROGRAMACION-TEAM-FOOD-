@@ -358,10 +358,10 @@ export default function AppShell({
         ) : (
           <header className="v2-topbar v2-module-topbar">
             <div className="v2-module-topbar-copy">
-              <span className="v2-kicker">PLANTA BARRANQUILLA</span>
               <div className="v2-topbar-heading has-icon">
                 <span className="v2-topbar-view-icon"><SubmenuIcon id={view} /></span>
                 <div className="v2-topbar-title-copy">
+                  <span className="v2-kicker">PLANTA BARRANQUILLA</span>
                   <h1>{title}</h1>
                   <p>{description}</p>
                 </div>
