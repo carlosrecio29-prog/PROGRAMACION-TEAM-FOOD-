@@ -86,7 +86,7 @@ function ControlIcon({ type }) {
   return <svg {...common}><path d="M8 8h32v32H8z" /></svg>;
 }
 
-function Summary({ data, onNavigate, year, month, onGoMonthly }) {
+function Summary({ data, onNavigate, year, month }) {
   const s = data?.summary || {};
   const p = data?.pending || {};
   const ready = number(s.registros_listos);
@@ -191,6 +191,36 @@ function Summary({ data, onNavigate, year, month, onGoMonthly }) {
 
       </section>
 
+      <button
+        type="button"
+        className="v2-analysis-entry"
+        onClick={() => onNavigate("indicators")}
+      >
+        <span className="v2-analysis-entry-icon"><ControlIcon type="report" /></span>
+        <span className="v2-analysis-entry-copy">
+          <b>Indicadores y seguimiento</b>
+          <small>Seguimiento del período · Tendencia semanal · Exportación · Por especialidad · Calidad de datos</small>
+        </span>
+        <span className="v2-analysis-entry-arrow">→</span>
+      </button>
+    </div>
+  );
+}
+
+
+function IndicatorsTracking({ data, year, month, onGoMonthly }) {
+  const s = data?.summary || {};
+  return (
+    <div className="v2-stack v2-indicators-view">
+      <section className="v2-analysis-hero">
+        <div>
+          <span className="v2-kicker">ANÁLISIS DEL PERÍODO</span>
+          <h2>Indicadores y seguimiento</h2>
+          <p>Consolidado de avance, tendencia semanal, exportación, especialidades y calidad de datos del mantenimiento.</p>
+        </div>
+        <span className="v2-analysis-period">{MONTHS[month - 1]} {year}</span>
+      </section>
+
       <ProgressDashboard year={year} month={month} onOpenMonthly={onGoMonthly} />
 
       <section className="v2-panel">
@@ -219,7 +249,7 @@ function Summary({ data, onNavigate, year, month, onGoMonthly }) {
         <div className="v2-section-head">
           <div>
             <span className="v2-kicker">CALIDAD DE DATOS</span>
-            <h3>Qué falta antes de programar</h3>
+            <h3>Estado de preparación de la información</h3>
           </div>
         </div>
         <div className="v2-quality-grid">
@@ -1552,7 +1582,10 @@ export default function App() {
     >
         {error && <div className="v2-error">{error}</div>}
         {view === "summary" && (
-          <Summary data={dashboard} year={year} month={month} onNavigate={navigate} onGoMonthly={() => navigate("monthly")} />
+          <Summary data={dashboard} year={year} month={month} onNavigate={navigate} />
+        )}{" "}
+        {view === "indicators" && (
+          <IndicatorsTracking data={dashboard} year={year} month={month} onGoMonthly={() => navigate("monthly")} />
         )}{" "}
         {view === "pending" && (
           <PendingPlans year={year} month={month} onChanged={refresh} />
