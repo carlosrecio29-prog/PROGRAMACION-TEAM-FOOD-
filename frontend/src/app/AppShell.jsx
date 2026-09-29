@@ -101,6 +101,14 @@ function SubmenuIcon({ id }) {
     );
   }
 
+  if (id === "indicators") {
+    return (
+      <svg {...common}>
+        <path d="M3 21h19v-2H5V3H3v18Zm4-4h3v-6H7v6Zm5 0h3V7h-3v10Zm5 0h3V4h-3v13Z" />
+      </svg>
+    );
+  }
+
   if (id === "backlog") {
     return (
       <svg {...common}>
@@ -351,7 +359,12 @@ export default function AppShell({
           <header className="v2-topbar">
             <div>
               <span className="v2-kicker">PLANTA BARRANQUILLA</span>
-              <h1>{title}</h1>
+              <div className={`v2-topbar-heading ${view === "indicators" ? "has-icon" : ""}`}>
+                {view === "indicators" && (
+                  <span className="v2-topbar-view-icon"><SubmenuIcon id="indicators" /></span>
+                )}
+                <h1>{title}</h1>
+              </div>
               <p>{description}</p>
             </div>
             <div className="v2-top-actions">
