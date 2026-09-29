@@ -3,25 +3,9 @@ import MaintenanceBaseUpload from "../components/MaintenanceBaseUpload";
 import PendingDataIndicators from "../components/PendingDataIndicators";
 import ShiftSettings from "../components/ShiftSettings";
 import companyLogo from "../assets/cekLogoData";
+import alianzaTeamLogo from "../assets/alianzaTeamLogoData";
 import "../admin-improvements.css";
 import { MONTHS, NAV_GROUPS, VIEW_META } from "./navigation";
-
-function TeamFoodsMark() {
-  return (
-    <div className="v2-team-mark" aria-label="Team Foods">
-      <svg viewBox="0 0 52 52" aria-hidden="true">
-        <path className="drop-a" d="M26 4c7 7 11 12 11 18a11 11 0 1 1-22 0c0-6 4-11 11-18Z" />
-        <path className="drop-b" d="M44 20c1 10-1 17-6 21a10 10 0 0 1-13-15c4-4 10-5 19-6Z" />
-        <path className="drop-c" d="M8 20c9 1 15 2 19 6a10 10 0 0 1-13 15c-5-4-7-11-6-21Z" />
-      </svg>
-      <span>
-        <small>ALIANZA</small>
-        <b>TEAM</b>
-      </span>
-    </div>
-  );
-}
-
 
 export default function AppShell({
   view,
@@ -122,7 +106,7 @@ export default function AppShell({
         {view === "summary" ? (
           <header className="v2-dashboard-header">
             <div className="v2-dashboard-brand">
-              <TeamFoodsMark />
+              <img className="v2-dashboard-logo" src={alianzaTeamLogo} alt="Alianza Team" />
               <div className="v2-dashboard-title">
                 <span>OPERACIÓN DE MANTENIMIENTO</span>
                 <h1>Panel de control</h1>
