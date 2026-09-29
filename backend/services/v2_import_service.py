@@ -297,17 +297,41 @@ def _parse_technicians(content:bytes,*,year:int,month:int)->tuple[list[dict[str,
     turn_ws=_sheet_by_name(wb,"informacion de turno")
     hours_by_turn={}
     if turn_ws:
-        for row in turn_ws.iter_rows(values_only=True):
-            text_value=" ".join(str(v).strip() for v in row if v not in (None,""))
-            if not text_value:
-                continue
-            m=re.search(r"\b(TA|T-?\d+)\b",normalize_text(text_value))
-            if not m:
-                continue
-            code=_normalize_turn_code(m.group(1))
-            hours=_duration_hours(text_value)
-            if hours is not None:
-                hours_by_turn[code]=hours
+        # Formato estándar: CODIGO | DESCRIPCION | HORAS DISPONIBLES.
+        # Conserva compatibilidad con el formato histórico de texto libre.
+        turn_header=header_mapping(turn_ws,1)
+        has_structured_turns=any(
+            normalize_text(h) in {"CODIGO","CÓDIGO","TURNO"}
+            for h in turn_header
+        )
+        if has_structured_turns:
+            for row in turn_ws.iter_rows(min_row=2,values_only=True):
+                raw_code=_scalar(cell_by_header(row,turn_header,"CODIGO","CÓDIGO","TURNO"))
+                if not raw_code:
+                    continue
+                code=_normalize_turn_code(raw_code)
+                raw_hours=cell_by_header(
+                    row,turn_header,
+                    "HORAS DISPONIBLES","HORAS","HH","DURACION","DURACIÓN",
+                )
+                try:
+                    hours=float(str(raw_hours).strip().replace(",","."))
+                except (TypeError,ValueError):
+                    hours=None
+                if hours is not None:
+                    hours_by_turn[code]=hours
+        else:
+            for row in turn_ws.iter_rows(values_only=True):
+                text_value=" ".join(str(v).strip() for v in row if v not in (None,""))
+                if not text_value:
+                    continue
+                m=re.search(r"\b(TA|T-?\d+)\b",normalize_text(text_value))
+                if not m:
+                    continue
+                code=_normalize_turn_code(m.group(1))
+                hours=_duration_hours(text_value)
+                if hours is not None:
+                    hours_by_turn[code]=hours
 
     roster_ws=_sheet_by_name(wb,"programacion de tecnicos")
     if roster_ws is None:
