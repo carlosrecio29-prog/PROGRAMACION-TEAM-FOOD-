@@ -11,7 +11,7 @@ export const VIEW_META = {
   pmp: ["PMP del mes", "Cartera preventiva exportada desde el software de mantenimiento."],
   operationExclusions: ["Actividades excluidas", "Consulta los planes y registros retirados del PMP por corresponder a OPERACIÓN."],
   closure: ["Cierre semanal", "Reconcilia la programación contra el estado verificado del software."],
-  monthly: ["Cierre mensual", "Avance, cumplimiento, pendientes e informe consolidado del mes."],
+  monthly: ["Cierre mensual", "Valida semanas, consolida resultados, gestiona pendientes y formaliza el cierre del período."],
   backlog: ["Backlog acumulado", "OT pendientes conservadas hasta confirmar su finalización."],
   pending: ["Completar datos", "Completa sólo los datos que faltan en los planes del periodo."],
   technicians: ["Programación de técnicos", "Programa turnos, ausencias y disponibilidad mensual del personal."],
@@ -29,7 +29,7 @@ export const NAV_GROUPS = [
   ] },
   { label: "Cierre", items: [
     { id: "closure", label: "Cierre semanal", code: "CI" },
-    { id: "monthly", label: "Informe mensual", code: "IM" },
+    { id: "monthly", label: "Cierre mensual", code: "CM" },
   ] },
   { label: "Backlog", items: [{ id: "backlog", label: "Seguimiento acumulado", code: "BL" }] },
   { label: "Administración", items: [
