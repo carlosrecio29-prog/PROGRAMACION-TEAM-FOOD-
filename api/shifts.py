@@ -8,7 +8,7 @@ from typing import Optional
 from sqlalchemy import text
 
 from backend.database import get_engine
-from backend.services.v2_programming_service import capacity_split
+from backend.services.v2_programming_service import capacity_split, refresh_open_program_capacities
 
 app = FastAPI(title="Programación Team Food · Turnos")
 
@@ -115,8 +115,14 @@ def update_shift_hours(shift_code: str, body: ShiftHoursUpdate):
             ),
             params,
         ).rowcount or 0
+        programs_refreshed = refresh_open_program_capacities(conn)
 
-    return {"ok": True, "shift": dict(row), "schedule_rows_updated": int(affected)}
+    return {
+        "ok": True,
+        "shift": dict(row),
+        "schedule_rows_updated": int(affected),
+        "programs_refreshed": int(programs_refreshed),
+    }
 
 
 @app.get("/api/v2/technician-schedule")
@@ -275,9 +281,12 @@ def update_technician_schedule(body: TechnicianScheduleUpdate):
             })
             updated += 1
 
+        programs_refreshed = refresh_open_program_capacities(conn)
+
     return {
         "ok": True,
         "updated": updated,
         "cleared": cleared,
         "processed": len(body.changes),
+        "programs_refreshed": int(programs_refreshed),
     }
