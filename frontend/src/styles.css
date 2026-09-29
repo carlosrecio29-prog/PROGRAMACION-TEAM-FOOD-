@@ -667,7 +667,18 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
   font-size:8px!important;font-weight:950!important;
   letter-spacing:.2px!important;
 }
-.tf-side-subitem.is-active .tf-side-code{
+.tf-side-subicon{
+  all:unset;
+  width:34px!important;height:28px!important;
+  display:grid!important;place-items:center!important;
+  border-radius:8px!important;
+  background:#163a57!important;color:#7fabcf!important;
+}
+.tf-side-subicon svg{
+  width:17px!important;height:17px!important;
+  display:block!important;fill:currentColor!important;
+}
+.tf-side-subitem.is-active .tf-side-subicon{
   background:#fff!important;color:#21628d!important;
 }
 .tf-side-sub-label{
