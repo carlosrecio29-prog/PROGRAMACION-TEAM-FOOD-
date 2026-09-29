@@ -36,6 +36,9 @@ from backend.services.v2_closure_service import (
 from backend.services.v2_backlog_service import get_accumulated_backlog
 from backend.services.v2_operation_exclusion_service import get_operation_exclusions
 from backend.services.v2_progress_service import get_progress, export_progress_pdf
+from backend.services.v2_monthly_close_service import (
+    V2MonthlyCloseError, get_monthly_close, close_month,
+)
 from backend.services.programming_service import (
     ProgrammingError, close_programming, programming_detail, programming_history, save_programming,
     export_programming_excel, export_programming_pdf, reset_test_data,
@@ -136,6 +139,37 @@ def v2_status():
 def v2_dashboard(year:int=2026,month:int=Query(9,ge=1,le=12)):
     try:return get_dashboard(year,month)
     except ValueError as exc:raise HTTPException(422,str(exc)) from exc
+
+class MonthlyCloseRequest(BaseModel):
+    closed_by:str|None=None
+
+
+@app.get("/api/v2/monthly-close")
+def v2_monthly_close_status(
+    year:int=2026,
+    month:int=Query(9,ge=1,le=12),
+):
+    try:
+        return get_monthly_close(year,month)
+    except V2MonthlyCloseError as exc:
+        raise HTTPException(422,str(exc)) from exc
+    except SQLAlchemyError as exc:
+        raise HTTPException(503,"No se pudo consultar el cierre mensual") from exc
+
+
+@app.post("/api/v2/monthly-close")
+def v2_monthly_close(
+    body:MonthlyCloseRequest,
+    year:int=2026,
+    month:int=Query(9,ge=1,le=12),
+):
+    try:
+        return close_month(year,month,body.closed_by)
+    except V2MonthlyCloseError as exc:
+        raise HTTPException(409,str(exc)) from exc
+    except SQLAlchemyError as exc:
+        raise HTTPException(503,"No se pudo registrar el cierre mensual") from exc
+
 
 @app.get("/api/v2/progress")
 def v2_progress(year:int=2026, month:int=Query(9,ge=1,le=12)):
