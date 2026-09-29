@@ -50,7 +50,7 @@ export default function ShiftSettings({ year, month }) {
       const response = await fetch(`/api/v2/shifts/${encodeURIComponent(row.codigo)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ hours }),
+        body: JSON.stringify({ hours, year, month }),
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.detail || `HTTP ${response.status}`);
@@ -60,7 +60,7 @@ export default function ShiftSettings({ year, month }) {
         return next;
       });
       setMessage(
-        `${row.codigo} actualizado a ${fmt(hours)} H. La disponibilidad de los técnicos que usan este turno quedó recalculada en la base de datos.`,
+        `${row.codigo} actualizado a ${fmt(hours)} H. La disponibilidad del período seleccionado quedó recalculada para las fechas que usan este turno.`,
       );
       await load();
     } catch (cause) {
