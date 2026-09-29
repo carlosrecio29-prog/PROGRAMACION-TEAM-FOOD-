@@ -161,7 +161,7 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
 .v2-control-primary strong{display:block;font-size:29px;line-height:1;margin:8px 0 5px;color:#12243b}
 .v2-control-primary small{display:block;font-size:8px;color:var(--muted)}
 
-.v2-control-body{display:grid;grid-template-columns:minmax(0,1.18fr) minmax(320px,.82fr);gap:14px}
+.v2-control-body{display:grid;grid-template-columns:minmax(320px,.82fr) minmax(0,1.18fr);gap:14px}
 .v2-control-overview,.v2-control-shortcuts{
   background:#fff;border:1px solid var(--line);border-radius:15px;padding:18px;
   box-shadow:0 8px 24px #18304d08
