@@ -212,65 +212,115 @@ function Summary({ data, onNavigate, year, month }) {
 
 function IndicatorsTracking({ data, year, month, onGoMonthly }) {
   const s = data?.summary || {};
+  const specialties = data?.specialties || [];
+  const totalHh = specialties.reduce((sum, row) => sum + Number(row.hh_calculables || 0), 0);
+  const totalRecords = Number(s.registros_listos || 0)
+    + Number(s.registros_sin_personas || 0)
+    + Number(s.registros_sin_tiempo_parada || 0)
+    + Number(s.registros_sin_plan_maestro || 0);
+  const readyPct = totalRecords
+    ? Math.round((Number(s.registros_listos || 0) / totalRecords) * 100)
+    : 100;
+
   return (
     <div className="v2-stack v2-indicators-view">
-      <section className="v2-analysis-hero">
+      <section className="v2-analysis-hero v2-indicators-hero">
         <div>
           <span className="v2-kicker">ANÁLISIS DEL PERÍODO</span>
           <h2>Indicadores y seguimiento</h2>
-          <p>Consolidado de avance, tendencia semanal, exportación, especialidades y calidad de datos del mantenimiento.</p>
+          <p>
+            Una vista ejecutiva del avance de mantenimiento, el comportamiento semanal,
+            la carga por especialidad y la calidad de la información.
+          </p>
         </div>
-        <span className="v2-analysis-period">{MONTHS[month - 1]} {year}</span>
+        <div className="v2-analysis-period-block">
+          <span>Período analizado</span>
+          <b>{MONTHS[month - 1]} {year}</b>
+        </div>
       </section>
 
       <ProgressDashboard year={year} month={month} onOpenMonthly={onGoMonthly} />
 
-      <section className="v2-panel">
+      <section className="v2-panel v2-indicator-specialties">
         <div className="v2-section-head">
           <div>
             <span className="v2-kicker">POR ESPECIALIDAD</span>
             <h3>Carga preventiva del mes</h3>
+            <p>Participación de cada especialidad dentro de las H-H calculables del PMP.</p>
+          </div>
+          <div className="v2-indicator-total-hh">
+            <span>Total calculable</span>
+            <b>{fmt(totalHh, 1)} H-H</b>
           </div>
         </div>
-        <div className="v2-spec-grid">
-          {(data?.specialties || []).map((x) => (
-            <div key={x.especialidad} className="v2-spec-card">
-              <div>
-                <Badge>{x.especialidad}</Badge>
-                <b>{SPEC_NAMES[x.especialidad] || x.especialidad}</b>
-              </div>
-              <strong>{number(x.ot_distintas)}</strong>
-              <span>OT distintas</span>
-              <small>{fmt(x.hh_calculables, 1)} H-H calculables</small>
-            </div>
-          ))}
+        <div className="v2-spec-grid v2-spec-grid-analytics">
+          {specialties.map((x) => {
+            const hhValue = Number(x.hh_calculables || 0);
+            const share = totalHh ? Math.min(100, (hhValue / totalHh) * 100) : 0;
+            return (
+              <article key={x.especialidad} className="v2-spec-card v2-spec-card-analytics">
+                <div className="v2-spec-card-head">
+                  <span className="v2-spec-code">{x.especialidad}</span>
+                  <div>
+                    <b>{SPEC_NAMES[x.especialidad] || x.especialidad}</b>
+                    <small>{share.toLocaleString("es-CO", { maximumFractionDigits: 1 })}% de las H-H</small>
+                  </div>
+                </div>
+                <div className="v2-spec-card-main">
+                  <strong>{fmt(hhValue, 1)}</strong>
+                  <span>H-H calculables</span>
+                </div>
+                <div className="v2-spec-share-track">
+                  <i style={{ width: `${share}%` }} />
+                </div>
+                <div className="v2-spec-card-foot">
+                  <span><b>{number(x.ot_distintas)}</b> OT distintas</span>
+                  <span><b>{number(x.registros || x.pmp_count || 0)}</b> registros</span>
+                </div>
+              </article>
+            );
+          })}
         </div>
       </section>
 
-      <section className="v2-panel">
+      <section className="v2-panel v2-indicator-quality">
         <div className="v2-section-head">
           <div>
             <span className="v2-kicker">CALIDAD DE DATOS</span>
             <h3>Estado de preparación de la información</h3>
+            <p>Validación de los datos mínimos requeridos antes de programar.</p>
+          </div>
+          <div className="v2-quality-score">
+            <strong>{readyPct}%</strong>
+            <span>preparación</span>
           </div>
         </div>
-        <div className="v2-quality-grid">
-          <div className="good">
+
+        <div className="v2-quality-progress">
+          <i style={{ width: `${Math.max(0, Math.min(100, readyPct))}%` }} />
+        </div>
+
+        <div className="v2-quality-grid v2-quality-grid-analytics">
+          <article className="good">
+            <span>Listos para programar</span>
             <b>{number(s.registros_listos)}</b>
-            <span>registros del PMP listos</span>
-          </div>
-          <div>
+            <small>registros del PMP completos</small>
+          </article>
+          <article className={Number(s.registros_sin_personas || 0) ? "warn" : "good"}>
+            <span>Sin Nº personas</span>
             <b>{number(s.registros_sin_personas)}</b>
-            <span>registros afectados por Nº personas</span>
-          </div>
-          <div>
+            <small>requieren completar recurso</small>
+          </article>
+          <article className={Number(s.registros_sin_tiempo_parada || 0) ? "warn" : "good"}>
+            <span>Sin tiempo de parada</span>
             <b>{number(s.registros_sin_tiempo_parada)}</b>
-            <span>registros afectados por TiempoParada</span>
-          </div>
-          <div>
+            <small>requieren definir condición</small>
+          </article>
+          <article className={Number(s.registros_sin_plan_maestro || 0) ? "danger" : "good"}>
+            <span>Sin plan maestro</span>
             <b>{number(s.registros_sin_plan_maestro)}</b>
-            <span>registros cuyo plan no está en el maestro</span>
-          </div>
+            <small>requieren conciliación</small>
+          </article>
         </div>
       </section>
     </div>
