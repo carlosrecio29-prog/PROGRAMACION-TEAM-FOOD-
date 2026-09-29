@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy import text
 
 from backend.database import get_engine
+from backend.services.v2_programming_service import refresh_open_program_capacities
 
 
 VALID_SPECIALTIES={"MEC","ELE","MET","SER"}
@@ -224,7 +225,9 @@ def save_plan_complement(
             WHERE id=:id
         """),{"id":plan_id}).mappings().one()
 
-    return dict(row)
+    result=dict(row)
+    result["programaciones_recalculadas"]=int(refreshed_programs)
+    return result
 
 
 def get_technicians(year:int,month:int)->dict[str,Any]:
@@ -265,6 +268,7 @@ def save_technician_complement(technician_id:int,specialty:str|None)->dict[str,A
                 complementado_en=now()
             WHERE id=:id
         """),{"specialty":specialty,"id":technician_id})
+        refreshed_programs=refresh_open_program_capacities(conn)
         row=conn.execute(text("""
             SELECT id,identificacion,nombre,especialidad AS especialidad_software,
                    especialidad_app,especialidad_efectiva,complementado_en
