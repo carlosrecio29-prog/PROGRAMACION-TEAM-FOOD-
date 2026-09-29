@@ -846,3 +846,75 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
 @media(max-width:900px){
   .tf-side-flyout{display:none!important}
 }
+
+
+/* Acceso a Indicadores y seguimiento */
+.v2-analysis-entry{
+  width:100%;
+  border:1px solid #cfddea;
+  background:linear-gradient(135deg,#fff,#f5f9fc);
+  border-radius:14px;
+  padding:14px 16px;
+  display:grid;
+  grid-template-columns:44px minmax(0,1fr) 28px;
+  align-items:center;
+  gap:13px;
+  text-align:left;
+  color:var(--ink);
+  box-shadow:0 8px 24px #18304d08;
+}
+.v2-analysis-entry:hover{
+  border-color:#98bddc;
+  background:#f1f7fc;
+}
+.v2-analysis-entry-icon{
+  width:44px;height:44px;border-radius:11px;
+  display:grid;place-items:center;
+  background:#e9f4fc;color:#1b86bd;
+}
+.v2-analysis-entry-icon svg{
+  width:25px;height:25px;fill:currentColor;
+}
+.v2-analysis-entry-copy b{
+  display:block;font-size:12px;color:#18324d;
+}
+.v2-analysis-entry-copy small{
+  display:block;margin-top:4px;font-size:8px;line-height:1.4;color:var(--muted);
+}
+.v2-analysis-entry-arrow{
+  font-size:20px;font-weight:900;color:#1c83b9;text-align:center;
+}
+.v2-analysis-hero{
+  background:linear-gradient(135deg,#fff,#f5f9fc);
+  border:1px solid var(--line);
+  border-radius:15px;
+  padding:17px 18px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:18px;
+  box-shadow:0 8px 24px #18304d08;
+}
+.v2-analysis-hero h2{margin:4px 0 4px;font-size:20px}
+.v2-analysis-hero p{margin:0;font-size:10px;color:var(--muted);line-height:1.45}
+.v2-analysis-period{
+  flex:0 0 auto;
+  border:1px solid #d2e3f0;
+  background:#edf6fc;
+  color:#1b5e8e;
+  border-radius:999px;
+  padding:8px 11px;
+  font-size:9px;
+  font-weight:900;
+  text-transform:uppercase;
+}
+@media(max-width:700px){
+  .v2-analysis-entry{
+    grid-template-columns:42px minmax(0,1fr) 24px;
+    padding:12px;
+  }
+  .v2-analysis-hero{
+    flex-direction:column;
+    align-items:flex-start;
+  }
+}
