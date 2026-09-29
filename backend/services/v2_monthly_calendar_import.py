@@ -105,6 +105,7 @@ def import_monthly_calendar(*, monthly_content: bytes, year: int, month: int) ->
         occurrence: Counter[str] = Counter()
         inserted: list[dict[str, Any]] = []
         excluded = 0
+        excluded_by_plan: Counter[tuple[str, str, int | None]] = Counter()
         missing_plan = 0
         missing_asset = 0
         ambiguous_planning = 0
@@ -115,22 +116,23 @@ def import_monthly_calendar(*, monthly_content: bytes, year: int, month: int) ->
         for row in monthly:
             raw_plan_key = row["plan_clave_software"]
             plan_key = normalize_text(raw_plan_key)
+            plan, match_type = _resolve_plan(raw_plan_key, plans, plans_by_description)
 
-            # OPERACIÓN se excluye por la etiqueta del propio archivo, aunque
-            # existan diferencias de espacios/puntuación respecto al maestro.
-            if is_operation_plan(raw_plan_key):
+            # OPERACIÓN se excluye por la etiqueta del propio archivo o por la
+            # clasificación del maestro. Cada exclusión queda resumida por
+            # período + plan + especialidad para poder auditarla desde la app.
+            if is_operation_plan(raw_plan_key) or (plan is not None and plan["es_operacion"]):
                 excluded += 1
+                specialty = normalize_text(row.get("especialidad")) or "SIN DEFINIR"
+                excluded_by_plan[
+                    (_scalar(raw_plan_key), specialty, int(plan["id"]) if plan else None)
+                ] += 1
                 continue
 
-            plan, match_type = _resolve_plan(raw_plan_key, plans, plans_by_description)
             if match_type == "DESCRIPCION_EXACTA":
                 matched_by_description += 1
             elif match_type == "DESCRIPCION_AMBIGUA":
                 ambiguous_description += 1
-
-            if plan is not None and plan["es_operacion"]:
-                excluded += 1
-                continue
 
             asset_id = assets.get(normalize_text(row["activo_codigo"]))
             if asset_id is None:
@@ -194,6 +196,37 @@ def import_monthly_calendar(*, monthly_content: bytes, year: int, month: int) ->
                 "planeacion_id": planning_id,
                 "plan_trabajo_id": int(plan["id"]) if plan else None,
             })
+
+        conn.execute(text("""
+            DELETE FROM programacion.operacion_exclusion_periodo_v2
+            WHERE periodo=:period
+        """), {"period": period})
+        if excluded_by_plan:
+            exclusion_rows = [
+                {
+                    "periodo": period,
+                    "plan_clave_software": plan_key_raw,
+                    "especialidad": specialty,
+                    "plan_trabajo_id": plan_id,
+                    "cantidad": count,
+                }
+                for (plan_key_raw, specialty, plan_id), count in excluded_by_plan.items()
+            ]
+            conn.execute(text("""
+                INSERT INTO programacion.operacion_exclusion_periodo_v2(
+                    periodo,plan_clave_software,especialidad,plan_trabajo_id,
+                    cantidad,motivo,origen,actualizado_en
+                ) VALUES(
+                    :periodo,:plan_clave_software,:especialidad,:plan_trabajo_id,
+                    :cantidad,'OPERACION','IMPORTACION_CALENDARIO',now()
+                )
+                ON CONFLICT(periodo,plan_clave_software,especialidad) DO UPDATE SET
+                    plan_trabajo_id=EXCLUDED.plan_trabajo_id,
+                    cantidad=EXCLUDED.cantidad,
+                    motivo=EXCLUDED.motivo,
+                    origen=EXCLUDED.origen,
+                    actualizado_en=now()
+            """), exclusion_rows)
 
         previous_not_in_file = len(previous_keys - {r["source_key"] for r in inserted})
         if previous_not_in_file:
