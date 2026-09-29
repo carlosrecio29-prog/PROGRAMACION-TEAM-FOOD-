@@ -1780,3 +1780,38 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
   line-height:1.5;
 }
 .v2-capacity-rule b{color:#2e4e67}
+
+
+/* === AJUSTE FINAL · ENCABEZADOS DE MÓDULO ALINEADOS A LA IZQUIERDA === */
+.v2-module-topbar{
+  padding-left:10px!important;
+}
+.v2-module-topbar-copy{
+  margin:0!important;
+  padding:0!important;
+  min-width:0!important;
+  flex:1 1 auto!important;
+}
+.v2-module-topbar .v2-topbar-heading{
+  justify-content:flex-start!important;
+  margin:0!important;
+  padding:0!important;
+  gap:14px!important;
+}
+.v2-module-topbar .v2-topbar-view-icon{
+  margin-left:0!important;
+}
+.v2-module-topbar .v2-topbar-title-copy{
+  margin:0!important;
+  padding:0!important;
+}
+@media(max-width:900px){
+  .v2-module-topbar{
+    padding-left:9px!important;
+  }
+}
+@media(max-width:650px){
+  .v2-module-topbar{
+    padding-left:8px!important;
+  }
+}
