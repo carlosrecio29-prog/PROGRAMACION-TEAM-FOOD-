@@ -1767,3 +1767,16 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
     width:124px!important;
   }
 }
+
+
+.v2-capacity-rule{
+  margin-top:9px;
+  padding:8px 10px;
+  border:1px solid #dce5ec;
+  border-radius:9px;
+  background:#f7fafc;
+  color:#65798c;
+  font-size:7.6px;
+  line-height:1.5;
+}
+.v2-capacity-rule b{color:#2e4e67}
