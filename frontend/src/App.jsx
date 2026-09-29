@@ -224,21 +224,6 @@ function IndicatorsTracking({ data, year, month, onGoMonthly }) {
 
   return (
     <div className="v2-stack v2-indicators-view">
-      <section className="v2-analysis-hero v2-indicators-hero">
-        <div>
-          <span className="v2-kicker">ANÁLISIS DEL PERÍODO</span>
-          <h2>Indicadores y seguimiento</h2>
-          <p>
-            Una vista ejecutiva del avance de mantenimiento, el comportamiento semanal,
-            la carga por especialidad y la calidad de la información.
-          </p>
-        </div>
-        <div className="v2-analysis-period-block">
-          <span>Período analizado</span>
-          <b>{MONTHS[month - 1]} {year}</b>
-        </div>
-      </section>
-
       <ProgressDashboard year={year} month={month} onOpenMonthly={onGoMonthly} />
 
       <section className="v2-panel v2-indicator-specialties">
