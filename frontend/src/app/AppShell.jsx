@@ -10,19 +10,126 @@ import { MONTHS, NAV_GROUPS, VIEW_META } from "./navigation";
 
 function SidebarIcon({ type }) {
   const common = { viewBox: "0 0 24 24", "aria-hidden": "true", focusable: "false" };
+
   if (type === "Inicio") {
-    return <svg {...common}><path d="M4 4h6v6H4V4Zm10 0h6v6h-6V4ZM4 14h6v6H4v-6Zm10 0h6v6h-6v-6Z" /></svg>;
+    return (
+      <svg {...common}>
+        <path d="M3 3h8v8H3V3Zm10 0h8v8h-8V3ZM3 13h8v8H3v-8Zm10 0h8v8h-8v-8Z" />
+      </svg>
+    );
   }
+
   if (type === "Planificación") {
-    return <svg {...common}><path d="M14.7 5.3 18.7 9l-2 2-1.2-1.1-5.8 5.8 1.1 1.2-2 2-3.7-4 2-2 1.2 1.1 5.8-5.8L12.7 7l2-1.7ZM5 3h5v2H7v3H5V3Zm9 16h3v-3h2v5h-5v-2Z" /></svg>;
+    return (
+      <svg {...common}>
+        <path d="M7 2h2v2h6V2h2v2h4v18H3V4h4V2Zm12 8H5v10h14V10ZM5 8h14V6H5v2Zm3 4h3v3H8v-3Zm5 0h3v3h-3v-3Z" />
+      </svg>
+    );
   }
+
   if (type === "Cierre") {
-    return <svg {...common}><path d="M12 3a9 9 0 1 1-8.5 6H6a7 7 0 1 0 2-2.4L10 9H3V2l2.5 2.5A9 9 0 0 1 12 3Zm-1 5h2v5l4 2-1 1.8-5-2.8V8Z" /></svg>;
+    return (
+      <svg {...common}>
+        <path d="M6 2h9l5 5v15H6V2Zm8 2v5h4l-4-5Zm-3 9-2 2 3 3 6-6-2-2-4 4-1-1Z" />
+      </svg>
+    );
   }
+
   if (type === "Backlog") {
-    return <svg {...common}><path d="M4 19h16v2H4v-2Zm1-3 3-4 3 2 4-6 4 3v3l-3.5-2.5-4 6-3-2L5 18v-2Z" /></svg>;
+    return (
+      <svg {...common}>
+        <path d="M5 3h14v4H5V3Zm0 7h14v4H5v-4Zm0 7h9v4H5v-4Zm11.5-.5H19V19h2.5v2H19v2.5h-2V21H14v-2h3v-2.5Z" />
+      </svg>
+    );
   }
-  return <svg {...common}><path d="M12 8.3A3.7 3.7 0 1 1 12 15.7 3.7 3.7 0 0 1 12 8.3Zm9 2.8v1.8l-2 .7a7.4 7.4 0 0 1-.7 1.7l.9 1.9-1.3 1.3-1.9-.9a7.4 7.4 0 0 1-1.7.7l-.7 2h-1.8l-.7-2a7.4 7.4 0 0 1-1.7-.7l-1.9.9-1.3-1.3.9-1.9a7.4 7.4 0 0 1-.7-1.7l-2-.7v-1.8l2-.7c.2-.6.4-1.2.7-1.7l-.9-1.9 1.3-1.3 1.9.9c.5-.3 1.1-.5 1.7-.7l.7-2h1.8l.7 2c.6.2 1.2.4 1.7.7l1.9-.9 1.3 1.3-.9 1.9c.3.5.5 1.1.7 1.7l2 .7Z" /></svg>;
+
+  return (
+    <svg {...common}>
+      <path d="M12 8.2A3.8 3.8 0 1 1 12 15.8 3.8 3.8 0 0 1 12 8.2Zm8.8 2.3 1.7 1.1-1.4 2.5-2-.4c-.2.6-.5 1.1-.9 1.6l1.1 1.8-2.2 2.2-1.8-1.1c-.5.4-1 .7-1.6.9l-.4 2h-2.6l-.4-2c-.6-.2-1.1-.5-1.6-.9l-1.8 1.1-2.2-2.2 1.1-1.8c-.4-.5-.7-1-.9-1.6l-2 .4-1.4-2.5 1.7-1.1c0-.6 0-1.2.2-1.8L1.7 7l2.2-2.2 1.8 1.1c.5-.4 1-.7 1.6-.9l.4-2h2.6l.4 2c.6.2 1.1.5 1.6.9l1.8-1.1L16.3 7l-1.1 1.7c.2.6.2 1.2.2 1.8h5.4Z" />
+    </svg>
+  );
+}
+
+function SubmenuIcon({ id }) {
+  const common = { viewBox: "0 0 24 24", "aria-hidden": "true", focusable: "false" };
+
+  if (id === "advanceStops") {
+    return (
+      <svg {...common}>
+        <path d="M7 2h2v2h6V2h2v2h4v18H3V4h4V2Zm12 8H5v10h14V10Zm-8 2h2v4h-2v-4Zm0 5h2v2h-2v-2Z" />
+      </svg>
+    );
+  }
+
+  if (id === "programming") {
+    return (
+      <svg {...common}>
+        <path d="M4 3h16v18H4V3Zm2 5h12V5H6v3Zm0 2v9h12v-9H6Zm2 2h3v2H8v-2Zm5 0h3v2h-3v-2Zm-5 4h3v2H8v-2Zm5 0h3v2h-3v-2Z" />
+      </svg>
+    );
+  }
+
+  if (id === "pmp") {
+    return (
+      <svg {...common}>
+        <path d="M6 2h9l4 4v16H6V2Zm8 2v4h4l-4-4ZM9 11h7v2H9v-2Zm0 4h7v2H9v-2Zm0 4h5v2H9v-2Z" />
+      </svg>
+    );
+  }
+
+  if (id === "closure") {
+    return (
+      <svg {...common}>
+        <path d="M5 3h14v18H5V3Zm3 9 3 3 6-7 1.5 1.4L11 18l-4.5-4.5L8 12Z" />
+      </svg>
+    );
+  }
+
+  if (id === "monthly") {
+    return (
+      <svg {...common}>
+        <path d="M4 20h16v2H4v-2Zm2-2V9h3v9H6Zm5 0V4h3v14h-3Zm5 0v-6h3v6h-3Z" />
+      </svg>
+    );
+  }
+
+  if (id === "backlog") {
+    return (
+      <svg {...common}>
+        <path d="M5 3h14v3H5V3Zm0 6h14v3H5V9Zm0 6h9v3H5v-3Zm11 0h3v2h2v3h-2v2h-3v-2h-2v-3h2v-2Z" />
+      </svg>
+    );
+  }
+
+  if (id === "imports") {
+    return (
+      <svg {...common}>
+        <path d="M5 2h10l4 4v16H5V2Zm9 2v4h4l-4-4ZM8 12h8v2H8v-2Zm0 4h8v2H8v-2Zm3-8h2v3h3v2h-3v3h-2v-3H8v-2h3V8Z" />
+      </svg>
+    );
+  }
+
+  if (id === "pending") {
+    return (
+      <svg {...common}>
+        <path d="M4 4h10v2H6v12h12v-8h2v10H4V4Zm11.7 1.3 3 3L10 17H7v-3l8.7-8.7Zm1.4-1.4 1.2-1.2a1.5 1.5 0 0 1 2.1 0l.9.9a1.5 1.5 0 0 1 0 2.1l-1.2 1.2-3-3Z" />
+      </svg>
+    );
+  }
+
+  if (id === "technicians") {
+    return (
+      <svg {...common}>
+        <path d="M8 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8Zm8 2a3 3 0 1 1 0 6 3 3 0 0 1 0-6ZM2 20v-3c0-3 2.5-5 5.5-5h1C11.5 12 14 14 14 17v3H2Zm13-7.2c.3-.1.7-.1 1-.1h1c2.8 0 5 2.2 5 5V20h-6v-3c0-1.7-.4-3.1-1-4.2Z" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg {...common}>
+      <path d="M5 5h14v14H5V5Z" />
+    </svg>
+  );
 }
 
 export default function AppShell({
@@ -128,7 +235,7 @@ export default function AppShell({
                         aria-current={view === item.id ? "page" : undefined}
                         onClick={() => onNavigate(item.id)}
                       >
-                        <span className="tf-side-code">{item.code}</span>
+                        <span className="tf-side-subicon"><SubmenuIcon id={item.id} /></span>
                         <span className="tf-side-sub-label">{item.label}</span>
                         {item.indicator && Number(indicators[item.indicator]) > 0 && (
                           <span className="tf-side-count" aria-label={`${indicators[item.indicator]} pendientes`}>
