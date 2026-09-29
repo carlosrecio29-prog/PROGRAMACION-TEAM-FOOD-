@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy import text
 
 from backend.database import get_engine
-from backend.parsers.common import cell_by_header, header_mapping, normalize_text, workbook_from_bytes
+from backend.parsers.common import cell_by_header, header_mapping, is_operation_plan, normalize_text, workbook_from_bytes
 from backend.services.v2_import_service import (
     _number,
     _order_source_key,
@@ -232,16 +232,35 @@ def import_maintenance_base(
         conn.execute(text(
             "DELETE FROM programacion.orden_mantenimiento WHERE periodo=:period"
         ), {"period": period})
+        conn.execute(text(
+            "DELETE FROM programacion.operacion_exclusion_detalle_v2 WHERE periodo=:period"
+        ), {"period": period})
 
         occurrence: Counter[str] = Counter()
         order_db = []
+        exclusion_detail = []
         missing_assets = 0
         missing_order_plans = 0
         ambiguous_planning = 0
         omitted_operation = 0
         for row in monthly:
-            if normalize_text(row["plan_clave_software"]) in excluded_plan_keys:
+            normalized_plan_key = normalize_text(row["plan_clave_software"])
+            if is_operation_plan(row["plan_clave_software"]) or normalized_plan_key in excluded_plan_keys:
                 omitted_operation += 1
+                ot_raw = normalize_text(row.get("numero_ot_raw"))
+                exclusion_detail.append({
+                    "periodo": period,
+                    "fila_origen": int(row["fila_origen"]),
+                    "numero_ot": None if ot_raw in {"", "SIN ASIGNAR"} else _scalar(row.get("numero_ot_raw")),
+                    "activo_codigo": _scalar(row.get("activo_codigo")),
+                    "plan_clave_software": _scalar(row.get("plan_clave_software")),
+                    "titulo": row.get("titulo"),
+                    "especialidad": row.get("especialidad"),
+                    "estado": normalize_text(row.get("estado")) or None,
+                    "cronograma_planeacion": row.get("cronograma_planeacion"),
+                    "tiempo_planeado_min": row.get("tiempo_planeado_min"),
+                    "plan_trabajo_id": plan_map.get(normalized_plan_key),
+                })
                 continue
             asset_id = asset_map.get(normalize_text(row["activo_codigo"]))
             if asset_id is None:
@@ -295,6 +314,19 @@ def import_maintenance_base(
                 "planeacion_id": planning_id,
                 "plan_trabajo_id": plan_id,
             })
+
+        if exclusion_detail:
+            conn.execute(text("""
+                INSERT INTO programacion.operacion_exclusion_detalle_v2(
+                    periodo,fila_origen,numero_ot,activo_codigo,plan_clave_software,
+                    titulo,especialidad,estado,cronograma_planeacion,tiempo_planeado_min,
+                    plan_trabajo_id,motivo,origen,registrado_en
+                ) VALUES(
+                    :periodo,:fila_origen,:numero_ot,:activo_codigo,:plan_clave_software,
+                    :titulo,:especialidad,:estado,:cronograma_planeacion,:tiempo_planeado_min,
+                    :plan_trabajo_id,'OPERACION','IMPORTACION_CALENDARIO',now()
+                )
+            """), exclusion_detail)
 
         if order_db:
             conn.execute(text("""INSERT INTO programacion.orden_mantenimiento(
