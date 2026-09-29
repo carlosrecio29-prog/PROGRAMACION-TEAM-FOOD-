@@ -17,6 +17,7 @@ import ProgressDashboard from "./components/ProgressDashboard";
 import AdvanceStops from "./components/AdvanceStops";
 import WeeklyProgramming from "./components/WeeklyProgramming";
 import MaintenanceBaseUpload from "./components/MaintenanceBaseUpload";
+import TechnicianSchedule from "./components/TechnicianSchedule";
 import AccumulatedBacklog from "./components/AccumulatedBacklog";
 import AppShell from "./app/AppShell";
 import { navigationIds } from "./app/navigation";
@@ -1231,15 +1232,15 @@ function LegacyWeeklyProgramming({ year, month, dashboard }) {
             <small>20% fuera de la capacidad efectiva</small>
           </div>
           <div className="target">
-            <span>Meta programable</span>
+            <span>Preventivo programable</span>
             <b>{fmt(target, 1)}</b>
-            <small>80% de la capacidad efectiva</small>
+            <small>80% de la capacidad efectiva para preventivo</small>
           </div>
           <div>
-            <span>Reserva</span>
+            <span>Correctivo</span>
             <b>{fmt(reserve, 1)}</b>
             <small>
-              20% de la capacidad efectiva para correctivos e imprevistos
+              20% de la capacidad efectiva para correctivo
             </small>
           </div>
           <div className="selected">
@@ -1257,7 +1258,7 @@ function LegacyWeeklyProgramming({ year, month, dashboard }) {
         </div>
         <div className="v2-progress-block">
           <div className="v2-progress-copy">
-            <span>Avance hacia la meta programable</span>
+            <span>Avance hacia preventivo</span>
             <b>{fmt(progress, 1)}%</b>
           </div>
           <div className="v2-progress-track">
@@ -1265,7 +1266,7 @@ function LegacyWeeklyProgramming({ year, month, dashboard }) {
           </div>
           <div className="v2-progress-foot">
             <span>{fmt(selectedHH, 1)} H-H programadas</span>
-            <span>Objetivo {fmt(target, 1)} H-H</span>
+            <span>Preventivo {fmt(target, 1)} H-H</span>
           </div>
         </div>
         {available === 0 && (
@@ -1338,7 +1339,7 @@ function LegacyWeeklyProgramming({ year, month, dashboard }) {
             <p>
               {programmingId
                 ? "Al guardar se actualizará la programación. Las OT que estaban en la versión anterior y ahora quitaste pasarán a BACKLOG."
-                : "El reporte mostrará las H-H netas, la capacidad efectiva (80%), la meta programable (80% de la efectiva), la reserva (20% de la efectiva) y las órdenes que el ingeniero debe responder."}
+                : "El reporte mostrará las H-H netas, la capacidad efectiva (80%), el preventivo programable (80% de la efectiva), el correctivo (20% de la efectiva) y las órdenes que el ingeniero debe responder."}
             </p>
             <div className="v2-save-summary">
               <span>
@@ -1601,7 +1602,7 @@ export default function App() {
           <Pmp year={year} month={month} dashboard={dashboard} />
         )}{" "}
         {view === "technicians" && (
-          <Technicians year={year} month={month} onChanged={refresh} />
+          <TechnicianSchedule year={year} month={month} onChanged={refresh} />
         )}
         {view === "imports" && (
           <MaintenanceBaseUpload year={year} month={month} />
