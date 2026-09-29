@@ -13,7 +13,7 @@ export const VIEW_META = {
   monthly: ["Cierre mensual", "Avance, cumplimiento, pendientes e informe consolidado del mes."],
   backlog: ["Backlog acumulado", "OT pendientes conservadas hasta confirmar su finalización."],
   pending: ["Completar datos", "Completa sólo los datos que faltan en los planes del periodo."],
-  technicians: ["Técnicos", "Personal, turnos, disponibilidad y especialidades."],
+  technicians: ["Programación de técnicos", "Programa turnos, ausencias y disponibilidad mensual del personal."],
   imports: ["Actualizar base", "Carga los Excel del software de mantenimiento en un único lugar."],
 };
 
@@ -21,6 +21,7 @@ export const NAV_GROUPS = [
   { label: "Inicio", items: [{ id: "summary", label: "Panel de control", code: "PC" }] },
   { label: "Planificación", items: [
     { id: "advanceStops", label: "Preparación de paradas", code: "PA" },
+    { id: "technicians", label: "Programación de técnicos", code: "TE", indicator: "technicians" },
     { id: "programming", label: "Programación semanal", code: "PS" },
     { id: "pmp", label: "PMP del mes", code: "PM" },
   ] },
@@ -32,7 +33,6 @@ export const NAV_GROUPS = [
   { label: "Administración", items: [
     { id: "imports", label: "Cargar Excel", code: "EX" },
     { id: "pending", label: "Completar datos", code: "CD", indicator: "pending" },
-    { id: "technicians", label: "Técnicos y turnos", code: "TE", indicator: "technicians" },
   ] },
 ];
 
