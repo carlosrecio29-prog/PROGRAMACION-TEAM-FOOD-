@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from datetime import date
 import logging
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+import json
+from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy.exc import SQLAlchemyError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -257,14 +258,25 @@ async def v2_close_week_file(
     programming_id:int,
     file:UploadFile=File(...),
     closed_by:str|None=Query(None),
+    manual_resolutions:str|None=Form(None),
 ):
     try:
+        resolutions=[]
+        if manual_resolutions:
+            try:
+                parsed=json.loads(manual_resolutions)
+            except json.JSONDecodeError as exc:
+                raise V2ClosureError("Las resoluciones manuales del cierre no tienen un formato válido.") from exc
+            if not isinstance(parsed,list):
+                raise V2ClosureError("Las resoluciones manuales del cierre deben enviarse como una lista.")
+            resolutions=parsed
         content=await read_upload(file)
         return close_week_from_calendar(
             programming_id=programming_id,
             content=content,
             filename=file.filename or "calendario.xlsx",
             closed_by=closed_by,
+            manual_resolutions=resolutions,
         )
     except V2ClosureError as exc:
         raise HTTPException(422,str(exc)) from exc
