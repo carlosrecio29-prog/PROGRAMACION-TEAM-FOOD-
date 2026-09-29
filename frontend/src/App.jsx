@@ -144,6 +144,26 @@ function Summary({ data, onNavigate, year, month, onGoMonthly }) {
       </section>
 
       <section className="v2-control-body">
+        <div className="v2-control-shortcuts">
+          <div className="v2-control-panel-head">
+            <div>
+              <span className="v2-kicker">ACCESOS RÁPIDOS</span>
+              <h3>Procesos principales</h3>
+            </div>
+          </div>
+          <div className="v2-control-action-list">
+            {quickActions.map((action) => (
+              <button type="button" key={action.id} onClick={() => onNavigate(action.id)}>
+                <span className="v2-control-action-icon"><ControlIcon type={action.icon} /></span>
+                <span className="v2-control-action-copy">
+                  <b>{action.title}</b>
+                  <small>{action.text}</small>
+                </span>
+                <span className="v2-control-arrow">→</span>
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="v2-control-overview">
           <div className="v2-control-panel-head">
             <div>
@@ -183,26 +203,6 @@ function Summary({ data, onNavigate, year, month, onGoMonthly }) {
           </div>
         </div>
 
-        <div className="v2-control-shortcuts">
-          <div className="v2-control-panel-head">
-            <div>
-              <span className="v2-kicker">ACCESOS RÁPIDOS</span>
-              <h3>Procesos principales</h3>
-            </div>
-          </div>
-          <div className="v2-control-action-list">
-            {quickActions.map((action) => (
-              <button type="button" key={action.id} onClick={() => onNavigate(action.id)}>
-                <span className="v2-control-action-icon"><ControlIcon type={action.icon} /></span>
-                <span className="v2-control-action-copy">
-                  <b>{action.title}</b>
-                  <small>{action.text}</small>
-                </span>
-                <span className="v2-control-arrow">→</span>
-              </button>
-            ))}
-          </div>
-        </div>
       </section>
 
       <ProgressDashboard year={year} month={month} onOpenMonthly={onGoMonthly} />
