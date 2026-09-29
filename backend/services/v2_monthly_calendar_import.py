@@ -119,10 +119,17 @@ def import_monthly_calendar(*, monthly_content: bytes, year: int, month: int) ->
             plan_key = normalize_text(raw_plan_key)
             plan, match_type = _resolve_plan(raw_plan_key, plans, plans_by_description)
 
-            # OPERACIÓN se excluye por la etiqueta del propio archivo o por la
-            # clasificación del maestro. Cada exclusión queda resumida por
-            # período + plan + especialidad para poder auditarla desde la app.
-            if is_operation_plan(raw_plan_key) or (plan is not None and plan["es_operacion"]):
+            # Si el plan se pudo resolver contra el maestro, el maestro manda.
+            # Esto evita excluir planes cuyo texto histórico en DescripcionPlanTrabaj
+            # aún contiene OPERACIÓN aunque PlanTrabajo ya haya sido corregido.
+            # Solo usamos el texto del calendario como respaldo cuando no existe
+            # una coincidencia segura en el maestro.
+            is_excluded_operation = (
+                bool(plan["es_operacion"])
+                if plan is not None
+                else is_operation_plan(raw_plan_key)
+            )
+            if is_excluded_operation:
                 excluded += 1
                 specialty = normalize_text(row.get("especialidad")) or "SIN DEFINIR"
                 plan_id = int(plan["id"]) if plan else None
