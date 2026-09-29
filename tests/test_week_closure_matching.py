@@ -116,7 +116,7 @@ def test_preview_separates_real_absences_from_conflicts():
     assert "closureBlocked" in frontend
 
 
-def test_non_metrology_without_ot_matches_exact_asset_and_plan():
+def test_activity_without_ot_is_never_closed_automatically():
     item = {
         "numero_ot": None,
         "especialidad": "MEC",
@@ -131,41 +131,35 @@ def test_non_metrology_without_ot_matches_exact_asset_and_plan():
     }
     exact, by_ot = _index_calendar([row])
     match, reason = _match_calendar_item(item, exact, by_ot)
-    assert match is row
-    assert reason == "EQUIPO_PLAN_SIN_OT"
-
-
-def test_non_metrology_without_ot_never_guesses_duplicate_asset_plan():
-    item = {
-        "numero_ot": None,
-        "especialidad": "SER",
-        "activo_codigo": "EQ-01",
-        "plan_clave_software": "105-RUTINA SERVICIO",
-    }
-    rows = [
-        {"numero_ot": "", "activo": "EQ-01", "plan": "105-RUTINA SERVICIO", "estado": "ABIERTO"},
-        {"numero_ot": "", "activo": "EQ-01", "plan": "105-RUTINA SERVICIO", "estado": "FINALIZADO"},
-    ]
-    exact, by_ot = _index_calendar(rows)
-    match, reason = _match_calendar_item(item, exact, by_ot)
-    assert match is None
-    assert reason == "EQUIPO_PLAN_AMBIGUO_SIN_OT"
-
-
-def test_metrology_without_ot_keeps_previous_pending_behavior():
-    item = {
-        "numero_ot": None,
-        "especialidad": "MET",
-        "activo_codigo": "EQ-MET-01",
-        "plan_clave_software": "109-COMPARACION MEDIDA CON PATRON",
-    }
-    row = {
-        "numero_ot": "",
-        "activo": "EQ-MET-01",
-        "plan": "109-COMPARACION MEDIDA CON PATRON",
-        "estado": "FINALIZADO",
-    }
-    exact, by_ot = _index_calendar([row])
-    match, reason = _match_calendar_item(item, exact, by_ot)
     assert match is None
     assert reason == "SIN_NUMERO_OT"
+
+
+def test_no_ot_rule_applies_equally_to_all_specialties():
+    for specialty in ("MEC", "ELE", "SER", "MET"):
+        item = {
+            "numero_ot": None,
+            "especialidad": specialty,
+            "activo_codigo": "EQ-01",
+            "plan_clave_software": "10-RUTINA",
+        }
+        exact, by_ot = _index_calendar([])
+        match, reason = _match_calendar_item(item, exact, by_ot)
+        assert match is None
+        assert reason == "SIN_NUMERO_OT"
+
+
+def test_backend_requires_explicit_resolution_for_no_ot_before_close():
+    source = (ROOT / "backend/services/v2_closure_service.py").read_text()
+    assert "manual_resolutions" in source
+    assert "debes asignar una OT o definir manualmente" in source
+    assert "ESTADO_MANUAL_SIN_OT" in source
+    assert "La OT {assigned_ot}" in source
+
+
+def test_frontend_blocks_close_until_no_ot_rows_are_resolved():
+    source = (ROOT / "frontend/src/components/WeeklyClosure.jsx").read_text()
+    assert "unresolvedNoOtRows" in source
+    assert "Asignar OT" in source
+    assert "FINALIZADA" in source
+    assert "PENDIENTE" in source
