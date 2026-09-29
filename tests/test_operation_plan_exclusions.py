@@ -105,9 +105,10 @@ def test_monthly_plan_does_not_guess_ambiguous_description():
     assert match_type == "DESCRIPCION_AMBIGUA"
 
 
-def test_plan_parser_classifies_operation_from_description_too():
+def test_plan_parser_uses_plan_trabajo_not_historical_description_for_operation():
     source = (ROOT / "backend/services/v2_import_service.py").read_text()
-    assert "is_operation_plan(plan) or is_operation_plan(description)" in source
+    assert '"es_operacion":is_operation_plan(plan)' in source
+    assert "is_operation_plan(plan) or is_operation_plan(description)" not in source
 
 
 def test_monthly_import_persists_equipment_level_operation_exclusions():
@@ -115,3 +116,31 @@ def test_monthly_import_persists_equipment_level_operation_exclusions():
     assert "operacion_exclusion_detalle_v2" in source
     assert '"activo_codigo": _scalar(row.get("activo_codigo"))' in source
     assert '"fila_origen": int(row["fila_origen"])' in source
+
+
+def test_resolved_master_can_override_stale_operation_text_from_calendar():
+    rows = [
+        {
+            "id": 514,
+            "grupo": "27",
+            "plan_trabajo": "RUTINA ELÉCTRICA SEMESTRAL MOTOR MEDICION DE RESISTENCIA",
+            "descripcion_plan_trabajo": "OPERACIÓN -RUTINA ELÉCTRICA SEMESTRAL MOTOR MEDICION DE RESISTENCIA",
+            "es_operacion": False,
+        }
+    ]
+    primary, descriptions = _build_plan_lookups(rows)
+    plan, match_type = _resolve_plan(
+        "27-OPERACIÓN -RUTINA ELÉCTRICA SEMESTRAL MOTOR MEDICION DE RESISTENCIA",
+        primary,
+        descriptions,
+    )
+    assert plan["id"] == 514
+    assert plan["es_operacion"] is False
+    assert match_type == "DESCRIPCION_EXACTA"
+
+
+def test_monthly_import_uses_resolved_master_as_operation_authority():
+    source = (ROOT / "backend/services/v2_monthly_calendar_import.py").read_text()
+    assert "is_excluded_operation" in source
+    assert 'bool(plan["es_operacion"])' in source
+    assert "else is_operation_plan(raw_plan_key)" in source
