@@ -50,6 +50,14 @@
       "dest": "/api/shifts.py"
     },
     {
+      "src": "/api/v2/technician-schedule",
+      "dest": "/api/shifts.py"
+    },
+    {
+      "src": "/api/v2/technician-schedule/(.*)",
+      "dest": "/api/shifts.py"
+    },
+    {
       "src": "/api/(.*)",
       "dest": "/api/index.py"
     },
