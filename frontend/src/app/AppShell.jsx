@@ -356,16 +356,16 @@ export default function AppShell({
             </div>
           </header>
         ) : (
-          <header className="v2-topbar">
-            <div>
+          <header className="v2-topbar v2-module-topbar">
+            <div className="v2-module-topbar-copy">
               <span className="v2-kicker">PLANTA BARRANQUILLA</span>
-              <div className={`v2-topbar-heading ${view === "indicators" ? "has-icon" : ""}`}>
-                {view === "indicators" && (
-                  <span className="v2-topbar-view-icon"><SubmenuIcon id="indicators" /></span>
-                )}
-                <h1>{title}</h1>
+              <div className="v2-topbar-heading has-icon">
+                <span className="v2-topbar-view-icon"><SubmenuIcon id={view} /></span>
+                <div className="v2-topbar-title-copy">
+                  <h1>{title}</h1>
+                  <p>{description}</p>
+                </div>
               </div>
-              <p>{description}</p>
             </div>
             <div className="v2-top-actions">
               <label>
