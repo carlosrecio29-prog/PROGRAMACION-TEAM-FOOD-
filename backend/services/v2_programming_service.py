@@ -16,6 +16,21 @@ class V2ProgrammingError(ValueError):
     pass
 
 
+def capacity_split(available: float) -> dict[str, float]:
+    available = round(float(available or 0), 2)
+    effective = round(available * 0.80, 2)
+    preventive = round(effective * 0.80, 2)
+    corrective = round(effective * 0.20, 2)
+    initial_margin = round(available - effective, 2)
+    return {
+        "available": available,
+        "effective": effective,
+        "preventive": preventive,
+        "corrective": corrective,
+        "initial_margin": initial_margin,
+    }
+
+
 def _validate_week(date_from:date,date_to:date,specialty:str)->str:
     specialty=specialty.upper()
     if specialty not in VALID_SPECIALTIES:
@@ -38,11 +53,12 @@ def _capacity(conn,date_from:date,date_to:date,specialty:str)->dict[str,Any]:
         WHERE pt.fecha BETWEEN :date_from AND :date_to
           AND t.especialidad_efectiva=:specialty
     """),{"date_from":date_from,"date_to":date_to,"specialty":specialty}).mappings().one()
-    available=float(row["hh_disponibles"] or 0)
-    effective=round(available*.80,2)
-    target=round(effective*.80,2)
-    reserve=round(effective*.20,2)
-    initial_margin=round(available-effective,2)
+    split=capacity_split(float(row["hh_disponibles"] or 0))
+    available=split["available"]
+    effective=split["effective"]
+    target=split["preventive"]
+    reserve=split["corrective"]
+    initial_margin=split["initial_margin"]
     technicians_available=int(row["tecnicos_disponibles"] or 0)
     technicians_assigned=int(row["tecnicos_asignados"] or 0)
     return {
