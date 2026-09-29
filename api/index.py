@@ -220,7 +220,7 @@ def v2_technicians(year:int=2026,month:int=Query(9,ge=1,le=12)):
     except ValueError as exc:raise HTTPException(422,str(exc)) from exc
 
 class V2TechnicianComplement(BaseModel):
-    specialty:str
+    specialty:str|None=None
 
 @app.patch("/api/v2/technicians/{technician_id}")
 def v2_save_technician(technician_id:int,body:V2TechnicianComplement):
