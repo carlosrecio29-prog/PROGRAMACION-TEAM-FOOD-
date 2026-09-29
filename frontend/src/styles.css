@@ -136,19 +136,9 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
   background:linear-gradient(90deg,#1593d0 0 42%,#68b232 42% 72%,#f1bf22 72% 100%)
 }
 .v2-dashboard-brand{display:flex;align-items:center;gap:17px;min-width:0}
-.v2-team-mark{
-  min-width:166px;display:flex;align-items:center;gap:9px;color:#168347
-}
-.v2-team-mark svg{width:48px;height:48px;flex:0 0 auto;transform:rotate(3deg)}
-.v2-team-mark .drop-a{fill:#138348;transform:translateY(-2px) scale(.72);transform-origin:center}
-.v2-team-mark .drop-b{fill:#72ba25;transform:translate(2px,5px) scale(.72);transform-origin:center}
-.v2-team-mark .drop-c{fill:#f4bf22;transform:translate(-2px,5px) scale(.72);transform-origin:center}
-.v2-team-mark>span{display:flex;flex-direction:column;line-height:.92}
-.v2-team-mark small{
-  font-size:10px;letter-spacing:2px;font-weight:700;color:#248d55
-}
-.v2-team-mark b{
-  font-size:26px;letter-spacing:-1px;font-weight:900;color:#128348
+.v2-dashboard-logo{
+  width:170px;height:auto;max-height:66px;object-fit:contain;display:block;
+  flex:0 0 auto
 }
 .v2-dashboard-title{border-left:1px solid var(--line);padding-left:17px;min-width:0}
 .v2-dashboard-title>span{
@@ -186,6 +176,7 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
 }
 @media(max-width:760px){
   .v2-dashboard-header,.v2-dashboard-brand{flex-direction:column;align-items:flex-start}
+  .v2-dashboard-logo{width:155px;max-height:none}
   .v2-dashboard-title{border-left:0;border-top:1px solid var(--line);padding:12px 0 0;width:100%}
   .v2-dashboard-meta{width:100%;justify-items:stretch;grid-template-columns:1fr 1fr}
   .v2-dashboard-period{grid-row:auto;grid-column:1/-1}
