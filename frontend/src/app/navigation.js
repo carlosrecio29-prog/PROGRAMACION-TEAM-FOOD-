@@ -4,7 +4,7 @@ export const MONTHS = [
 ];
 
 export const VIEW_META = {
-  summary: ["Inicio", "Estado operativo y próximos pasos del periodo."],
+  summary: ["Panel de control", "Indicadores, estado operativo y accesos rápidos del período."],
   programming: ["Programación semanal", "Programa por capacidad, condición y origen de las OT."],
   advanceStops: ["Preparación de paradas", "Revisa el calendario provisional del mes siguiente y exporta las actividades con equipo detenido."],
   pmp: ["PMP del mes", "Cartera preventiva exportada desde el software de mantenimiento."],
@@ -17,7 +17,7 @@ export const VIEW_META = {
 };
 
 export const NAV_GROUPS = [
-  { label: "Inicio", items: [{ id: "summary", label: "Resumen operativo", code: "IN" }] },
+  { label: "Inicio", items: [{ id: "summary", label: "Panel de control", code: "PC" }] },
   { label: "Planificación", items: [
     { id: "advanceStops", label: "Preparación de paradas", code: "PA" },
     { id: "programming", label: "Programación semanal", code: "PS" },
