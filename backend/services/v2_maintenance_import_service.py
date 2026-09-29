@@ -296,9 +296,14 @@ def import_maintenance_base(
             if plan_id is None:
                 missing_order_plans += 1
 
+            planning_plan_key = (
+                normalize_text(f"{resolved_plan['grupo']}-{resolved_plan['plan_trabajo']}")
+                if resolved_plan is not None
+                else normalize_text(row["plan_clave_software"])
+            )
             candidates = planning_lookup.get((
                 normalize_text(row["activo_codigo"]),
-                normalize_text(row["plan_clave_software"]),
+                planning_plan_key,
             ), [])
             enabled = [candidate for candidate in candidates if candidate["habilitado"]]
             candidates = enabled or candidates
