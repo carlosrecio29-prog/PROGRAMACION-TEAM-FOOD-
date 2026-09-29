@@ -142,18 +142,31 @@ export default function TechnicianSchedule({ year, month, onChanged }) {
     }
   }
 
-  async function saveSpecialty(technician) {
-    const specialty = specialtyDraft[technician.id];
-    if (!specialty) return;
+  function specialtyValue(technician) {
+    if (Object.prototype.hasOwnProperty.call(specialtyDraft, technician.id)) {
+      return specialtyDraft[technician.id];
+    }
+    return technician.especialidad || "";
+  }
+
+  async function saveSpecialty(technician, reset = false) {
+    const specialty = reset ? null : specialtyValue(technician);
+    if (!reset && !specialty) return;
     try {
       setSavingSpecialty(technician.id);
       setError("");
-      await saveV2TechnicianComplement(technician.id, specialty);
+      setMessage("");
+      const result = await saveV2TechnicianComplement(technician.id, specialty);
       setSpecialtyDraft((current) => {
         const next = { ...current };
         delete next[technician.id];
         return next;
       });
+      setMessage(
+        reset
+          ? `${technician.nombre}: se restauró la especialidad del software (${result.especialidad_efectiva || "SIN DEFINIR"}).`
+          : `${technician.nombre}: especialidad actualizada a ${SPEC_NAMES[result.especialidad_efectiva] || result.especialidad_efectiva}. Las H-H quedaron recalculadas.`,
+      );
       await load();
       onChanged?.();
     } catch (cause) {
@@ -164,7 +177,6 @@ export default function TechnicianSchedule({ year, month, onChanged }) {
   }
 
   const changeCount = Object.keys(draft).length;
-  const missingSpecialty = (data?.technicians || []).filter((technician) => !technician.especialidad);
 
   return (
     <div className="v2-stack technician-planning">
@@ -210,7 +222,7 @@ export default function TechnicianSchedule({ year, month, onChanged }) {
             <span className="v2-kicker">CAPACIDAD DEL MES</span>
             <h3>Regla de disponibilidad por especialidad</h3>
             <p>
-              100% H-H → 80% capacidad efectiva → de esa capacidad: 80% preventivo y 20% correctivo.
+              H-H brutas → 80% H-H efectivas → de esas H-H efectivas: 80% preventivo y 20% correctivo/reserva.
             </p>
           </div>
         </div>
@@ -221,14 +233,19 @@ export default function TechnicianSchedule({ year, month, onChanged }) {
                 <Badge>{SPEC_NAMES[row.specialty] || row.specialty}</Badge>
               </div>
               <dl>
-                <div><dt>H-H netas</dt><dd>{fmt(row.available)}</dd></div>
-                <div><dt>Capacidad efectiva · 80%</dt><dd>{fmt(row.effective)}</dd></div>
-                <div className="preventive"><dt>Preventivo · 80%</dt><dd>{fmt(row.preventive)}</dd></div>
-                <div className="corrective"><dt>Correctivo · 20%</dt><dd>{fmt(row.corrective)}</dd></div>
-                <div><dt>Margen inicial · 20%</dt><dd>{fmt(row.initial_margin)}</dd></div>
+                <div><dt>H-H brutas · 100%</dt><dd>{fmt(row.available)}</dd></div>
+                <div><dt>H-H efectivas · 80%</dt><dd>{fmt(row.effective)}</dd></div>
+                <div className="preventive"><dt>Preventivo · 80% efectivas</dt><dd>{fmt(row.preventive)}</dd></div>
+                <div className="corrective"><dt>Correctivo / reserva · 20% efectivas</dt><dd>{fmt(row.corrective)}</dd></div>
+                <div className="preparation"><dt>Alistamiento / tiempo no programable · 20% bruto</dt><dd>{fmt(row.initial_margin)}</dd></div>
               </dl>
             </article>
           ))}
+        </div>
+        <div className="technician-capacity-rule-note">
+          <b>Ejemplo de la regla:</b> 200 H-H brutas → 40 H-H para cambio de ropa, charla,
+          alistamiento, búsqueda de herramientas, desplazamientos y otros tiempos operativos →
+          160 H-H efectivas → 128 H-H preventivo + 32 H-H correctivo/reserva.
         </div>
       </section>
 
@@ -271,11 +288,48 @@ export default function TechnicianSchedule({ year, month, onChanged }) {
                       <small>{technician.identificacion || ""}</small>
                     </td>
                     <td className="sticky-col specialty-col">
-                      {technician.especialidad ? (
-                        <span className="tech-specialty">{technician.especialidad}</span>
-                      ) : (
-                        <span className="tech-specialty missing">—</span>
-                      )}
+                      <div className="tech-specialty-editor">
+                        <select
+                          value={specialtyValue(technician)}
+                          onChange={(event) =>
+                            setSpecialtyDraft((current) => ({
+                              ...current,
+                              [technician.id]: event.target.value,
+                            }))
+                          }
+                          aria-label={`Especialidad de ${technician.nombre}`}
+                        >
+                          <option value="">—</option>
+                          {SPECS.map((spec) => (
+                            <option key={spec} value={spec}>{spec}</option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          className="tech-specialty-save"
+                          title="Guardar especialidad"
+                          disabled={
+                            savingSpecialty === technician.id ||
+                            !Object.prototype.hasOwnProperty.call(specialtyDraft, technician.id) ||
+                            !specialtyValue(technician) ||
+                            specialtyValue(technician) === (technician.especialidad || "")
+                          }
+                          onClick={() => saveSpecialty(technician)}
+                        >
+                          {savingSpecialty === technician.id ? "…" : "✓"}
+                        </button>
+                        {technician.especialidad_app && (
+                          <button
+                            type="button"
+                            className="tech-specialty-reset"
+                            title={`Restaurar especialidad del software: ${technician.especialidad_software || "sin definir"}`}
+                            disabled={savingSpecialty === technician.id}
+                            onClick={() => saveSpecialty(technician, true)}
+                          >
+                            ↺
+                          </button>
+                        )}
+                      </div>
                     </td>
                     {days.map((day) => {
                       const value = currentValue(technician.id, day);
@@ -308,44 +362,6 @@ export default function TechnicianSchedule({ year, month, onChanged }) {
           </div>
         )}
       </section>
-
-      {!!missingSpecialty.length && (
-        <section className="v2-panel">
-          <div className="v2-section-head">
-            <div>
-              <span className="v2-kicker">DATOS PENDIENTES</span>
-              <h3>Técnicos sin especialidad</h3>
-              <p>Estos técnicos no aportarán capacidad a una especialidad hasta completar este dato.</p>
-            </div>
-          </div>
-          <div className="technician-specialty-list">
-            {missingSpecialty.map((technician) => (
-              <div key={technician.id}>
-                <span><b>{technician.nombre}</b><small>{technician.identificacion || ""}</small></span>
-                <select
-                  value={specialtyDraft[technician.id] || ""}
-                  onChange={(event) =>
-                    setSpecialtyDraft((current) => ({ ...current, [technician.id]: event.target.value }))
-                  }
-                >
-                  <option value="">Especialidad...</option>
-                  {SPECS.map((spec) => (
-                    <option key={spec} value={spec}>{SPEC_NAMES[spec]}</option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  className="v2-save"
-                  disabled={!specialtyDraft[technician.id] || savingSpecialty === technician.id}
-                  onClick={() => saveSpecialty(technician)}
-                >
-                  {savingSpecialty === technician.id ? "Guardando..." : "Guardar"}
-                </button>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
 
       <section className="v2-panel technician-excel-backup">
         <div>
