@@ -43,6 +43,23 @@ def import_technician_schedule(*, content: bytes, year: int, month: int) -> dict
             )).mappings()
         }
 
+        shift_config = {
+            str(row["codigo"]).strip(): dict(row)
+            for row in conn.execute(text("""
+                SELECT codigo, horas, es_ausencia
+                FROM programacion.turno_config
+                WHERE activo = true
+            """)).mappings()
+        }
+
+        absence_day_type = {
+            "VAC": "VACACION",
+            "INC": "INCAPACIDAD",
+            "C": "COMPENSATORIO",
+            "DE": "DESCANSO",
+            "PERM": "PERMISO",
+        }
+
         db_rows = []
         missing = set()
         for row in schedule:
@@ -50,7 +67,23 @@ def import_technician_schedule(*, content: bytes, year: int, month: int) -> dict
             if tech_id is None:
                 missing.add(row["nombre_normalizado"])
                 continue
-            db_rows.append({**row, "tecnico_id": tech_id})
+            code = str(row.get("turno_codigo") or "").strip()
+            config = shift_config.get(code)
+            normalized_row = dict(row)
+            if config is not None:
+                is_absence = bool(config["es_ausencia"])
+                normalized_row["tipo_dia"] = (
+                    absence_day_type.get(code, "AUSENCIA")
+                    if is_absence else "TRABAJO"
+                )
+                normalized_row["horas_disponibles"] = (
+                    0.0 if is_absence else float(config["horas"] or 0)
+                )
+            else:
+                warnings.append(
+                    f"{row['nombre_normalizado']} {row['fecha']}: turno {code} no existe en la configuración actual"
+                )
+            db_rows.append({**normalized_row, "tecnico_id": tech_id})
 
         # El piloto de octubre parte vacío. Se insertan/actualizan fechas
         # del archivo sin borrar otros registros ni otros meses.
