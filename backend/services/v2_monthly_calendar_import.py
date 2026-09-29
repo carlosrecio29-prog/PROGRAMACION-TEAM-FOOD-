@@ -106,6 +106,7 @@ def import_monthly_calendar(*, monthly_content: bytes, year: int, month: int) ->
         inserted: list[dict[str, Any]] = []
         excluded = 0
         excluded_by_plan: Counter[tuple[str, str, int | None]] = Counter()
+        excluded_detail: list[dict[str, Any]] = []
         missing_plan = 0
         missing_asset = 0
         ambiguous_planning = 0
@@ -124,9 +125,24 @@ def import_monthly_calendar(*, monthly_content: bytes, year: int, month: int) ->
             if is_operation_plan(raw_plan_key) or (plan is not None and plan["es_operacion"]):
                 excluded += 1
                 specialty = normalize_text(row.get("especialidad")) or "SIN DEFINIR"
+                plan_id = int(plan["id"]) if plan else None
                 excluded_by_plan[
-                    (_scalar(raw_plan_key), specialty, int(plan["id"]) if plan else None)
+                    (_scalar(raw_plan_key), specialty, plan_id)
                 ] += 1
+                ot_raw = normalize_text(row.get("numero_ot_raw"))
+                excluded_detail.append({
+                    "periodo": period,
+                    "fila_origen": int(row["fila_origen"]),
+                    "numero_ot": None if ot_raw in {"", "SIN ASIGNAR"} else _scalar(row.get("numero_ot_raw")),
+                    "activo_codigo": _scalar(row.get("activo_codigo")),
+                    "plan_clave_software": _scalar(raw_plan_key),
+                    "titulo": row.get("titulo"),
+                    "especialidad": specialty,
+                    "estado": normalize_text(row.get("estado")) or None,
+                    "cronograma_planeacion": row.get("cronograma_planeacion"),
+                    "tiempo_planeado_min": row.get("tiempo_planeado_min"),
+                    "plan_trabajo_id": plan_id,
+                })
                 continue
 
             if match_type == "DESCRIPCION_EXACTA":
@@ -196,6 +212,23 @@ def import_monthly_calendar(*, monthly_content: bytes, year: int, month: int) ->
                 "planeacion_id": planning_id,
                 "plan_trabajo_id": int(plan["id"]) if plan else None,
             })
+
+        conn.execute(text("""
+            DELETE FROM programacion.operacion_exclusion_detalle_v2
+            WHERE periodo=:period
+        """), {"period": period})
+        if excluded_detail:
+            conn.execute(text("""
+                INSERT INTO programacion.operacion_exclusion_detalle_v2(
+                    periodo,fila_origen,numero_ot,activo_codigo,plan_clave_software,
+                    titulo,especialidad,estado,cronograma_planeacion,tiempo_planeado_min,
+                    plan_trabajo_id,motivo,origen,registrado_en
+                ) VALUES(
+                    :periodo,:fila_origen,:numero_ot,:activo_codigo,:plan_clave_software,
+                    :titulo,:especialidad,:estado,:cronograma_planeacion,:tiempo_planeado_min,
+                    :plan_trabajo_id,'OPERACION','IMPORTACION_CALENDARIO',now()
+                )
+            """), excluded_detail)
 
         conn.execute(text("""
             DELETE FROM programacion.operacion_exclusion_periodo_v2
@@ -276,6 +309,7 @@ def import_monthly_calendar(*, monthly_content: bytes, year: int, month: int) ->
         "periodo": str(period),
         "pmp_archivo": len(monthly),
         "pmp_excluidos_operacion": excluded,
+        "pmp_excluidos_detalle": len(excluded_detail),
         "pmp_importados_o_actualizados": len(inserted),
         "pmp_abiertos_archivo": open_in_file,
         "pmp_finalizados_archivo": finalized_in_file,
