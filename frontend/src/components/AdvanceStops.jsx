@@ -85,34 +85,41 @@ export default function AdvanceStops({ year, month }) {
   }
 
   return <div className="v2-stack advance-stop-page">
-    <section className="v2-hero advance-stop-hero">
-      <div>
-        <span className="v2-kicker">PLANIFICACIÓN ANTICIPADA · MANTENIMIENTO</span>
-        <h2>Preparación de paradas del mes siguiente</h2>
-        <p>Identifica los planes con equipo detenido antes de generar las OT.
-          Entrega el Excel al planeador para coordinar las ventanas de parada.</p>
-      </div>
-      <div className="advance-stop-hero-chip">ANÁLISIS PROVISIONAL · SOLO LECTURA</div>
-    </section>
-
-    <section className="v2-panel">
+    <section className="v2-panel advance-stop-upload-panel">
       <div className="v2-section-head">
-        <div><span className="v2-kicker">PASO 1 · PERÍODO Y ARCHIVO</span>
-          <h3>Cargar Lista de Calendario provisional</h3>
-          <p>Se acepta con número de OT o sin OT. El resultado aparece automáticamente
-            al seleccionar el Excel.</p></div>
+        <div>
+          <span className="v2-kicker">PASO 1 · PREPARAR ANÁLISIS</span>
+          <h3>Selecciona el período y carga la Lista de Calendario</h3>
+          <p>Este análisis es provisional y de solo lectura. Puedes usar un archivo con OT o sin OT.</p>
+        </div>
+        <span className="advance-stop-readonly">SOLO LECTURA</span>
       </div>
-      <div className="advance-stop-form">
-        <label>Mes que necesitas preparar
-          <select value={periodMonth} onChange={e => setPeriodMonth(Number(e.target.value))}>
-            {MONTHS.map((name, i) => <option key={name} value={i + 1}>{name}</option>)}
-          </select>
-        </label>
-        <label>Año
-          <input type="number" min="2020" max="2100" value={periodYear}
-            onChange={e => setPeriodYear(Number(e.target.value))}/>
-        </label>
-        <label className="advance-stop-file">Lista de Calendario (.xlsx)
+
+      <div className="advance-stop-input-layout">
+        <div className="advance-stop-period-card">
+          <span className="advance-stop-card-label">PERÍODO A PREPARAR</span>
+          <div className="advance-stop-period-fields">
+            <label>Mes
+              <select value={periodMonth} onChange={e => setPeriodMonth(Number(e.target.value))}>
+                {MONTHS.map((name, i) => <option key={name} value={i + 1}>{name}</option>)}
+              </select>
+            </label>
+            <label>Año
+              <input type="number" min="2020" max="2100" value={periodYear}
+                onChange={e => setPeriodYear(Number(e.target.value))}/>
+            </label>
+          </div>
+          <strong>{MONTHS[periodMonth - 1]} {periodYear}</strong>
+          <small>Mes que se enviará al planeador para preparar las ventanas de parada.</small>
+        </div>
+
+        <label className={"advance-stop-dropzone " + (file ? "loaded" : "")}>
+          <span className="advance-stop-dropzone-icon" aria-hidden="true">↑</span>
+          <span className="advance-stop-dropzone-copy">
+            <b>{file ? file.name : "Seleccionar Lista de Calendario"}</b>
+            <small>{file ? "Archivo cargado · puedes reemplazarlo seleccionando otro" : "Archivo Excel .xlsx · el análisis inicia automáticamente"}</small>
+          </span>
+          <span className="advance-stop-dropzone-action">{file ? "Cambiar archivo" : "Buscar archivo"}</span>
           <input type="file" accept=".xlsx"
             onChange={e => {
               setFile(e.target.files?.[0] || null);
@@ -123,28 +130,36 @@ export default function AdvanceStops({ year, month }) {
             }}/>
         </label>
       </div>
-      <div className="v2-success advance-stop-safe">
-        Esta carga <b>NO reemplaza el PMP operativo</b> y no modifica programaciones,
-        cierres, órdenes, backlog ni maestros. El mes seleccionado identifica el informe;
-        no se inventan fechas de parada ausentes en el archivo.
+
+      <div className="advance-stop-safety-strip">
+        <span aria-hidden="true">✓</span>
+        <p>
+          <b>No modifica la operación:</b> esta carga no reemplaza PMP, programaciones,
+          cierres, órdenes, backlog ni maestros.
+        </p>
       </div>
-      {file && <p className="advance-stop-upload-status">
-        <b>Archivo:</b> {file.name} · <b>Período:</b> {MONTHS[periodMonth - 1]} {periodYear}
-        {loading ? " · Analizando planes y equipos..." : preview ? " · Análisis listo" : ""}
-      </p>}
+
+      {file && <div className={"advance-stop-file-status " + (loading ? "loading" : preview ? "ready" : "")}>
+        <span className="advance-stop-file-status-dot" />
+        <div>
+          <b>{loading ? "Analizando planes y equipos..." : preview ? "Análisis listo" : "Archivo seleccionado"}</b>
+          <small>{file.name} · {MONTHS[periodMonth - 1]} {periodYear}</small>
+        </div>
+      </div>}
       {error && <div className="v2-error" role="alert">{error}</div>}
     </section>
 
-    {preview && <section className="v2-panel">
-      <div className="v2-section-head">
-        <div><span className="v2-kicker">PASO 2 · CLASIFICACIÓN DEL MAESTRO</span>
-          <h3>Actividades del período {MONTHS[periodMonth - 1]} {periodYear}</h3>
-          <p>Criterio: <b>TiempoParada &gt; 0 = EQUIPO DETENIDO</b>;
-             <b> TiempoParada = 0 = OPERANDO</b>; sin dato o sin plan maestro = SIN DEFINIR.</p>
+    {preview && <section className="v2-panel advance-stop-results-panel">
+      <div className="v2-section-head advance-stop-results-head">
+        <div>
+          <span className="v2-kicker">PASO 2 · RESULTADO DEL ANÁLISIS</span>
+          <h3>Clasificación de actividades · {MONTHS[periodMonth - 1]} {periodYear}</h3>
+          <p>Selecciona una condición para filtrar el listado y revisar los equipos que requieren coordinación.</p>
         </div>
-        <button type="button" className="v2-primary"
+        <button type="button" className="v2-primary advance-stop-export"
           disabled={downloading || loading} onClick={exportFile}>
-          {downloading ? "Generando Excel..." : "Descargar Excel para el planeador"}
+          <span aria-hidden="true">↓</span>
+          {downloading ? "Generando Excel..." : "Exportar para planeador"}
         </button>
       </div>
       <div className="advance-stop-cards">
@@ -174,13 +189,28 @@ export default function AdvanceStops({ year, month }) {
         Trabajo que los incluya o confirmar la condición con el planeador.
         No se han supuesto tiempos para completar el listado.
       </div>}
-      <div className="advance-stop-note">
-        {num(preview.total_archivo)} filas del archivo · {num(preview.sin_ot)} actividades sin número de OT ·
-        {num(preview.excluidos_operacion)} registros de OPERACIÓN excluidos.
-        <br/>Las actividades <b>SIN DEFINIR</b> no se consideran operando ni detenidas
-        hasta que el planeador confirme el maestro. El Excel conserva <b>todas</b>
-        las actividades, aunque filtres la pantalla.
+      <div className="advance-stop-summary-strip">
+        <span><b>{num(preview.total_archivo)}</b><small>Filas del archivo</small></span>
+        <span><b>{num(preview.sin_ot)}</b><small>Sin número de OT</small></span>
+        <span><b>{num(preview.excluidos_operacion)}</b><small>OPERACIÓN excluidas</small></span>
+        <span><b>{num(preview.total_mantenimiento)}</b><small>Mantenimiento analizado</small></span>
       </div>
+
+      <details className="advance-stop-method">
+        <summary>
+          <span>
+            <b>Criterio de clasificación</b>
+            <small>Ver cómo se determina Operando, Equipo detenido y Sin definir</small>
+          </span>
+        </summary>
+        <p>
+          <b>TiempoParada &gt; 0</b> = EQUIPO DETENIDO ·
+          <b> TiempoParada = 0</b> = OPERANDO ·
+          sin dato, valor inválido o plan sin coincidencia = SIN DEFINIR.
+          Las actividades SIN DEFINIR no se asumen como operando ni detenidas.
+          El Excel exportado conserva el listado completo aunque filtres la pantalla.
+        </p>
+      </details>
       {preview.sin_definir > 0 && <div className="advance-stop-note" role="status">
         <b>¿Por qué aparecen SIN DEFINIR?</b> El sistema diferencia
         <b> {num(preview.sin_definir_por_tiempo)} actividades</b> cuyo plan existe,
@@ -189,6 +219,13 @@ export default function AdvanceStops({ year, month }) {
         y <b>{num(preview.sin_definir_por_invalido)}</b> con tiempo inválido.
         No se asume parada ni operación hasta revisar el dato correcto.
       </div>}
+      <div className="advance-stop-list-head">
+        <div>
+          <span className="v2-kicker">PASO 3 · REVISIÓN DE EQUIPOS</span>
+          <h3>${LABELS[condition] || "Todas las actividades"}</h3>
+        </div>
+        <span><b>{num(visible.length)}</b> resultados visibles</span>
+      </div>
       <div className="advance-stop-filters">
         {condition === "SIN DEFINIR" && <label>Motivo de revisión
           <select value={reason} onChange={e => setReason(e.target.value)}>
@@ -209,7 +246,6 @@ export default function AdvanceStops({ year, month }) {
             onChange={e => setSearch(e.target.value)}
             placeholder="Ej.: motor, chiller, BA-…, OT-…"/>
         </label>
-        <span><b>{num(visible.length)}</b> coincidencias</span>
       </div>
       <div className="v2-table-wrap advance-stop-table">
         <table>
@@ -246,11 +282,15 @@ export default function AdvanceStops({ year, month }) {
       </p>}
     </section>}
     {!file && <section className="v2-panel advance-stop-empty">
-      <h3>¿Qué recibirá el planeador?</h3>
-      <p>Un Excel con pestañas <b>RESUMEN</b>, <b>EQUIPO DETENIDO</b>,
-        <b>OPERANDO</b> y <b>SIN DEFINIR</b>. Cada fila incluirá OT si existe,
-        equipo, área, criticidad, especialidad, plan, tiempos y HH estimadas.</p>
-      <p>La clasificación no depende de que el software haya asignado el número de OT.</p>
+      <div className="advance-stop-empty-icon" aria-hidden="true">▦</div>
+      <div>
+        <span className="v2-kicker">RESULTADO ESPERADO</span>
+        <h3>¿Qué recibirá el planeador?</h3>
+        <p>Un Excel organizado con <b>RESUMEN</b>, <b>EQUIPO DETENIDO</b>,
+          <b>OPERANDO</b> y <b>SIN DEFINIR</b>, incluyendo equipo, área, criticidad,
+          especialidad, plan, tiempos y H-H estimadas.</p>
+        <small>La clasificación funciona aunque la actividad todavía no tenga número de OT.</small>
+      </div>
     </section>}
   </div>;
 }
