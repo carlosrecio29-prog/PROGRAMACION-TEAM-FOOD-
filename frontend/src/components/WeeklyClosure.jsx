@@ -52,8 +52,9 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
   const [preview, setPreview] = useState(null);
   const [acceptMissing, setAcceptMissing] = useState(false);
   const problemRows = (preview?.rows || []).filter(row => row.finalizado === null);
-  const missingRows = problemRows.filter(row => ["NO_ENCONTRADA", "SIN_NUMERO_OT"].includes(row.coincidencia));
-  const conflictingRows = problemRows.filter(row => !["NO_ENCONTRADA", "SIN_NUMERO_OT"].includes(row.coincidencia));
+  const missingReasons = ["NO_ENCONTRADA", "NO_ENCONTRADA_SIN_OT", "SIN_NUMERO_OT"];
+  const missingRows = problemRows.filter(row => missingReasons.includes(row.coincidencia));
+  const conflictingRows = problemRows.filter(row => !missingReasons.includes(row.coincidencia));
   const closureBlocked = conflictingRows.length > 0 || (missingRows.length > 0 && !acceptMissing);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
