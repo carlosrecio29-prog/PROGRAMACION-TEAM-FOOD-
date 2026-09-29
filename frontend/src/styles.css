@@ -27,6 +27,31 @@ button{cursor:pointer}
 .v2-sidebar nav button span{font-size:9px;color:#7297bd}
 .v2-sidebar nav button i{font-style:normal;background:#7e5530;color:#fff1cf;border-radius:999px;padding:3px 6px;font-size:8px}
 .v2-sidebar nav button:hover,.v2-sidebar nav button.active{background:#ffffff12;color:#fff}
+.v2-nav-group{display:flex;flex-direction:column;gap:5px}
+.v2-nav-label{
+  display:block;padding:7px 12px 4px;color:#7297bd;font-size:8px;font-weight:950;
+  letter-spacing:1.15px;text-transform:uppercase
+}
+.v2-sidebar nav .v2-nav-group-toggle{
+  width:100%;border:0;background:transparent;color:#88a4bf;padding:9px 12px;
+  border-radius:9px;display:flex;align-items:center;justify-content:space-between;
+  gap:10px;text-align:left;font-size:9px;font-weight:950;letter-spacing:1.05px;
+  text-transform:uppercase
+}
+.v2-sidebar nav .v2-nav-group-toggle>span{font-size:9px;color:inherit}
+.v2-sidebar nav .v2-nav-group-toggle>b{
+  width:20px;height:20px;display:grid;place-items:center;border-radius:7px;
+  background:#ffffff08;color:#87a6c5;font-size:14px;line-height:1;
+  transition:transform .18s ease,background .18s ease,color .18s ease
+}
+.v2-sidebar nav .v2-nav-group-toggle:hover{background:#ffffff08;color:#d9e6f2}
+.v2-nav-group.open>.v2-nav-group-toggle{color:#b9d0e5}
+.v2-nav-group.open>.v2-nav-group-toggle>b{
+  transform:rotate(180deg);background:#ffffff10;color:#fff
+}
+.v2-nav-group.current>.v2-nav-group-toggle{color:#d9e8f6}
+.v2-nav-items{display:flex;flex-direction:column;gap:5px}
+.v2-nav-items[hidden]{display:none}
 .v2-side-note{margin-top:auto;border:1px solid #ffffff16;border-radius:11px;background:#ffffff08;padding:12px}
 .v2-side-note small,.v2-side-note span{display:block;color:#9fb2c5;font-size:9px;line-height:1.4}
 .v2-side-note b{display:block;font-size:11px;margin:4px 0}
@@ -87,6 +112,7 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
 @media(max-width:1250px){.v2-kpis{grid-template-columns:repeat(3,1fr)}.v2-spec-grid,.v2-quality-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:900px){
   .v2-sidebar{position:relative;width:100%;min-height:auto}.v2-sidebar nav{display:grid;grid-template-columns:repeat(2,1fr)}
+  .v2-nav-group{min-width:0}.v2-nav-items{min-width:0}
   .v2-side-note,.v2-profile{display:none}.v2-main{margin-left:0;padding:18px}.v2-topbar,.v2-hero{flex-direction:column;align-items:flex-start}
   .v2-toolbar,.v2-toolbar-4{grid-template-columns:1fr 1fr}
 }
