@@ -248,7 +248,7 @@ def get_technicians(year:int,month:int)->dict[str,Any]:
 
 
 def save_technician_complement(technician_id:int,specialty:str|None)->dict[str,Any]:
-    specialty=normalize_text(specialty) or None
+    specialty=(specialty or "").strip().upper() or None
     if specialty is not None and specialty not in VALID_SPECIALTIES:
         raise ValueError("Especialidad inválida")
     with get_engine().begin() as conn:
