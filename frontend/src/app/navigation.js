@@ -4,7 +4,8 @@ export const MONTHS = [
 ];
 
 export const VIEW_META = {
-  summary: ["Panel de control", "Indicadores, estado operativo y accesos rápidos del período."],
+  summary: ["Panel de control", "Estado operativo y accesos rápidos del período."],
+  indicators: ["Indicadores y seguimiento", "Seguimiento del período, tendencia semanal, especialidades y exportación."],
   programming: ["Programación semanal", "Programa por capacidad, condición y origen de las OT."],
   advanceStops: ["Preparación de paradas", "Revisa el calendario provisional del mes siguiente y exporta las actividades con equipo detenido."],
   pmp: ["PMP del mes", "Cartera preventiva exportada desde el software de mantenimiento."],
@@ -36,5 +37,5 @@ export const NAV_GROUPS = [
 ];
 
 export function navigationIds(groups = NAV_GROUPS) {
-  return groups.flatMap((group) => group.items.map((item) => item.id));
+  return [...groups.flatMap((group) => group.items.map((item) => item.id)), "indicators"];
 }
