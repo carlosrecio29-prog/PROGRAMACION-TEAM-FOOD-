@@ -85,6 +85,9 @@ function ControlIcon({ type }) {
   if (type === "report") {
     return <svg {...common}><path d="M10 5h20l9 9v29H10V5Zm19 4v7h7l-7-7ZM16 24h17v5H16v-5Zm0 9h17v5H16v-5Zm0-18h8v5h-8v-5Z" /></svg>;
   }
+  if (type === "bars") {
+    return <svg {...common}><path d="M7 39h35v4H3V6h4v33Zm6-4h6V23h-6v12Zm11 0h6V14h-6v21Zm11 0h6V8h-6v27Z" /></svg>;
+  }
   return <svg {...common}><path d="M8 8h32v32H8z" /></svg>;
 }
 
@@ -130,6 +133,19 @@ function Summary({ data, onNavigate, year, month }) {
           </div>
         </article>
       </section>
+
+      <button
+        type="button"
+        className="v2-analysis-entry v2-analysis-entry-top"
+        onClick={() => onNavigate("indicators")}
+      >
+        <span className="v2-analysis-entry-icon"><ControlIcon type="bars" /></span>
+        <span className="v2-analysis-entry-copy">
+          <b>Indicadores y seguimiento</b>
+          <small>Seguimiento del período · Tendencia semanal · Exportación · Por especialidad · Calidad de datos</small>
+        </span>
+        <span className="v2-analysis-entry-arrow">→</span>
+      </button>
 
       <section className="v2-control-body">
         <div className="v2-control-shortcuts">
@@ -193,18 +209,6 @@ function Summary({ data, onNavigate, year, month }) {
 
       </section>
 
-      <button
-        type="button"
-        className="v2-analysis-entry"
-        onClick={() => onNavigate("indicators")}
-      >
-        <span className="v2-analysis-entry-icon"><ControlIcon type="report" /></span>
-        <span className="v2-analysis-entry-copy">
-          <b>Indicadores y seguimiento</b>
-          <small>Seguimiento del período · Tendencia semanal · Exportación · Por especialidad · Calidad de datos</small>
-        </span>
-        <span className="v2-analysis-entry-arrow">→</span>
-      </button>
     </div>
   );
 }
