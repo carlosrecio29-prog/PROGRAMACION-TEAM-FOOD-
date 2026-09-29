@@ -225,9 +225,7 @@ def save_plan_complement(
             WHERE id=:id
         """),{"id":plan_id}).mappings().one()
 
-    result=dict(row)
-    result["programaciones_recalculadas"]=int(refreshed_programs)
-    return result
+    return dict(row)
 
 
 def get_technicians(year:int,month:int)->dict[str,Any]:
@@ -274,7 +272,9 @@ def save_technician_complement(technician_id:int,specialty:str|None)->dict[str,A
                    especialidad_app,especialidad_efectiva,complementado_en
             FROM programacion.tecnico WHERE id=:id
         """),{"id":technician_id}).mappings().one()
-    return dict(row)
+    result=dict(row)
+    result["programaciones_recalculadas"]=int(refreshed_programs)
+    return result
 
 
 def get_pmp(
