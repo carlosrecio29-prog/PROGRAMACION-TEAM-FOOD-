@@ -247,13 +247,13 @@ def get_technicians(year:int,month:int)->dict[str,Any]:
     return {"periodo":str(period),"technicians":rows}
 
 
-def save_technician_complement(technician_id:int,specialty:str)->dict[str,Any]:
-    specialty=specialty.upper()
-    if specialty not in VALID_SPECIALTIES:
+def save_technician_complement(technician_id:int,specialty:str|None)->dict[str,Any]:
+    specialty=normalize_text(specialty) or None
+    if specialty is not None and specialty not in VALID_SPECIALTIES:
         raise ValueError("Especialidad inválida")
     with get_engine().begin() as conn:
         current=conn.execute(text("""
-            SELECT id,especialidad
+            SELECT id,especialidad,especialidad_app,especialidad_efectiva
             FROM programacion.tecnico
             WHERE id=:id
         """),{"id":technician_id}).mappings().first()
@@ -261,7 +261,7 @@ def save_technician_complement(technician_id:int,specialty:str)->dict[str,Any]:
             raise ValueError("Técnico no encontrado")
         conn.execute(text("""
             UPDATE programacion.tecnico
-            SET especialidad_app=CASE WHEN especialidad IS NULL THEN :specialty ELSE especialidad_app END,
+            SET especialidad_app=:specialty,
                 complementado_en=now()
             WHERE id=:id
         """),{"specialty":specialty,"id":technician_id})
