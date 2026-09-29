@@ -64,10 +64,12 @@ def _index_calendar(calendar_rows: list[dict[str, str]]):
         ot = normalize_text(row["numero_ot"])
         asset = normalize_text(row["activo"])
         plan = normalize_text(row["plan"])
+        if asset and plan:
+            # Las filas sin OT también se indexan por EQUIPO + PLAN.
+            # Se usa una clave OT vacía para no alterar la estructura existente.
+            exact[(ot if ot and ot != "SIN ASIGNAR" else "", asset, plan)].append(row)
         if ot and ot != "SIN ASIGNAR":
             by_ot[ot].append(row)
-            if asset and plan:
-                exact[(ot, asset, plan)].append(row)
     return exact, by_ot
 
 
@@ -75,8 +77,20 @@ def _match_calendar_item(item, exact, by_ot):
     ot = normalize_text(item.get("numero_ot"))
     asset = normalize_text(item.get("activo_codigo"))
     plan = normalize_text(item.get("plan_clave_software"))
+    specialty = normalize_text(item.get("especialidad"))
+
     if not ot or ot == "SIN ASIGNAR":
-        return None, "SIN_NUMERO_OT"
+        # Metrología queda explícitamente fuera de esta regla por ahora.
+        # MEC/ELE/SER sí pueden cerrarse por coincidencia exacta EQUIPO + PLAN.
+        if specialty == "MET":
+            return None, "SIN_NUMERO_OT"
+        candidates = exact.get(("", asset, plan), [])
+        if len(candidates) == 1:
+            return candidates[0], "EQUIPO_PLAN_SIN_OT"
+        if len(candidates) > 1:
+            return None, "EQUIPO_PLAN_AMBIGUO_SIN_OT"
+        return None, "NO_ENCONTRADA_SIN_OT"
+
     candidates = exact.get((ot, asset, plan), [])
     if len(candidates) == 1:
         return candidates[0], "OT_EQUIPO_PLAN"
@@ -109,7 +123,7 @@ def preview_week_closure(*, programming_id: int, content: bytes) -> dict[str, An
         if not header:
             raise V2ClosureError("Programación semanal no encontrada")
         items = conn.execute(text("""
-            SELECT o.numero_ot,a.codigo AS activo_codigo,o.plan_clave_software,
+            SELECT o.numero_ot,o.especialidad,a.codigo AS activo_codigo,o.plan_clave_software,
                    pi.hh_programadas
             FROM programacion.programacion_item_v2 pi
             JOIN programacion.orden_mantenimiento o ON o.id=pi.orden_mantenimiento_id
@@ -137,7 +151,7 @@ def preview_week_closure(*, programming_id: int, content: bytes) -> dict[str, An
             summary["hh_pending"] += hh
         else:
             summary["not_found"] += 1
-            if reason in {"NO_ENCONTRADA", "SIN_NUMERO_OT"}:
+            if reason in {"NO_ENCONTRADA", "NO_ENCONTRADA_SIN_OT", "SIN_NUMERO_OT"}:
                 summary["missing"] += 1
             elif reason == "ESTADO_VACIO":
                 summary["blank_states"] += 1
@@ -248,7 +262,7 @@ def close_week_from_calendar(
             raise V2ClosureError("Esta semana ya está cerrada; se conserva su cierre y backlog.")
 
         items = [dict(r) for r in conn.execute(text("""
-            SELECT pi.id AS item_id,pi.orden_mantenimiento_id,o.numero_ot,
+            SELECT pi.id AS item_id,pi.orden_mantenimiento_id,o.numero_ot,o.especialidad,
                    a.codigo AS activo_codigo,o.plan_clave_software
             FROM programacion.programacion_item_v2 pi
             JOIN programacion.orden_mantenimiento o ON o.id=pi.orden_mantenimiento_id
@@ -268,9 +282,10 @@ def close_week_from_calendar(
             if match_reason in {
                 "EQUIPO_NO_COINCIDE", "PLAN_NO_COINCIDE",
                 "DUPLICADA_EN_CALENDARIO", "OT_AMBIGUA_EN_CALENDARIO",
+                "EQUIPO_PLAN_AMBIGUO_SIN_OT",
             }:
                 raise V2ClosureError(
-                    f"OT {item['numero_ot']}: {match_reason}. "
+                    f"{'OT ' + str(item['numero_ot']) if item.get('numero_ot') else 'Actividad sin OT'}: {match_reason}. "
                     "Revisa el archivo en la vista previa antes de cerrar."
                 )
 
@@ -287,7 +302,7 @@ def close_week_from_calendar(
             state = normalize_text(matched.get("estado"))
             if not state:
                 raise V2ClosureError(
-                    f"OT {item['numero_ot']}: ESTADO_VACIO en el calendario. "
+                    f"{'OT ' + str(item['numero_ot']) if item.get('numero_ot') else 'Actividad sin OT'}: ESTADO_VACIO en el calendario. "
                     "El archivo no permite decidir entre FINALIZADA o PENDIENTE."
                 )
             finalized = _is_finalized(state)
