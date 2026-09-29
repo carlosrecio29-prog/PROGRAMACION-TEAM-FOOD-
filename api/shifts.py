@@ -138,7 +138,11 @@ def technician_schedule(
         technicians = [
             dict(row)
             for row in conn.execute(text("""
-                SELECT id, identificacion, nombre, especialidad_efectiva AS especialidad
+                SELECT
+                  id, identificacion, nombre,
+                  especialidad AS especialidad_software,
+                  especialidad_app,
+                  especialidad_efectiva AS especialidad
                 FROM programacion.tecnico
                 WHERE activo = true
                 ORDER BY COALESCE(especialidad_efectiva,'ZZZ'), nombre
