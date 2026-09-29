@@ -73,36 +73,35 @@ export default function AppShell({
             </span>
           </div>
         </div>
-        <nav aria-label="Flujos operativos">
+        <nav className="tf-side-nav" aria-label="Flujos operativos">
           {NAV_GROUPS.map((group) => {
             const isHome = group.label === "Inicio";
             const isOpen = isHome || openGroup === group.label;
             const hasActiveItem = group.items.some((item) => item.id === view);
             const homeItem = isHome ? group.items[0] : null;
+
             if (isHome) {
               return (
-                <div className={`v2-nav-group home${hasActiveItem ? " current" : ""}`} key={group.label}>
+                <div className="tf-side-section" key={group.label}>
                   <button
                     type="button"
-                    className={view === homeItem.id ? "v2-nav-root active" : "v2-nav-root"}
-                    aria-current={view === homeItem.id ? "page" : undefined}
+                    className={`tf-side-root ${view === homeItem.id ? "is-active" : ""}`}
                     title={!sidebarOpen ? homeItem.label : undefined}
+                    aria-current={view === homeItem.id ? "page" : undefined}
                     onClick={() => onNavigate(homeItem.id)}
                   >
-                    <span className="v2-nav-root-icon"><SidebarIcon type="Inicio" /></span>
-                    <span className="v2-nav-root-label">{homeItem.label}</span>
+                    <span className="tf-side-icon"><SidebarIcon type="Inicio" /></span>
+                    <span className="tf-side-label">{homeItem.label}</span>
                   </button>
                 </div>
               );
             }
+
             return (
-              <div
-                className={`v2-nav-group${isOpen ? " open" : ""}${hasActiveItem ? " current" : ""}`}
-                key={group.label}
-              >
+              <div className={`tf-side-section ${hasActiveItem ? "has-active" : ""}`} key={group.label}>
                 <button
                   type="button"
-                  className="v2-nav-group-toggle"
+                  className={`tf-side-root tf-side-group ${hasActiveItem ? "is-active" : ""}`}
                   aria-expanded={isOpen}
                   title={!sidebarOpen ? group.label : undefined}
                   onClick={() => {
@@ -114,26 +113,27 @@ export default function AppShell({
                     setOpenGroup((current) => current === group.label ? "" : group.label);
                   }}
                 >
-                  <span className="v2-nav-root-icon"><SidebarIcon type={group.label} /></span>
-                  <span className="v2-nav-root-label">{group.label}</span>
-                  <b aria-hidden="true">⌄</b>
+                  <span className="tf-side-icon"><SidebarIcon type={group.label} /></span>
+                  <span className="tf-side-label">{group.label}</span>
+                  <span className={`tf-side-chevron ${isOpen ? "is-open" : ""}`} aria-hidden="true">›</span>
                 </button>
-                {sidebarOpen && (
-                  <div className="v2-nav-items">
+
+                {sidebarOpen && isOpen && (
+                  <div className="tf-side-submenu">
                     {group.items.map((item) => (
                       <button
                         type="button"
                         key={item.id}
-                        className={view === item.id ? "active" : ""}
+                        className={`tf-side-subitem ${view === item.id ? "is-active" : ""}`}
                         aria-current={view === item.id ? "page" : undefined}
                         onClick={() => onNavigate(item.id)}
                       >
-                        <span>{item.code}</span>
-                        <em>{item.label}</em>
+                        <span className="tf-side-code">{item.code}</span>
+                        <span className="tf-side-sub-label">{item.label}</span>
                         {item.indicator && Number(indicators[item.indicator]) > 0 && (
-                          <i aria-label={`${indicators[item.indicator]} pendientes`}>
+                          <span className="tf-side-count" aria-label={`${indicators[item.indicator]} pendientes`}>
                             {indicators[item.indicator]}
-                          </i>
+                          </span>
                         )}
                       </button>
                     ))}
