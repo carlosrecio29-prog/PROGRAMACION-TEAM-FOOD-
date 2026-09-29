@@ -51,11 +51,22 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [acceptMissing, setAcceptMissing] = useState(false);
+  const [manualResolutions, setManualResolutions] = useState({});
   const problemRows = (preview?.rows || []).filter(row => row.finalizado === null);
-  const missingReasons = ["NO_ENCONTRADA", "NO_ENCONTRADA_SIN_OT", "SIN_NUMERO_OT"];
+  const noOtRows = problemRows.filter(row => row.coincidencia === "SIN_NUMERO_OT");
+  const missingReasons = ["NO_ENCONTRADA", "NO_ENCONTRADA_SIN_OT"];
   const missingRows = problemRows.filter(row => missingReasons.includes(row.coincidencia));
-  const conflictingRows = problemRows.filter(row => !missingReasons.includes(row.coincidencia));
-  const closureBlocked = conflictingRows.length > 0 || (missingRows.length > 0 && !acceptMissing);
+  const conflictingRows = problemRows.filter(
+    row => row.coincidencia !== "SIN_NUMERO_OT" && !missingReasons.includes(row.coincidencia),
+  );
+  const unresolvedNoOtRows = noOtRows.filter(row => {
+    const resolution = manualResolutions[row.orden_mantenimiento_id] || {};
+    return !(String(resolution.numero_ot || "").trim() || resolution.estado_manual);
+  });
+  const closureBlocked =
+    conflictingRows.length > 0 ||
+    unresolvedNoOtRows.length > 0 ||
+    (missingRows.length > 0 && !acceptMissing);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
@@ -90,6 +101,7 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
   useEffect(() => {
     setPreview(null);
     setAcceptMissing(false);
+    setManualResolutions({});
     setFile(null);
     load();
   }, [week?.from, week?.to, specialty]);
@@ -105,6 +117,8 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
       setError("");
       setPreview(null);
       setAcceptMissing(false);
+      setManualResolutions({});
+      setManualResolutions({});
       const result = await previewV2WeekClosure(id, file);
       setPreview(result);
     } catch (e) {
@@ -112,6 +126,21 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
     } finally {
       setUploading(false);
     }
+  }
+
+  function updateNoOtResolution(orderId, patch) {
+    setManualResolutions((current) => {
+      const previous = current[orderId] || {};
+      const next = { ...previous, ...patch };
+      if (Object.prototype.hasOwnProperty.call(patch, "numero_ot") && String(patch.numero_ot || "").trim()) {
+        next.estado_manual = "";
+      }
+      if (Object.prototype.hasOwnProperty.call(patch, "estado_manual") && patch.estado_manual) {
+        next.numero_ot = "";
+      }
+      return { ...current, [orderId]: next };
+    });
+    setError("");
   }
 
   async function closeWeek() {
@@ -130,6 +159,12 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
       setError("Primero compara el Excel con las OT guardadas; el cierre no se ha procesado.");
       return;
     }
+    if (unresolvedNoOtRows.length > 0) {
+      setError(
+        `Hay ${unresolvedNoOtRows.length} actividad(es) sin OT. Asigna la OT o define si quedó FINALIZADA o PENDIENTE antes de cerrar.`,
+      );
+      return;
+    }
     if (missingRows.length > 0 && !acceptMissing) {
       setError("Marca la casilla para autorizar exclusivamente las OT verdaderamente ausentes.");
       return;
@@ -146,7 +181,15 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
       setUploading(true);
       setError("");
       setMessage("");
-      const result = await uploadV2WeekClosure(id, file);
+      const resolutions = noOtRows.map((row) => {
+        const value = manualResolutions[row.orden_mantenimiento_id] || {};
+        return {
+          orden_mantenimiento_id: row.orden_mantenimiento_id,
+          numero_ot: String(value.numero_ot || "").trim() || null,
+          estado_manual: value.estado_manual || null,
+        };
+      });
+      const result = await uploadV2WeekClosure(id, file, "", resolutions);
       setClosure(result);
       await load();
       const s = result.summary || {};
@@ -156,6 +199,7 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
       setFile(null);
       setPreview(null);
       setAcceptMissing(false);
+      setManualResolutions({});
     } catch (e) {
       setError(e.message);
     } finally {
@@ -348,6 +392,7 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
                   setFile(e.target.files?.[0] || null);
                   setPreview(null);
                   setAcceptMissing(false);
+                  setManualResolutions({});
                   setError("");
                 }}
               />
@@ -375,6 +420,14 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
                   Archivo: {preview.summary?.calendar_rows} filas.</p>
                 <p>H-H: {fmt(preview.summary?.hh_programmed,2)} programadas · {fmt(preview.summary?.hh_finalized,2)} finalizadas ·
                   {fmt(preview.summary?.hh_pending,2)} pendientes. Cumplimiento estimado: {fmt(preview.summary?.compliance_pct,1)}%.</p>
+                {noOtRows.length > 0 && (
+                  <div className={unresolvedNoOtRows.length ? "v2-warning" : "v2-success"} role="status" style={{ marginBottom: 12 }}>
+                    <b>{noOtRows.length} actividad(es) programada(s) no tienen OT.</b>{" "}
+                    {unresolvedNoOtRows.length
+                      ? "Resuelve cada una en la tabla: asigna la OT correcta o define manualmente FINALIZADA/PENDIENTE."
+                      : "Todas las actividades sin OT ya tienen una resolución definida para este cierre."}
+                  </div>
+                )}
                 {conflictingRows.length > 0 && (
                   <div className="v2-error" role="alert" style={{ marginBottom: 12 }}>
                     El cierre está bloqueado por <b>{conflictingRows.length} OT con discrepancias reales</b>.
@@ -390,10 +443,10 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
                     como no encontradas en BACKLOG.
                   </label>
                 )}
-                {missingRows.length > 0 && !acceptMissing && conflictingRows.length === 0 && (
+                {missingRows.length > 0 && !acceptMissing && conflictingRows.length === 0 && unresolvedNoOtRows.length === 0 && (
                   <div className="v2-warning" role="status">Para habilitar Confirmar cierre semanal, marca la casilla anterior.</div>
                 )}
-                {conflictingRows.length === 0 && (missingRows.length === 0 || acceptMissing) && (
+                {conflictingRows.length === 0 && unresolvedNoOtRows.length === 0 && (missingRows.length === 0 || acceptMissing) && (
                   <div className="v2-success" role="status">Conciliación revisada: puedes confirmar el cierre semanal.</div>
                 )}
                 <details open={problemRows.length > 0}>
@@ -402,7 +455,7 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
                     OT a revisar: {problemRows.map(row => row.numero_ot || "SIN OT").join(" · ")}
                   </div>}
                   <div className="v2-table-wrap"><table>
-                    <thead><tr><th>OT programada</th><th>Equipo</th><th>Plan</th><th>H-H</th><th>Estado en Excel</th><th>Coincidencia</th><th>Resultado</th></tr></thead>
+                    <thead><tr><th>OT programada</th><th>Equipo</th><th>Plan</th><th>H-H</th><th>Estado en Excel</th><th>Coincidencia</th><th>Resolver SIN OT</th><th>Resultado</th></tr></thead>
                     <tbody>{(preview.rows||[]).map((row,i)=>(
                       <tr key={i} style={row.finalizado === null ? { background: "rgba(234, 179, 8, 0.12)" } : undefined}>
                         <td><b>{row.numero_ot || "SIN OT"}</b></td><td>{row.activo}</td><td>{row.plan}</td>
@@ -413,7 +466,38 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
                               [a.activo || "SIN EQUIPO", a.plan || "SIN PLAN", a.estado || "SIN ESTADO"].join(" / ")
                             ).join(" | ")}</small>}
                         </td>
-                        <td>{row.finalizado === true ? "FINALIZADA" : row.finalizado === false ? "PENDIENTE → BACKLOG" : "REVISAR"}</td>
+                        <td>
+                          {row.coincidencia === "SIN_NUMERO_OT" ? (
+                            <div className="v2-no-ot-resolution">
+                              <label>
+                                <span>Asignar OT</span>
+                                <input
+                                  type="text"
+                                  placeholder="OT-0000-26"
+                                  value={manualResolutions[row.orden_mantenimiento_id]?.numero_ot || ""}
+                                  onChange={(event) =>
+                                    updateNoOtResolution(row.orden_mantenimiento_id, { numero_ot: event.target.value })
+                                  }
+                                />
+                              </label>
+                              <em>o</em>
+                              <label>
+                                <span>Definir estado</span>
+                                <select
+                                  value={manualResolutions[row.orden_mantenimiento_id]?.estado_manual || ""}
+                                  onChange={(event) =>
+                                    updateNoOtResolution(row.orden_mantenimiento_id, { estado_manual: event.target.value })
+                                  }
+                                >
+                                  <option value="">Seleccionar...</option>
+                                  <option value="FINALIZADA">FINALIZADA</option>
+                                  <option value="PENDIENTE">PENDIENTE</option>
+                                </select>
+                              </label>
+                            </div>
+                          ) : "—"}
+                        </td>
+                        <td>{row.finalizado === true ? "FINALIZADA" : row.finalizado === false ? "PENDIENTE → BACKLOG" : row.coincidencia === "SIN_NUMERO_OT" && !unresolvedNoOtRows.some(item => item.orden_mantenimiento_id === row.orden_mantenimiento_id) ? "RESUELTA · LISTA PARA CIERRE" : "REVISAR"}</td>
                       </tr>
                     ))}</tbody>
                   </table></div>
