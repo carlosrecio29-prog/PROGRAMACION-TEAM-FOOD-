@@ -1593,7 +1593,7 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
 /* === ENCABEZADO ESTÁNDAR PARA TODOS LOS MÓDULOS === */
 .v2-module-topbar{
   margin-bottom:18px;
-  padding:22px 24px;
+  padding:22px 24px 22px 14px;
   border:1px solid #d5e2ec;
   border-radius:18px;
   background:linear-gradient(135deg,#ffffff 0%,#f8fbfd 68%,#f0f7fb 100%);
@@ -1606,13 +1606,13 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
 }
 .v2-module-topbar .v2-kicker{
   display:block;
-  margin-bottom:9px;
+  margin-bottom:6px;
   font-size:9px;
   letter-spacing:1.15px;
 }
 .v2-module-topbar .v2-topbar-heading{
   align-items:center;
-  gap:15px;
+  gap:18px;
 }
 .v2-module-topbar .v2-topbar-view-icon{
   width:58px;
@@ -1652,7 +1652,7 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
 }
 @media(max-width:900px){
   .v2-module-topbar{
-    padding:18px;
+    padding:18px 18px 18px 12px;
     align-items:flex-start;
   }
   .v2-module-topbar .v2-topbar-title-copy h1{
@@ -1670,7 +1670,7 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
 }
 @media(max-width:650px){
   .v2-module-topbar{
-    padding:16px;
+    padding:16px 16px 16px 12px;
     border-radius:15px;
   }
   .v2-module-topbar .v2-topbar-heading{
