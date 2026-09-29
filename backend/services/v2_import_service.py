@@ -206,12 +206,13 @@ def _parse_plans(content:bytes)->list[dict[str,Any]]:
         if not group or not plan:
             continue
         people=_number(cell_by_header(row,m,"NumeroPersonas","Número de Personas"))
+        description=cell_by_header(row,m,"DescripcionPlanTrabaj","DescripcionPlanTrabajo")
         rows.append({
             "grupo":group,
             "descripcion_grupo":cell_by_header(row,m,"DescripcionGrupo"),
             "plan_trabajo":plan,
-            "es_operacion":is_operation_plan(plan),
-            "descripcion_plan_trabajo":cell_by_header(row,m,"DescripcionPlanTrabaj","DescripcionPlanTrabajo"),
+            "es_operacion":is_operation_plan(plan) or is_operation_plan(description),
+            "descripcion_plan_trabajo":description,
             "tipo_frecuencia":cell_by_header(row,m,"TipoFrecuencia"),
             "valor_frecuencia":_number(cell_by_header(row,m,"ValorFrecuenci","ValorFrecuencia")),
             "tiempo_ejecucion_min":_number(cell_by_header(row,m,"TiempoEjecucion")),
@@ -268,6 +269,7 @@ def _parse_monthly(content:bytes)->list[dict[str,Any]]:
         rows.append({
             "titulo":cell_by_header(row,m,"Título","Titulo"),
             "activo_codigo":asset,
+            "activo_descripcion":cell_by_header(row,m,"DescripcionActivo","DescripciónActivo"),
             "especialidad":_specialty(cell_by_header(row,m,"Especialidad")) or normalize_text(cell_by_header(row,m,"Especialidad")) or None,
             "orden_tipo":normalize_text(cell_by_header(row,m,"OrdenTipo")) or None,
             "numero_ot_raw":_scalar(cell_by_header(row,m,"Orden")),
