@@ -114,3 +114,58 @@ def test_preview_separates_real_absences_from_conflicts():
     assert "missingRows" in frontend
     assert "conflictingRows" in frontend
     assert "closureBlocked" in frontend
+
+
+def test_non_metrology_without_ot_matches_exact_asset_and_plan():
+    item = {
+        "numero_ot": None,
+        "especialidad": "MEC",
+        "activo_codigo": "BA-EM-E3-LL02",
+        "plan_clave_software": "59-MANTENIMIENTO MECÁNICO SEMESTRAL LLENADORA DE BIDONES",
+    }
+    row = {
+        "numero_ot": "",
+        "activo": "BA-EM-E3-LL02",
+        "plan": "59-MANTENIMIENTO MECÁNICO SEMESTRAL LLENADORA DE BIDONES",
+        "estado": "FINALIZADO",
+    }
+    exact, by_ot = _index_calendar([row])
+    match, reason = _match_calendar_item(item, exact, by_ot)
+    assert match is row
+    assert reason == "EQUIPO_PLAN_SIN_OT"
+
+
+def test_non_metrology_without_ot_never_guesses_duplicate_asset_plan():
+    item = {
+        "numero_ot": None,
+        "especialidad": "SER",
+        "activo_codigo": "EQ-01",
+        "plan_clave_software": "105-RUTINA SERVICIO",
+    }
+    rows = [
+        {"numero_ot": "", "activo": "EQ-01", "plan": "105-RUTINA SERVICIO", "estado": "ABIERTO"},
+        {"numero_ot": "", "activo": "EQ-01", "plan": "105-RUTINA SERVICIO", "estado": "FINALIZADO"},
+    ]
+    exact, by_ot = _index_calendar(rows)
+    match, reason = _match_calendar_item(item, exact, by_ot)
+    assert match is None
+    assert reason == "EQUIPO_PLAN_AMBIGUO_SIN_OT"
+
+
+def test_metrology_without_ot_keeps_previous_pending_behavior():
+    item = {
+        "numero_ot": None,
+        "especialidad": "MET",
+        "activo_codigo": "EQ-MET-01",
+        "plan_clave_software": "109-COMPARACION MEDIDA CON PATRON",
+    }
+    row = {
+        "numero_ot": "",
+        "activo": "EQ-MET-01",
+        "plan": "109-COMPARACION MEDIDA CON PATRON",
+        "estado": "FINALIZADO",
+    }
+    exact, by_ot = _index_calendar([row])
+    match, reason = _match_calendar_item(item, exact, by_ot)
+    assert match is None
+    assert reason == "SIN_NUMERO_OT"
