@@ -53,6 +53,8 @@ def _capacity(conn,date_from:date,date_to:date,specialty:str)->dict[str,Any]:
         "effective":effective,
         "target":target,
         "reserve":reserve,
+        "preventive":target,
+        "corrective":reserve,
         "initial_margin":initial_margin,
     }
 
