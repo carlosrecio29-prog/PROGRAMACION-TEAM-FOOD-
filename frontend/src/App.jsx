@@ -101,20 +101,6 @@ function Summary({ data, onNavigate, year, month, onGoMonthly }) {
   ];
   return (
     <div className="v2-stack v2-control-dashboard">
-      <section className="v2-control-intro">
-        <div>
-          <span className="v2-kicker">CONTROL OPERATIVO · {MONTHS[month - 1]?.toUpperCase()} {year}</span>
-          <h2>Panel de control de mantenimiento</h2>
-          <p>Visión rápida del PMP, capacidad disponible, calidad de datos y accesos a los procesos principales.</p>
-        </div>
-        <div className="v2-control-status">
-          <span className={total > 0 ? "ready" : "waiting"} />
-          <div>
-            <b>{total > 0 ? "Periodo cargado" : "Pendiente de carga"}</b>
-            <small>{total > 0 ? `${readyPct}% del PMP listo para programar` : "Aún no hay PMP cargado para este período"}</small>
-          </div>
-        </div>
-      </section>
 
       <section className="v2-control-primary">
         <article>
