@@ -56,59 +56,157 @@ function fmt(v, d = 1) {
     maximumFractionDigits: d,
   });
 }
-function Summary({ data, onGoPending, year, month, onGoMonthly }) {
+function ControlIcon({ type }) {
+  const common = {
+    viewBox: "0 0 48 48",
+    "aria-hidden": "true",
+    focusable: "false",
+  };
+  if (type === "calendar") {
+    return <svg {...common}><path d="M10 8h28a4 4 0 0 1 4 4v26a4 4 0 0 1-4 4H10a4 4 0 0 1-4-4V12a4 4 0 0 1 4-4Zm0 12v18h28V20H10Zm5-16v9m18-9v9M15 26h7v7h-7Zm11 0h7v7h-7Z" /></svg>;
+  }
+  if (type === "clock") {
+    return <svg {...common}><path d="M24 5a19 19 0 1 1 0 38 19 19 0 0 1 0-38Zm0 6a13 13 0 1 0 0 26 13 13 0 0 0 0-26Zm3 3v9.8l7 4-3 5-10-6V14h6Z" /></svg>;
+  }
+  if (type === "team") {
+    return <svg {...common}><path d="M18 23a8 8 0 1 1 0-16 8 8 0 0 1 0 16Zm17-2a6 6 0 1 1 0-12 6 6 0 0 1 0 12ZM4 42v-6c0-6.1 5-11 11-11h6c6 0 11 4.9 11 11v6H4Zm27 0v-6c0-3.2-1-6.1-2.9-8.4A10.8 10.8 0 0 1 33 26h4c4.9 0 9 4 9 9v7H31Z" /></svg>;
+  }
+  if (type === "check") {
+    return <svg {...common}><path d="M10 7h28a4 4 0 0 1 4 4v26a4 4 0 0 1-4 4H10a4 4 0 0 1-4-4V11a4 4 0 0 1 4-4Zm6 17-4 4 8 8 17-17-4-4-13 13-4-4Z" /></svg>;
+  }
+  if (type === "alert") {
+    return <svg {...common}><path d="M24 5 45 42H3L24 5Zm-3 13v12h6V18h-6Zm0 15v6h6v-6h-6Z" /></svg>;
+  }
+  if (type === "tools") {
+    return <svg {...common}><path d="M35.5 6a11 11 0 0 0-13.7 13.7L7 34.5A5.3 5.3 0 1 0 14.5 42l14.8-14.8A11 11 0 0 0 43 13.5l-7 7-8.5-8.5 8-6Z" /></svg>;
+  }
+  if (type === "report") {
+    return <svg {...common}><path d="M10 5h20l9 9v29H10V5Zm19 4v7h7l-7-7ZM16 24h17v5H16v-5Zm0 9h17v5H16v-5Zm0-18h8v5h-8v-5Z" /></svg>;
+  }
+  return <svg {...common}><path d="M8 8h32v32H8z" /></svg>;
+}
+
+function Summary({ data, onNavigate, year, month, onGoMonthly }) {
   const s = data?.summary || {};
   const p = data?.pending || {};
+  const ready = number(s.registros_listos);
+  const total = number(s.registros_pmp);
+  const readyPct = total > 0 ? Math.round((ready / total) * 100) : 0;
+  const quickActions = [
+    { id: "advanceStops", title: "Preparar paradas", text: "Revisar actividades con equipo detenido", icon: "calendar" },
+    { id: "programming", title: "Programación semanal", text: "Seleccionar y guardar actividades", icon: "tools" },
+    { id: "closure", title: "Cierre semanal", text: "Conciliar OT contra el calendario", icon: "check" },
+    { id: "monthly", title: "Informe mensual", text: "Ver cumplimiento y descargar informe", icon: "report" },
+    { id: "imports", title: "Cargar Excel", text: "Actualizar archivos del período", icon: "calendar" },
+  ];
   return (
-    <div className="v2-stack">
-      <section className="v2-hero">
+    <div className="v2-stack v2-control-dashboard">
+      <section className="v2-control-intro">
         <div>
-          <span className="v2-kicker">BASE OPERATIVA · {String(month).padStart(2, "0")}/{year}</span>
-          <h2>Estado operativo y avance del mantenimiento</h2>
-          <p>Datos maestros, cartera PMP, cumplimiento semanal y cierre del mes.</p>
+          <span className="v2-kicker">CONTROL OPERATIVO · {MONTHS[month - 1]?.toUpperCase()} {year}</span>
+          <h2>Panel de control de mantenimiento</h2>
+          <p>Visión rápida del PMP, capacidad disponible, calidad de datos y accesos a los procesos principales.</p>
         </div>
-        <button className="v2-primary" onClick={onGoPending}>
-          Completar datos pendientes
-        </button>
-      </section>
-      <div className="v2-success" style={{ marginBottom: 12 }}>
-        Planes OPERACIÓN excluidos: <b>{number(s.planes_operacion)}</b> ·
-        Registros OPERACIÓN fuera del PMP: <b>{number(s.registros_operacion_excluidos)}</b>.
-        No se incluyen en las HH ni en los pendientes de mantenimiento.
-      </div>
-      <section className="v2-kpis">
-        <div>
-          <span>Registros PMP</span>
-          <b>{number(s.registros_pmp)}</b>
-          <small>{number(s.ot_distintas)} OT distintas</small>
-        </div>
-        <div>
-          <span>H-H calculables</span>
-          <b>{fmt(s.hh_calculables, 1)}</b>
-          <small>con datos disponibles hoy</small>
-        </div>
-        <div>
-          <span>H-H técnicos mes</span>
-          <b>{fmt(s.hh_tecnicos_mes, 1)}</b>
-          <small>antes del 80 / 20</small>
-        </div>
-        <div className="warn">
-          <span>Planes pendientes</span>
-          <b>{number(p.planes_pendientes)}</b>
-          <small>usados en el PMP del mes</small>
-        </div>
-        <div className="warn">
-          <span>Sin Nº personas</span>
-          <b>{number(p.planes_sin_personas)}</b>
-          <small>planes diferentes</small>
-        </div>
-        <div className={number(s.tecnicos_sin_especialidad) ? "warn" : "ok"}>
-          <span>Técnicos sin especialidad</span>
-          <b>{number(s.tecnicos_sin_especialidad)}</b>
-          <small>requieren completar dato</small>
+        <div className="v2-control-status">
+          <span className={total > 0 ? "ready" : "waiting"} />
+          <div>
+            <b>{total > 0 ? "Periodo cargado" : "Pendiente de carga"}</b>
+            <small>{total > 0 ? `${readyPct}% del PMP listo para programar` : "Aún no hay PMP cargado para este período"}</small>
+          </div>
         </div>
       </section>
+
+      <section className="v2-control-primary">
+        <article>
+          <div className="v2-control-icon"><ControlIcon type="calendar" /></div>
+          <div>
+            <span>PMP DEL MES</span>
+            <strong>{number(s.registros_pmp)}</strong>
+            <small>{number(s.ot_distintas)} OT distintas</small>
+          </div>
+        </article>
+        <article>
+          <div className="v2-control-icon"><ControlIcon type="clock" /></div>
+          <div>
+            <span>H-H CALCULABLES</span>
+            <strong>{fmt(s.hh_calculables, 1)}</strong>
+            <small>carga preventiva calculable</small>
+          </div>
+        </article>
+        <article>
+          <div className="v2-control-icon"><ControlIcon type="team" /></div>
+          <div>
+            <span>H-H TÉCNICOS DEL MES</span>
+            <strong>{fmt(s.hh_tecnicos_mes, 1)}</strong>
+            <small>disponibilidad antes del 80 / 20</small>
+          </div>
+        </article>
+      </section>
+
+      <section className="v2-control-body">
+        <div className="v2-control-overview">
+          <div className="v2-control-panel-head">
+            <div>
+              <span className="v2-kicker">ESTADO OPERATIVO</span>
+              <h3>Preparación del período</h3>
+            </div>
+            <b>{readyPct}% listo</b>
+          </div>
+          <div className="v2-control-progress">
+            <i style={{ width: `${Math.min(100, readyPct)}%` }} />
+          </div>
+          <div className="v2-control-mini-grid">
+            <button type="button" onClick={() => onNavigate("pmp")}>
+              <ControlIcon type="check" />
+              <span>Registros PMP listos</span>
+              <strong>{number(s.registros_listos)}</strong>
+            </button>
+            <button type="button" onClick={() => onNavigate("pending")}>
+              <ControlIcon type="alert" />
+              <span>Planes pendientes</span>
+              <strong>{number(p.planes_pendientes)}</strong>
+            </button>
+            <button type="button" onClick={() => onNavigate("pending")}>
+              <ControlIcon type="team" />
+              <span>Sin Nº personas</span>
+              <strong>{number(p.planes_sin_personas)}</strong>
+            </button>
+            <button type="button" onClick={() => onNavigate("technicians")}>
+              <ControlIcon type="team" />
+              <span>Técnicos sin especialidad</span>
+              <strong>{number(s.tecnicos_sin_especialidad)}</strong>
+            </button>
+          </div>
+          <div className="v2-control-operation-note">
+            <b>{number(s.planes_operacion)}</b> planes OPERACIÓN excluidos ·
+            <b> {number(s.registros_operacion_excluidos)}</b> registros fuera del PMP de mantenimiento.
+          </div>
+        </div>
+
+        <div className="v2-control-shortcuts">
+          <div className="v2-control-panel-head">
+            <div>
+              <span className="v2-kicker">ACCESOS RÁPIDOS</span>
+              <h3>Procesos principales</h3>
+            </div>
+          </div>
+          <div className="v2-control-action-list">
+            {quickActions.map((action) => (
+              <button type="button" key={action.id} onClick={() => onNavigate(action.id)}>
+                <span className="v2-control-action-icon"><ControlIcon type={action.icon} /></span>
+                <span className="v2-control-action-copy">
+                  <b>{action.title}</b>
+                  <small>{action.text}</small>
+                </span>
+                <span className="v2-control-arrow">→</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
       <ProgressDashboard year={year} month={month} onOpenMonthly={onGoMonthly} />
+
       <section className="v2-panel">
         <div className="v2-section-head">
           <div>
@@ -130,6 +228,7 @@ function Summary({ data, onGoPending, year, month, onGoMonthly }) {
           ))}
         </div>
       </section>
+
       <section className="v2-panel">
         <div className="v2-section-head">
           <div>
@@ -1467,7 +1566,7 @@ export default function App() {
     >
         {error && <div className="v2-error">{error}</div>}
         {view === "summary" && (
-          <Summary data={dashboard} year={year} month={month} onGoPending={() => navigate("pending")} onGoMonthly={() => navigate("monthly")} />
+          <Summary data={dashboard} year={year} month={month} onNavigate={navigate} onGoMonthly={() => navigate("monthly")} />
         )}{" "}
         {view === "pending" && (
           <PendingPlans year={year} month={month} onChanged={refresh} />
