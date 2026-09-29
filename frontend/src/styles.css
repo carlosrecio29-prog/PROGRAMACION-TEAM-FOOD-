@@ -1062,3 +1062,59 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
   .technician-grid .tech-col{min-width:155px;width:155px}
   .technician-grid .specialty-col{left:155px}
 }
+
+
+/* Resolución controlada de actividades sin OT en cierre semanal */
+.v2-no-ot-resolution{
+  min-width:260px;
+  display:grid;
+  grid-template-columns:minmax(105px,1fr) 18px minmax(125px,1fr);
+  align-items:end;
+  gap:7px;
+}
+.v2-no-ot-resolution label{
+  display:grid;
+  gap:4px;
+  margin:0;
+}
+.v2-no-ot-resolution label>span{
+  font-size:7px;
+  font-weight:900;
+  color:#60758a;
+  text-transform:uppercase;
+  letter-spacing:.2px;
+}
+.v2-no-ot-resolution input,
+.v2-no-ot-resolution select{
+  width:100%;
+  min-height:31px;
+  border:1px solid #cfdbe5;
+  border-radius:7px;
+  background:#fff;
+  color:#1f3850;
+  padding:5px 7px;
+  font-size:8px;
+  font-weight:800;
+}
+.v2-no-ot-resolution input:focus,
+.v2-no-ot-resolution select:focus{
+  outline:2px solid #bfe4f6;
+  border-color:#49a8d5;
+}
+.v2-no-ot-resolution em{
+  align-self:center;
+  text-align:center;
+  font-size:8px;
+  font-style:normal;
+  font-weight:900;
+  color:#8a99a8;
+  padding-top:13px;
+}
+@media(max-width:900px){
+  .v2-no-ot-resolution{
+    min-width:190px;
+    grid-template-columns:1fr;
+    align-items:stretch;
+  }
+  .v2-no-ot-resolution em{padding:0}
+}
