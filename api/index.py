@@ -34,6 +34,7 @@ from backend.services.v2_closure_service import (
     V2ClosureError, get_week_closure, close_week_from_calendar, preview_week_closure,
 )
 from backend.services.v2_backlog_service import get_accumulated_backlog
+from backend.services.v2_operation_exclusion_service import get_operation_exclusions
 from backend.services.v2_progress_service import get_progress, export_progress_pdf
 from backend.services.programming_service import (
     ProgrammingError, close_programming, programming_detail, programming_history, save_programming,
@@ -55,6 +56,17 @@ def run_import(fn,filename,content,**kwargs):
     try:return fn(filename,content,**kwargs)
     except ValueError as exc:raise HTTPException(422,str(exc)) from exc
     except Exception as exc:raise HTTPException(500,f"Error procesando archivo: {exc}") from exc
+
+@app.get("/api/v2/operation-exclusions")
+def v2_operation_exclusions(
+    year:int=Query(...,ge=2020,le=2100),
+    month:int=Query(...,ge=1,le=12),
+):
+    try:
+        return get_operation_exclusions(year=year,month=month)
+    except SQLAlchemyError as exc:
+        raise HTTPException(503,"No se pudo consultar el registro de actividades excluidas") from exc
+
 
 @app.get("/api/health")
 def health():
