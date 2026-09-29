@@ -118,7 +118,6 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
       setPreview(null);
       setAcceptMissing(false);
       setManualResolutions({});
-      setManualResolutions({});
       const result = await previewV2WeekClosure(id, file);
       setPreview(result);
     } catch (e) {
