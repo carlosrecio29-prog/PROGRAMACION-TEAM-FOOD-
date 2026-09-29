@@ -177,8 +177,13 @@ def import_monthly_calendar(*, monthly_content: bytes, year: int, month: int) ->
                         f"Fila {row['fila_origen']}: plan {row['plan_clave_software']} {detail}"
                     )
 
+            planning_plan_key = (
+                normalize_text(f"{plan['grupo']}-{plan['plan_trabajo']}")
+                if plan is not None
+                else plan_key
+            )
             candidates = planning_lookup.get((
-                normalize_text(row["activo_codigo"]), plan_key,
+                normalize_text(row["activo_codigo"]), planning_plan_key,
             ), [])
             enabled = [candidate for candidate in candidates if candidate["habilitado"]]
             candidates = enabled or candidates
