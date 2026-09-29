@@ -211,7 +211,9 @@ def _parse_plans(content:bytes)->list[dict[str,Any]]:
             "grupo":group,
             "descripcion_grupo":cell_by_header(row,m,"DescripcionGrupo"),
             "plan_trabajo":plan,
-            "es_operacion":is_operation_plan(plan) or is_operation_plan(description),
+            # PlanTrabajo es la fuente maestra. DescripcionPlanTrabaj puede conservar
+            # un texto histórico con OPERACIÓN aunque el plan ya haya sido corregido.
+            "es_operacion":is_operation_plan(plan),
             "descripcion_plan_trabajo":description,
             "tipo_frecuencia":cell_by_header(row,m,"TipoFrecuencia"),
             "valor_frecuencia":_number(cell_by_header(row,m,"ValorFrecuenci","ValorFrecuencia")),
