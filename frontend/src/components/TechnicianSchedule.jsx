@@ -65,6 +65,7 @@ export default function TechnicianSchedule({ year, month, onChanged }) {
       const result = await getTechnicianSchedule(year, month);
       setData(result);
       setDraft({});
+      setSpecialtyDraft({});
     } catch (cause) {
       setError(cause.message || "No se pudo cargar la programación de técnicos.");
     } finally {
@@ -186,8 +187,8 @@ export default function TechnicianSchedule({ year, month, onChanged }) {
             <span className="v2-kicker">PLANIFICACIÓN DE PERSONAL</span>
             <h3>Programación mensual de técnicos</h3>
             <p>
-              Modifica los turnos directamente en la matriz. Los cambios se guardan por técnico y fecha,
-              por lo que puedes actualizar el mes tantas veces como sea necesario.
+              Modifica turnos y especialidad directamente en la matriz. Los cambios de especialidad
+              recalculan la capacidad de las programaciones semanales que todavía no estén cerradas.
             </p>
           </div>
           <Badge tone={changeCount ? "warn" : "ok"}>
@@ -267,7 +268,7 @@ export default function TechnicianSchedule({ year, month, onChanged }) {
               <thead>
                 <tr>
                   <th className="sticky-col tech-col">Técnico</th>
-                  <th className="sticky-col specialty-col">Esp.</th>
+                  <th className="sticky-col specialty-col">Especialidad</th>
                   {days.map((day) => {
                     const weekday = new Date(year, month - 1, day).getDay();
                     return (
