@@ -2,13 +2,52 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from datetime import date
+import re
 from typing import Any
 
 from sqlalchemy import text
 
 from backend.database import get_engine
-from backend.parsers.common import normalize_text
+from backend.parsers.common import is_operation_plan, normalize_text
 from backend.services.v2_import_service import _order_source_key, _parse_monthly, _scalar
+
+
+def _group_and_label(plan_key: Any) -> tuple[str, str]:
+    value = normalize_text(plan_key)
+    match = re.match(r"^([^\-–—:]+?)\s*[\-–—:]\s*(.+)$", value)
+    if not match:
+        return "", value
+    return normalize_text(match.group(1)), normalize_text(match.group(2))
+
+
+def _build_plan_lookups(rows: list[dict[str, Any]]) -> tuple[dict[str, dict[str, Any]], dict[tuple[str, str], list[dict[str, Any]]]]:
+    by_primary: dict[str, dict[str, Any]] = {}
+    by_description: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        by_primary[normalize_text(f"{row['grupo']}-{row['plan_trabajo']}")] = row
+        description = normalize_text(row.get("descripcion_plan_trabajo"))
+        if description:
+            by_description[(normalize_text(row["grupo"]), description)].append(row)
+    return by_primary, by_description
+
+
+def _resolve_plan(
+    plan_key: Any,
+    by_primary: dict[str, dict[str, Any]],
+    by_description: dict[tuple[str, str], list[dict[str, Any]]],
+) -> tuple[dict[str, Any] | None, str]:
+    normalized = normalize_text(plan_key)
+    direct = by_primary.get(normalized)
+    if direct is not None:
+        return direct, "PLAN_TRABAJO"
+
+    group, label = _group_and_label(plan_key)
+    candidates = by_description.get((group, label), [])
+    if len(candidates) == 1:
+        return candidates[0], "DESCRIPCION_EXACTA"
+    if len(candidates) > 1:
+        return None, "DESCRIPCION_AMBIGUA"
+    return None, "SIN_COINCIDENCIA"
 
 
 def import_monthly_calendar(*, monthly_content: bytes, year: int, month: int) -> dict[str, Any]:
@@ -40,12 +79,14 @@ def import_monthly_calendar(*, monthly_content: bytes, year: int, month: int) ->
             LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
             WHERE o.periodo=:period AND COALESCE(p.es_operacion,false)=false
         """), {"period": period}).scalars().all())
-        plans = {
-            normalize_text(f"{p['grupo']}-{p['plan_trabajo']}"): p
-            for p in conn.execute(text(
-                "SELECT id,grupo,plan_trabajo,es_operacion FROM programacion.plan_trabajo"
-            )).mappings()
-        }
+        plan_rows = [
+            dict(p)
+            for p in conn.execute(text("""
+                SELECT id,grupo,plan_trabajo,descripcion_plan_trabajo,es_operacion
+                FROM programacion.plan_trabajo
+            """)).mappings()
+        ]
+        plans, plans_by_description = _build_plan_lookups(plan_rows)
         assets = {
             normalize_text(r["codigo"]): int(r["id"])
             for r in conn.execute(text("SELECT id,codigo FROM programacion.activo")).mappings()
@@ -67,11 +108,26 @@ def import_monthly_calendar(*, monthly_content: bytes, year: int, month: int) ->
         missing_plan = 0
         missing_asset = 0
         ambiguous_planning = 0
+        matched_by_description = 0
+        ambiguous_description = 0
         open_in_file = 0
         finalized_in_file = 0
         for row in monthly:
-            plan_key = normalize_text(row["plan_clave_software"])
-            plan = plans.get(plan_key)
+            raw_plan_key = row["plan_clave_software"]
+            plan_key = normalize_text(raw_plan_key)
+
+            # OPERACIÓN se excluye por la etiqueta del propio archivo, aunque
+            # existan diferencias de espacios/puntuación respecto al maestro.
+            if is_operation_plan(raw_plan_key):
+                excluded += 1
+                continue
+
+            plan, match_type = _resolve_plan(raw_plan_key, plans, plans_by_description)
+            if match_type == "DESCRIPCION_EXACTA":
+                matched_by_description += 1
+            elif match_type == "DESCRIPCION_AMBIGUA":
+                ambiguous_description += 1
+
             if plan is not None and plan["es_operacion"]:
                 excluded += 1
                 continue
@@ -87,8 +143,13 @@ def import_monthly_calendar(*, monthly_content: bytes, year: int, month: int) ->
             if plan is None:
                 missing_plan += 1
                 if len(warnings) < 30:
+                    detail = (
+                        "descripción ambigua en el maestro"
+                        if match_type == "DESCRIPCION_AMBIGUA"
+                        else "sin coincidencia exacta en PlanTrabajo o DescripcionPlanTrabaj"
+                    )
                     warnings.append(
-                        f"Fila {row['fila_origen']}: plan {row['plan_clave_software']} no encontrado"
+                        f"Fila {row['fila_origen']}: plan {row['plan_clave_software']} {detail}"
                     )
 
             candidates = planning_lookup.get((
@@ -188,6 +249,8 @@ def import_monthly_calendar(*, monthly_content: bytes, year: int, month: int) ->
         "registros_previos_no_en_archivo": previous_not_in_file,
         "pmp_omitidos_por_activo_faltante": missing_asset,
         "ordenes_sin_plan_maestro": missing_plan,
+        "planes_enlazados_por_descripcion_exacta": matched_by_description,
+        "planes_con_descripcion_ambigua": ambiguous_description,
         "registros_pmp_con_planeacion_ambigua": ambiguous_planning,
         **dict(existing),
         "warnings": warnings,
