@@ -13,6 +13,13 @@ function normalize(value) {
   return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
 }
 
+function fmt(value) {
+  const number = Number(value || 0);
+  return Number.isFinite(number)
+    ? number.toLocaleString("es-CO", { maximumFractionDigits: 1 })
+    : "0";
+}
+
 export default function OperationExclusions({ year, month }) {
   const [data, setData] = useState(null);
   const [specialty, setSpecialty] = useState("");
@@ -37,21 +44,25 @@ export default function OperationExclusions({ year, month }) {
   }, [year, month]);
 
   const query = normalize(search);
-  const catalog = useMemo(
-    () => (data?.catalog || []).filter((row) => {
+
+  const details = useMemo(
+    () => (data?.period_details || []).filter((row) => {
       if (specialty && row.especialidad !== specialty) return false;
       if (!query) return true;
       return normalize([
-        row.grupo,
-        row.plan_trabajo,
-        row.descripcion_plan_trabajo,
+        row.numero_ot,
+        row.activo_codigo,
+        row.descripcion_activo,
+        row.plan_clave_software,
+        row.titulo,
+        row.cronograma_planeacion,
         row.especialidad,
       ].join(" ")).includes(query);
     }),
     [data, specialty, query],
   );
 
-  const periodRows = useMemo(
+  const summaryRows = useMemo(
     () => (data?.period_exclusions || []).filter((row) => {
       if (specialty && row.especialidad !== specialty) return false;
       if (!query) return true;
@@ -66,10 +77,22 @@ export default function OperationExclusions({ year, month }) {
     [data, specialty, query],
   );
 
-  const filteredPeriodTotal = periodRows.reduce(
-    (sum, row) => sum + Number(row.cantidad || 0),
-    0,
+  const catalog = useMemo(
+    () => (data?.catalog || []).filter((row) => {
+      if (specialty && row.especialidad !== specialty) return false;
+      if (!query) return true;
+      return normalize([
+        row.grupo,
+        row.plan_trabajo,
+        row.descripcion_plan_trabajo,
+        row.especialidad,
+      ].join(" ")).includes(query);
+    }),
+    [data, specialty, query],
   );
+
+  const visibleEquipment = new Set(details.map((row) => row.activo_codigo).filter(Boolean)).size;
+  const visiblePlans = new Set(details.map((row) => row.plan_clave_software).filter(Boolean)).size;
 
   return (
     <div className="v2-stack operation-exclusions">
@@ -77,35 +100,36 @@ export default function OperationExclusions({ year, month }) {
         <div className="v2-section-head">
           <div>
             <span className="v2-kicker">CONTROL DE EXCLUSIONES</span>
-            <h3>Actividades excluidas por OPERACIÓN</h3>
+            <h3>Equipos y PMP excluidos por OPERACIÓN</h3>
             <p>
-              Consulta los planes que no entran al PMP de mantenimiento porque su nombre
-              comienza con OPERACIÓN y revisa cuántas filas fueron retiradas en el período.
+              Aquí puedes auditar exactamente qué actividades de la Lista de Calendario
+              fueron retiradas del PMP de mantenimiento, incluyendo el equipo y el plan
+              que originó la exclusión.
             </p>
           </div>
           <Badge tone="warn">Regla automática</Badge>
         </div>
 
         <div className="operation-exclusion-kpis">
-          <article>
-            <span>Planes excluidos del maestro</span>
-            <b>{data?.catalog_total ?? "—"}</b>
-            <small>marcados como OPERACIÓN</small>
-          </article>
           <article className="period">
-            <span>Exclusiones del período</span>
+            <span>Actividades excluidas</span>
             <b>{data?.period_total ?? "—"}</b>
-            <small>filas retiradas del PMP seleccionado</small>
+            <small>filas retiradas del período</small>
           </article>
           <article>
-            <span>Mecánica</span>
-            <b>{data?.catalog_by_specialty?.MEC ?? 0}</b>
-            <small>planes en catálogo</small>
+            <span>Equipos afectados</span>
+            <b>{data?.period_unique_equipment ?? "—"}</b>
+            <small>equipos distintos</small>
           </article>
           <article>
-            <span>Eléctrica</span>
-            <b>{data?.catalog_by_specialty?.ELE ?? 0}</b>
-            <small>planes en catálogo</small>
+            <span>PMP excluidos</span>
+            <b>{data?.period_unique_plans ?? "—"}</b>
+            <small>planes distintos</small>
+          </article>
+          <article>
+            <span>Planes OPERACIÓN maestro</span>
+            <b>{data?.catalog_total ?? "—"}</b>
+            <small>regla maestra de exclusión</small>
           </article>
         </div>
       </section>
@@ -114,7 +138,7 @@ export default function OperationExclusions({ year, month }) {
         <div className="v2-section-head">
           <div>
             <span className="v2-kicker">FILTROS</span>
-            <h3>Buscar actividades excluidas</h3>
+            <h3>Buscar por equipo, OT o PMP</h3>
           </div>
           <button type="button" onClick={load} disabled={loading}>
             {loading ? "Actualizando..." : "Actualizar"}
@@ -135,7 +159,7 @@ export default function OperationExclusions({ year, month }) {
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Grupo, plan o descripción..."
+              placeholder="Código de equipo, nombre, OT o PMP..."
             />
           </label>
         </div>
@@ -145,56 +169,61 @@ export default function OperationExclusions({ year, month }) {
       <section className="v2-panel">
         <div className="v2-section-head">
           <div>
-            <span className="v2-kicker">PERÍODO SELECCIONADO</span>
-            <h3>Exclusiones aplicadas al PMP</h3>
+            <span className="v2-kicker">DETALLE DEL PERÍODO</span>
+            <h3>Actividades retiradas de la Lista de Calendario</h3>
             <p>
-              Estas cantidades corresponden a filas que fueron detectadas como OPERACIÓN
-              y por eso no entraron a la cartera preventiva del período.
+              Cada fila corresponde a una actividad real del archivo mensual que no entró
+              a programación porque su plan fue identificado como OPERACIÓN.
             </p>
           </div>
-          <Badge tone={filteredPeriodTotal ? "warn" : "ok"}>
-            {filteredPeriodTotal} excluida{filteredPeriodTotal === 1 ? "" : "s"}
-          </Badge>
+          <div className="operation-detail-badges">
+            <Badge tone={details.length ? "warn" : "ok"}>{details.length} visibles</Badge>
+            <Badge>{visibleEquipment} equipos</Badge>
+            <Badge>{visiblePlans} PMP</Badge>
+          </div>
         </div>
 
-        <div className="v2-table-wrap operation-exclusions-table">
+        <div className="v2-table-wrap operation-exclusions-table operation-detail-table">
           <table>
             <thead>
               <tr>
+                <th>OT</th>
                 <th>Especialidad</th>
-                <th>Grupo</th>
-                <th>Plan detectado en calendario</th>
-                <th>Plan maestro</th>
-                <th>Cantidad</th>
-                <th>Origen del registro</th>
+                <th>Equipo</th>
+                <th>Descripción del equipo</th>
+                <th>PMP excluido</th>
+                <th>Actividad</th>
+                <th>Tiempo</th>
+                <th>Estado</th>
               </tr>
             </thead>
             <tbody>
-              {periodRows.map((row, index) => (
-                <tr key={`${row.plan_clave_software}-${row.especialidad}-${index}`}>
+              {details.map((row) => (
+                <tr key={row.id}>
+                  <td>
+                    <b className="operation-ot">{row.numero_ot || "SIN OT"}</b>
+                    {row.fila_origen && <small>Fila {row.fila_origen}</small>}
+                  </td>
                   <td><Badge>{row.especialidad || "—"}</Badge></td>
-                  <td><b>{row.grupo || "—"}</b></td>
+                  <td><b className="operation-equipment-code">{row.activo_codigo}</b></td>
+                  <td>{row.descripcion_activo || "—"}</td>
                   <td><span className="operation-plan-name">{row.plan_clave_software}</span></td>
                   <td>
-                    <b>{row.plan_maestro || "—"}</b>
-                    {row.descripcion_maestro && row.descripcion_maestro !== row.plan_maestro && (
-                      <small>{row.descripcion_maestro}</small>
+                    <b>{row.titulo || "—"}</b>
+                    {row.cronograma_planeacion && row.cronograma_planeacion !== row.titulo && (
+                      <small>{row.cronograma_planeacion}</small>
                     )}
                   </td>
-                  <td><strong>{Number(row.cantidad || 0)}</strong></td>
-                  <td>
-                    <span className="operation-origin">
-                      {row.origen === "SANEAMIENTO_PRE_PILOTO"
-                        ? "Saneamiento pre-piloto"
-                        : "Carga de Lista de Calendario"}
-                    </span>
-                  </td>
+                  <td>{fmt(row.tiempo_planeado_min)} min</td>
+                  <td><Badge tone="warn">{row.estado || "—"}</Badge></td>
                 </tr>
               ))}
-              {!periodRows.length && (
+              {!details.length && (
                 <tr>
-                  <td colSpan={6} className="v2-empty">
-                    No hay exclusiones registradas para este período con los filtros seleccionados.
+                  <td colSpan={8} className="v2-empty">
+                    {loading
+                      ? "Cargando detalle de exclusiones..."
+                      : "No hay actividades excluidas registradas para este período con los filtros seleccionados."}
                   </td>
                 </tr>
               )}
@@ -203,19 +232,59 @@ export default function OperationExclusions({ year, month }) {
         </div>
       </section>
 
-      <section className="v2-panel">
-        <div className="v2-section-head">
+      {!!summaryRows.length && (
+        <section className="v2-panel">
+          <div className="v2-section-head">
+            <div>
+              <span className="v2-kicker">RESUMEN POR PMP</span>
+              <h3>Cuántas actividades fueron retiradas por cada plan</h3>
+            </div>
+            <Badge>{summaryRows.length} planes</Badge>
+          </div>
+          <div className="v2-table-wrap operation-exclusions-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Especialidad</th>
+                  <th>PMP detectado en calendario</th>
+                  <th>Plan maestro</th>
+                  <th>Cantidad</th>
+                </tr>
+              </thead>
+              <tbody>
+                {summaryRows.map((row, index) => (
+                  <tr key={`${row.plan_clave_software}-${row.especialidad}-${index}`}>
+                    <td><Badge>{row.especialidad || "—"}</Badge></td>
+                    <td><span className="operation-plan-name">{row.plan_clave_software}</span></td>
+                    <td>
+                      <b>{row.plan_maestro || "—"}</b>
+                      {row.descripcion_maestro && row.descripcion_maestro !== row.plan_maestro && (
+                        <small>{row.descripcion_maestro}</small>
+                      )}
+                    </td>
+                    <td><strong>{Number(row.cantidad || 0)}</strong></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      <details className="v2-panel operation-catalog-details">
+        <summary>
+          <span>
+            <b>Catálogo maestro de planes OPERACIÓN</b>
+            <small>Ver los {data?.catalog_total ?? 0} planes que definen la regla de exclusión.</small>
+          </span>
+        </summary>
+        <div className="v2-section-head" style={{ marginTop: 14 }}>
           <div>
             <span className="v2-kicker">CATÁLOGO MAESTRO</span>
             <h3>Planes clasificados como OPERACIÓN</h3>
-            <p>
-              Este catálogo define qué actividades deben permanecer fuera de la programación
-              preventiva de mantenimiento.
-            </p>
           </div>
           <Badge>{catalog.length} visibles</Badge>
         </div>
-
         <div className="v2-table-wrap operation-exclusions-table">
           <table>
             <thead>
@@ -241,17 +310,10 @@ export default function OperationExclusions({ year, month }) {
                   </td>
                 </tr>
               ))}
-              {!catalog.length && (
-                <tr>
-                  <td colSpan={5} className="v2-empty">
-                    No hay planes OPERACIÓN con los filtros seleccionados.
-                  </td>
-                </tr>
-              )}
             </tbody>
           </table>
         </div>
-      </section>
+      </details>
     </div>
   );
 }
