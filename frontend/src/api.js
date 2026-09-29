@@ -293,6 +293,18 @@ export async function downloadAdvanceStopsExcel(file, year, month) {
   window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
 }
 
+export async function getV2MonthlyClose(year = 2026, month = 10) {
+  return check(await fetch(`/api/v2/monthly-close?${new URLSearchParams({ year, month })}`));
+}
+
+export async function closeV2Month(year, month, closedBy = "Aplicación") {
+  return check(await fetch(`/api/v2/monthly-close?${new URLSearchParams({ year, month })}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ closed_by: closedBy }),
+  }));
+}
+
 export async function getV2Progress(year = 2026, month = 10) {
   return check(await fetch(`/api/v2/progress?${new URLSearchParams({year,month})}`));
 }
