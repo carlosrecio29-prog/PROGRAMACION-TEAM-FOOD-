@@ -175,6 +175,22 @@ export async function uploadV2TechnicianSchedule(file, year, month) {
   }));
 }
 
+export async function getTechnicianSchedule(year, month) {
+  return check(
+    await fetch(`/api/v2/technician-schedule?${new URLSearchParams({ year, month })}`),
+  );
+}
+
+export async function saveTechnicianSchedule(changes) {
+  return check(
+    await fetch("/api/v2/technician-schedule", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ changes }),
+    }),
+  );
+}
+
 export async function getV2Technicians(year = 2026, month = 10) {
   return check(
     await fetch(`/api/v2/technicians?${new URLSearchParams({ year, month })}`),
