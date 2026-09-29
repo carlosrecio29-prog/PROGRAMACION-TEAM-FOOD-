@@ -8,6 +8,7 @@ from typing import Optional
 from sqlalchemy import text
 
 from backend.database import get_engine
+from backend.services.v2_programming_service import capacity_split
 
 app = FastAPI(title="Programación Team Food · Turnos")
 
@@ -184,17 +185,10 @@ def technician_schedule(
 
     specialties = []
     for row in specialty_rows:
-        available = float(row["hh_disponibles"] or 0)
-        effective = round(available * 0.80, 2)
-        preventive = round(effective * 0.80, 2)
-        corrective = round(effective * 0.20, 2)
+        split = capacity_split(float(row["hh_disponibles"] or 0))
         specialties.append({
             "specialty": row["especialidad"],
-            "available": round(available, 2),
-            "effective": effective,
-            "preventive": preventive,
-            "corrective": corrective,
-            "initial_margin": round(available - effective, 2),
+            **split,
         })
 
     return {
