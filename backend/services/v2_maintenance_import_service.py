@@ -8,6 +8,7 @@ from sqlalchemy import text
 
 from backend.database import get_engine
 from backend.parsers.common import cell_by_header, header_mapping, is_operation_plan, normalize_text, workbook_from_bytes
+from backend.services.v2_monthly_calendar_import import _build_plan_lookups, _resolve_plan
 from backend.services.v2_import_service import (
     _number,
     _order_source_key,
@@ -171,6 +172,14 @@ def import_maintenance_base(
                 "SELECT id,grupo,plan_trabajo FROM programacion.plan_trabajo"
             )).mappings()
         }
+        plan_rows = [
+            dict(row)
+            for row in conn.execute(text("""
+                SELECT id,grupo,plan_trabajo,descripcion_plan_trabajo,es_operacion
+                FROM programacion.plan_trabajo
+            """)).mappings()
+        ]
+        plan_lookup, plan_description_lookup = _build_plan_lookups(plan_rows)
 
         # Reconstituye la relación que quedó en NULL al reemplazar el maestro anterior.
         conn.execute(text("UPDATE programacion.planeacion SET plan_trabajo_id=NULL"))
@@ -245,7 +254,15 @@ def import_maintenance_base(
         omitted_operation = 0
         for row in monthly:
             normalized_plan_key = normalize_text(row["plan_clave_software"])
-            if is_operation_plan(row["plan_clave_software"]) or normalized_plan_key in excluded_plan_keys:
+            resolved_plan, _match_type = _resolve_plan(
+                row["plan_clave_software"], plan_lookup, plan_description_lookup
+            )
+            is_excluded_operation = (
+                bool(resolved_plan["es_operacion"])
+                if resolved_plan is not None
+                else is_operation_plan(row["plan_clave_software"])
+            )
+            if is_excluded_operation:
                 omitted_operation += 1
                 ot_raw = normalize_text(row.get("numero_ot_raw"))
                 exclusion_detail.append({
@@ -259,7 +276,7 @@ def import_maintenance_base(
                     "estado": normalize_text(row.get("estado")) or None,
                     "cronograma_planeacion": row.get("cronograma_planeacion"),
                     "tiempo_planeado_min": row.get("tiempo_planeado_min"),
-                    "plan_trabajo_id": plan_map.get(normalized_plan_key),
+                    "plan_trabajo_id": int(resolved_plan["id"]) if resolved_plan else None,
                 })
                 continue
             asset_id = asset_map.get(normalize_text(row["activo_codigo"]))
@@ -271,7 +288,11 @@ def import_maintenance_base(
                     )
                 continue
 
-            plan_id = plan_map.get(normalize_text(row["plan_clave_software"]))
+            plan_id = (
+                int(resolved_plan["id"])
+                if resolved_plan is not None
+                else plan_map.get(normalize_text(row["plan_clave_software"]))
+            )
             if plan_id is None:
                 missing_order_plans += 1
 
