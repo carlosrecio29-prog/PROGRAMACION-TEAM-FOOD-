@@ -178,6 +178,26 @@ def technician_schedule(
                 ORDER BY especialidad
             """), {"period": period}).mappings()
         ]
+        pmp_rows = [
+            dict(row)
+            for row in conn.execute(text("""
+                SELECT
+                  COALESCE(o.especialidad,'SIN') AS especialidad,
+                  round(COALESCE(sum(
+                    COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min)
+                    / 60.0 * p.numero_personas_efectivo
+                  ) FILTER (
+                    WHERE p.numero_personas_efectivo IS NOT NULL
+                      AND COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min) IS NOT NULL
+                  ),0),2) AS hh_pmp
+                FROM programacion.orden_mantenimiento o
+                LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
+                WHERE o.periodo=:period
+                  AND COALESCE(p.es_operacion,false)=false
+                GROUP BY COALESCE(o.especialidad,'SIN')
+                ORDER BY especialidad
+            """), {"period": period}).mappings()
+        ]
 
     by_technician = {}
     totals = {}
@@ -193,11 +213,21 @@ def technician_schedule(
     for technician in technicians:
         technician["hh_mes"] = totals.get(str(technician["id"]), 0)
 
+    capacity_by_specialty = {
+        row["especialidad"]: float(row["hh_disponibles"] or 0)
+        for row in specialty_rows
+    }
+    pmp_by_specialty = {
+        row["especialidad"]: float(row["hh_pmp"] or 0)
+        for row in pmp_rows
+    }
+
     specialties = []
-    for row in specialty_rows:
-        split = capacity_split(float(row["hh_disponibles"] or 0))
+    for specialty in sorted(set(capacity_by_specialty) | set(pmp_by_specialty)):
+        split = capacity_split(capacity_by_specialty.get(specialty, 0))
         specialties.append({
-            "specialty": row["especialidad"],
+            "specialty": specialty,
+            "pmp_hours": round(pmp_by_specialty.get(specialty, 0), 2),
             **split,
         })
 
