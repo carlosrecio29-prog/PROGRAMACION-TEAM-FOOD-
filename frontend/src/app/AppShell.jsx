@@ -455,13 +455,6 @@ export default function AppShell({
           </header>
         )}
 
-        {accessRole !== "admin" && accessRole !== "loading" && (
-          <div className="v2-readonly-banner" role="status">
-            <b>MODO CONSULTA · SOLO LECTURA</b>
-            <span>Puedes recorrer toda la plataforma y consultar la información, pero las acciones que modifican datos están bloqueadas.</span>
-          </div>
-        )}
-
         {view === "pending" && <PendingDataIndicators year={year} month={month} />}
         {view === "imports" && <MaintenanceBaseUpload year={year} month={month} />}
         {children}
