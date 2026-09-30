@@ -1589,13 +1589,24 @@ export default function App() {
   const [year] = useState(2026);
   const [month, setMonth] = useState(10);
   const [dashboard, setDashboard] = useState(null);
+  const [technicianRevision, setTechnicianRevision] = useState(0);
   const [health, setHealth] = useState("checking");
   const [error, setError] = useState("");
   const [backlogOrderId, setBacklogOrderId] = useState("");
-  const refresh = () => {
+  const refresh = () =>
     getV2Dashboard(year, month)
-      .then(setDashboard)
-      .catch((e) => setError(e.message));
+      .then((result) => {
+        setDashboard(result);
+        return result;
+      })
+      .catch((e) => {
+        setError(e.message);
+        throw e;
+      });
+
+  const refreshTechnicianData = () => {
+    setTechnicianRevision((current) => current + 1);
+    return refresh().catch(() => null);
   };
   useEffect(() => {
     getHealth()
@@ -1617,6 +1628,7 @@ export default function App() {
       month={month}
       onMonthChange={setMonth}
       health={health}
+      onTechnicianDataChanged={refreshTechnicianData}
       indicators={{
         pending: number(dashboard?.pending?.planes_pendientes),
         technicians: number(dashboard?.summary?.tecnicos_sin_especialidad),
@@ -1646,7 +1658,12 @@ export default function App() {
           <Pmp year={year} month={month} dashboard={dashboard} />
         )}{" "}
         {view === "technicians" && (
-          <TechnicianSchedule year={year} month={month} onChanged={refresh} />
+          <TechnicianSchedule
+            year={year}
+            month={month}
+            revision={technicianRevision}
+            onChanged={refreshTechnicianData}
+          />
         )}
         {view === "imports" && (
           <MaintenanceBaseUpload year={year} month={month} />

@@ -1824,3 +1824,42 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
     padding-left:4px!important;
   }
 }
+
+/* Total general de H-H en Programación de técnicos */
+.technician-capacity-total{
+  flex:0 0 auto;
+  min-width:210px;
+  padding:10px 14px;
+  border:1px solid #cfe1ef;
+  border-radius:11px;
+  background:#eef6fc;
+  text-align:right;
+}
+.technician-capacity-total span{
+  display:block;
+  color:#57748a;
+  font-size:7.5px;
+  font-weight:950;
+  letter-spacing:.35px;
+}
+.technician-capacity-total b{
+  display:block;
+  margin-top:3px;
+  color:#145f8d;
+  font-size:24px;
+  line-height:1;
+}
+.technician-capacity-total small{
+  display:block;
+  margin-top:4px;
+  color:#718799;
+  font-size:7.5px;
+}
+@media(max-width:700px){
+  .technician-capacity-total{
+    width:100%;
+    min-width:0;
+    text-align:left;
+  }
+}
+

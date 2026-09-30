@@ -41,7 +41,7 @@ function shiftTone(code) {
   return "absence";
 }
 
-export default function TechnicianSchedule({ year, month, onChanged }) {
+export default function TechnicianSchedule({ year, month, revision = 0, onChanged }) {
   const [data, setData] = useState(null);
   const [draft, setDraft] = useState({});
   const [loading, setLoading] = useState(true);
@@ -75,7 +75,7 @@ export default function TechnicianSchedule({ year, month, onChanged }) {
 
   useEffect(() => {
     load();
-  }, [year, month]);
+  }, [year, month, revision]);
 
   function currentValue(technicianId, day) {
     const date = isoDate(year, month, day);
@@ -178,6 +178,13 @@ export default function TechnicianSchedule({ year, month, onChanged }) {
   }
 
   const changeCount = Object.keys(draft).length;
+  const totalMonthlyHours = useMemo(
+    () => (data?.technicians || []).reduce(
+      (sum, technician) => sum + Number(technician.hh_mes || 0),
+      0,
+    ),
+    [data],
+  );
 
   return (
     <div className="v2-stack technician-planning">
@@ -225,6 +232,11 @@ export default function TechnicianSchedule({ year, month, onChanged }) {
             <p>
               Compara la carga del PMP del mes con la capacidad del personal: H-H brutas → 80% H-H efectivas → 80% preventivo y 20% correctivo/reserva.
             </p>
+          </div>
+          <div className="technician-capacity-total">
+            <span>H-H TÉCNICOS DEL MES</span>
+            <b>{fmt(totalMonthlyHours)}</b>
+            <small>disponibilidad bruta total del personal</small>
           </div>
         </div>
         <div className="technician-capacity-grid">

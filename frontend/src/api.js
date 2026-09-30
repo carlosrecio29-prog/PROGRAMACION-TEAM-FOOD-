@@ -144,7 +144,10 @@ export async function savePlanDefinition(planId, payload) {
 
 export async function getV2Dashboard(year = 2026, month = 10) {
   return check(
-    await fetch(`/api/v2/dashboard?${new URLSearchParams({ year, month })}`),
+    await fetch(
+      `/api/v2/dashboard?${new URLSearchParams({ year, month })}`,
+      { cache: "no-store" },
+    ),
   );
 }
 export async function getV2PendingPlans(
@@ -177,7 +180,10 @@ export async function uploadV2TechnicianSchedule(file, year, month) {
 
 export async function getTechnicianSchedule(year, month) {
   return check(
-    await fetch(`/api/v2/technician-schedule?${new URLSearchParams({ year, month })}`),
+    await fetch(
+      `/api/v2/technician-schedule?${new URLSearchParams({ year, month })}`,
+      { cache: "no-store" },
+    ),
   );
 }
 

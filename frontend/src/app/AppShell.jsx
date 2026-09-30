@@ -155,6 +155,7 @@ export default function AppShell({
   month,
   onMonthChange,
   health,
+  onTechnicianDataChanged,
   indicators = {},
   children,
 }) {
@@ -397,7 +398,13 @@ export default function AppShell({
         {view === "pending" && <PendingDataIndicators year={year} month={month} />}
         {view === "imports" && <MaintenanceBaseUpload year={year} month={month} />}
         {children}
-        {view === "technicians" && <ShiftSettings year={year} month={month} />}
+        {view === "technicians" && (
+          <ShiftSettings
+            year={year}
+            month={month}
+            onChanged={onTechnicianDataChanged}
+          />
+        )}
       </main>
     </div>
   );

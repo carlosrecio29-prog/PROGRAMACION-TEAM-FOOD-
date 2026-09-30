@@ -6,7 +6,7 @@ function fmt(value) {
   return Number.isFinite(n) ? n.toLocaleString("es-CO", { maximumFractionDigits: 2 }) : "0";
 }
 
-export default function ShiftSettings({ year, month }) {
+export default function ShiftSettings({ year, month, onChanged }) {
   const [rows, setRows] = useState([]);
   const [draft, setDraft] = useState({});
   const [saving, setSaving] = useState("");
@@ -18,7 +18,10 @@ export default function ShiftSettings({ year, month }) {
     try {
       setLoading(true);
       setError("");
-      const response = await fetch(`/api/v2/shifts?${new URLSearchParams({ year, month })}`);
+      const response = await fetch(
+        `/api/v2/shifts?${new URLSearchParams({ year, month })}`,
+        { cache: "no-store" },
+      );
       const body = await response.json();
       if (!response.ok) throw new Error(body.detail || `HTTP ${response.status}`);
       setRows(body.shifts || []);
@@ -63,6 +66,7 @@ export default function ShiftSettings({ year, month }) {
         `${row.codigo} actualizado a ${fmt(hours)} H. La disponibilidad del período seleccionado quedó recalculada para las fechas que usan este turno.`,
       );
       await load();
+      await onChanged?.();
     } catch (cause) {
       setError(cause.message);
     } finally {
