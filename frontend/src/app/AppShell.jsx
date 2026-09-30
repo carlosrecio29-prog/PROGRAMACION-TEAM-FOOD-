@@ -61,7 +61,7 @@ function SubmenuIcon({ id }) {
     );
   }
 
-  if (id === "programming" || id === "programmingTest") {
+  if (id === "programming") {
     return (
       <svg {...common}>
         <path d="M4 3h16v18H4V3Zm2 5h12V5H6v3Zm0 2v9h12v-9H6Zm2 2h3v2H8v-2Zm5 0h3v2h-3v-2Zm-5 4h3v2H8v-2Zm5 0h3v2h-3v-2Z" />

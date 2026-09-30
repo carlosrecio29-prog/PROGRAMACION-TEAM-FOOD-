@@ -253,14 +253,18 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
 }
 .v2-control-operation-note b{color:#314d69}
 
-.v2-control-action-list{display:flex;flex-direction:column;margin-top:12px}
-.v2-control-action-list button{
-  border:0;border-top:1px solid #e8edf2;background:#fff;display:grid;
-  grid-template-columns:43px 1fr 24px;gap:12px;align-items:center;text-align:left;
-  color:var(--ink);padding:12px 4px
+.v2-control-action-list{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:8px;
+  margin-top:12px
 }
-.v2-control-action-list button:first-child{border-top:0}
-.v2-control-action-list button:hover{background:#f8fbfd}
+.v2-control-action-list button{
+  border:1px solid #e5ebf0;background:#fff;display:grid;
+  grid-template-columns:43px 1fr 18px;gap:10px;align-items:center;text-align:left;
+  color:var(--ink);padding:10px;border-radius:11px;min-height:70px
+}
+.v2-control-action-list button:hover{background:#f8fbfd;border-color:#cfdde8}
 .v2-control-action-icon{
   width:38px;height:38px;border-radius:10px;display:grid;place-items:center;background:#edf6fd;color:#1692d0
 }
@@ -276,6 +280,7 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
   .v2-control-body{grid-template-columns:1fr}
 }
 @media(max-width:720px){
+  .v2-control-action-list{grid-template-columns:1fr}
   .v2-control-intro{align-items:flex-start;flex-direction:column}
   .v2-control-status{width:100%;min-width:0;border-left:0;border-top:1px solid var(--line);padding:13px 0 0}
   .v2-control-mini-grid{grid-template-columns:1fr}
@@ -1863,33 +1868,6 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
   }
 }
 
-/* === MODO PRUEBA · PROGRAMACIÓN SEMANA 1 === */
-.weekly-test-mode{position:relative}
-.weekly-test-banner{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:18px;
-  border:1px solid #e6c56f;
-  background:linear-gradient(135deg,#fffaf0,#fffdf8);
-}
-.weekly-test-banner h3{margin:4px 0 5px;color:#6f4d12}
-.weekly-test-banner p{margin:0;color:#806a44;max-width:920px}
-.weekly-test-banner .v2-kicker{color:#a66a12}
-.weekly-test-specialties{margin-top:12px}
-.weekly-test-actions{
-  border-color:#e4d09c;
-  background:#fffdf7;
-}
-.v2-view-programmingTest .v2-topbar-view-icon{
-  border-color:#e4c46b;
-  background:#fff7df;
-}
-.v2-view-programmingTest .v2-topbar-view-icon svg{fill:#b37612}
-@media(max-width:760px){
-  .weekly-test-banner{align-items:flex-start;flex-direction:column}
-}
-
 /* === ACCESO GERENCIA · SOLO LECTURA / ADMINISTRADOR === */
 .v2-access-control{
   display:flex;
@@ -2039,8 +2017,7 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
 .access-viewer .technician-planning-actions button,
 .access-viewer .technician-excel-actions button,
 .access-viewer .v2-shift-settings .v2-save,
-.access-viewer .v2-view-closure .v2-toolbar button,
-.access-viewer .weekly-test-actions button{
+.access-viewer .v2-view-closure .v2-toolbar button{
   pointer-events:none!important;
   opacity:.42!important;
   cursor:not-allowed!important;

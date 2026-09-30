@@ -16,7 +16,6 @@ import WeeklyClosure from "./components/WeeklyClosure";
 import ProgressDashboard from "./components/ProgressDashboard";
 import AdvanceStops from "./components/AdvanceStops";
 import WeeklyProgramming from "./components/WeeklyProgramming";
-import WeeklyProgrammingTest from "./components/WeeklyProgrammingTest";
 import MaintenanceBaseUpload from "./components/MaintenanceBaseUpload";
 import TechnicianSchedule from "./components/TechnicianSchedule";
 import AccumulatedBacklog from "./components/AccumulatedBacklog";
@@ -101,9 +100,12 @@ function Summary({ data, onNavigate, year, month }) {
   const readyPct = total > 0 ? Math.round((ready / total) * 100) : 0;
   const quickActions = [
     { id: "advanceStops", title: "Preparar paradas", text: "Revisar actividades con equipo detenido", icon: "calendar" },
-    { id: "programming", title: "Programación semanal", text: "Seleccionar y guardar actividades", icon: "tools" },
+    { id: "technicians", title: "Programación de técnicos", text: "Turnos, especialidades y capacidad del mes", icon: "team" },
+    { id: "programming", title: "Programación semanal", text: "Seleccionar y guardar actividades por especialidad", icon: "tools" },
+    { id: "pmp", title: "PMP del mes", text: "Consultar la cartera preventiva del período", icon: "report" },
     { id: "closure", title: "Cierre semanal", text: "Conciliar OT contra el calendario", icon: "check" },
-    { id: "monthly", title: "Cierre mensual", text: "Validar, consolidar y formalizar el cierre del mes", icon: "report" },
+    { id: "monthly", title: "Cierre mensual", text: "Consolidar y formalizar el cierre del mes", icon: "bars" },
+    { id: "backlog", title: "Backlog acumulado", text: "Dar seguimiento a OT pendientes", icon: "alert" },
     { id: "imports", title: "Cargar Excel", text: "Actualizar archivos del período", icon: "calendar" },
   ];
   return (
@@ -1713,9 +1715,6 @@ export default function App() {
         {view === "advanceStops" && <AdvanceStops year={year} month={month} />}
         {view === "programming" && (
           <WeeklyProgramming year={year} month={month} dashboard={dashboard} />
-        )}{" "}
-        {view === "programmingTest" && (
-          <WeeklyProgrammingTest year={year} month={month} dashboard={dashboard} />
         )}{" "}
         {view === "monthly" && <MonthlyClose year={year} month={month} />}
         {view === "closure" && <WeeklyClosure year={year} month={month} onOpenBacklog={(orderId) => { setBacklogOrderId(orderId); navigate("backlog"); }} />}{" "}
