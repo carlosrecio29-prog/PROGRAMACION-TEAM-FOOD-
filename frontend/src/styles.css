@@ -1863,3 +1863,30 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
   }
 }
 
+/* === MODO PRUEBA · PROGRAMACIÓN SEMANA 1 === */
+.weekly-test-mode{position:relative}
+.weekly-test-banner{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:18px;
+  border:1px solid #e6c56f;
+  background:linear-gradient(135deg,#fffaf0,#fffdf8);
+}
+.weekly-test-banner h3{margin:4px 0 5px;color:#6f4d12}
+.weekly-test-banner p{margin:0;color:#806a44;max-width:920px}
+.weekly-test-banner .v2-kicker{color:#a66a12}
+.weekly-test-specialties{margin-top:12px}
+.weekly-test-actions{
+  border-color:#e4d09c;
+  background:#fffdf7;
+}
+.v2-view-programmingTest .v2-topbar-view-icon{
+  border-color:#e4c46b;
+  background:#fff7df;
+}
+.v2-view-programmingTest .v2-topbar-view-icon svg{fill:#b37612}
+@media(max-width:760px){
+  .weekly-test-banner{align-items:flex-start;flex-direction:column}
+}
+

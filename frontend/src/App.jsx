@@ -16,6 +16,7 @@ import WeeklyClosure from "./components/WeeklyClosure";
 import ProgressDashboard from "./components/ProgressDashboard";
 import AdvanceStops from "./components/AdvanceStops";
 import WeeklyProgramming from "./components/WeeklyProgramming";
+import WeeklyProgrammingTest from "./components/WeeklyProgrammingTest";
 import MaintenanceBaseUpload from "./components/MaintenanceBaseUpload";
 import TechnicianSchedule from "./components/TechnicianSchedule";
 import AccumulatedBacklog from "./components/AccumulatedBacklog";
@@ -1647,6 +1648,9 @@ export default function App() {
         {view === "advanceStops" && <AdvanceStops year={year} month={month} />}
         {view === "programming" && (
           <WeeklyProgramming year={year} month={month} dashboard={dashboard} />
+        )}{" "}
+        {view === "programmingTest" && (
+          <WeeklyProgrammingTest year={year} month={month} dashboard={dashboard} />
         )}{" "}
         {view === "monthly" && <MonthlyClose year={year} month={month} />}
         {view === "closure" && <WeeklyClosure year={year} month={month} onOpenBacklog={(orderId) => { setBacklogOrderId(orderId); navigate("backlog"); }} />}{" "}
