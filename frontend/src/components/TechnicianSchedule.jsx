@@ -223,7 +223,7 @@ export default function TechnicianSchedule({ year, month, onChanged }) {
             <span className="v2-kicker">CAPACIDAD DEL MES</span>
             <h3>Regla de disponibilidad por especialidad</h3>
             <p>
-              H-H brutas → 80% H-H efectivas → de esas H-H efectivas: 80% preventivo y 20% correctivo/reserva.
+              Compara la carga del PMP del mes con la capacidad del personal: H-H brutas → 80% H-H efectivas → 80% preventivo y 20% correctivo/reserva.
             </p>
           </div>
         </div>
@@ -234,6 +234,7 @@ export default function TechnicianSchedule({ year, month, onChanged }) {
                 <Badge>{SPEC_NAMES[row.specialty] || row.specialty}</Badge>
               </div>
               <dl>
+                <div className="pmp"><dt>H-H PMP del mes</dt><dd>{fmt(row.pmp_hours)}</dd></div>
                 <div><dt>H-H brutas · 100%</dt><dd>{fmt(row.available)}</dd></div>
                 <div><dt>H-H efectivas · 80%</dt><dd>{fmt(row.effective)}</dd></div>
                 <div className="preventive"><dt>Preventivo · 80% efectivas</dt><dd>{fmt(row.preventive)}</dd></div>
