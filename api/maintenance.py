@@ -1,15 +1,20 @@
 from __future__ import annotations
 
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import StreamingResponse
 
 from backend.config import MAX_UPLOAD_BYTES
+from backend.auth import admin_write_guard
 from backend.services.v2_maintenance_import_service import import_maintenance_base, import_operation_master
 from backend.services.v2_monthly_calendar_import import import_monthly_calendar
 from backend.services.v2_advance_stops import preview_advance_stops, export_advance_excel
 from backend.services.v2_technician_import_service import import_technician_schedule
 
 app = FastAPI(title="Programación Team Food · Actualización de base")
+
+@app.middleware("http")
+async def protect_writes(request: Request, call_next):
+    return await admin_write_guard(request, call_next)
 
 
 async def read_upload(file: UploadFile) -> bytes:

@@ -1592,6 +1592,7 @@ export default function App() {
   const [dashboard, setDashboard] = useState(null);
   const [technicianRevision, setTechnicianRevision] = useState(0);
   const [health, setHealth] = useState("checking");
+  const [accessRole, setAccessRole] = useState("loading");
   const [error, setError] = useState("");
   const [backlogOrderId, setBacklogOrderId] = useState("");
   const refresh = () =>
@@ -1614,6 +1615,67 @@ export default function App() {
       .then(() => setHealth("ok"))
       .catch(() => setHealth("error"));
   }, []);
+
+  useEffect(() => {
+    fetch("/api/auth/session", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json();
+      })
+      .then((body) => setAccessRole(body.role === "admin" ? "admin" : "viewer"))
+      .catch(() => setAccessRole("viewer"));
+  }, []);
+
+  useEffect(() => {
+    const originalFetch = window.fetch.bind(window);
+    const canWrite = accessRole === "admin";
+
+    window.fetch = async (input, init = {}) => {
+      const method = String(init?.method || "GET").toUpperCase();
+      const url = typeof input === "string" ? input : input?.url || "";
+      const authRequest = url.includes("/api/auth/");
+
+      if (
+        !canWrite &&
+        !["GET", "HEAD", "OPTIONS"].includes(method) &&
+        !authRequest
+      ) {
+        return new Response(
+          JSON.stringify({
+            detail: "Modo solo lectura. Solo el administrador puede modificar información.",
+            role: "viewer",
+          }),
+          {
+            status: 403,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      return originalFetch(input, init);
+    };
+
+    return () => {
+      window.fetch = originalFetch;
+    };
+  }, [accessRole]);
+
+  async function adminLogin(password) {
+    const response = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.detail || "No se pudo iniciar sesión.");
+    setAccessRole("admin");
+    return body;
+  }
+
+  async function adminLogout() {
+    await fetch("/api/auth/logout", { method: "POST" }).catch(() => null);
+    setAccessRole("viewer");
+  }
   useEffect(() => {
     refresh();
   }, [year, month]);
@@ -1629,6 +1691,9 @@ export default function App() {
       month={month}
       onMonthChange={setMonth}
       health={health}
+      accessRole={accessRole}
+      onAdminLogin={adminLogin}
+      onAdminLogout={adminLogout}
       onTechnicianDataChanged={refreshTechnicianData}
       indicators={{
         pending: number(dashboard?.pending?.planes_pendientes),

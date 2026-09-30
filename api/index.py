@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 import logging
 import json
-from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from sqlalchemy.exc import SQLAlchemyError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -11,6 +11,15 @@ from sqlalchemy import text
 from pydantic import BaseModel, Field
 
 from backend.config import MAX_UPLOAD_BYTES, database_url_diagnostics
+from backend.auth import (
+    COOKIE_NAME,
+    SESSION_HOURS,
+    admin_write_guard,
+    create_admin_session,
+    request_is_admin,
+    revoke_admin_session,
+    verify_admin_password,
+)
 from backend.database import get_engine
 from backend.services.import_service import (
     import_master_assets, import_master_classification, import_master_personnel_turns,
@@ -46,6 +55,51 @@ from backend.services.programming_service import (
 
 app=FastAPI(title="Programador de Mantenimiento API",version="1.1.0")
 app.add_middleware(CORSMiddleware,allow_origins=["*"],allow_credentials=False,allow_methods=["*"],allow_headers=["*"])
+
+@app.middleware("http")
+async def protect_writes(request:Request,call_next):
+    return await admin_write_guard(request,call_next)
+
+class AdminLoginRequest(BaseModel):
+    password:str=Field(min_length=1,max_length=256)
+
+@app.get("/api/auth/session")
+def auth_session(request:Request):
+    is_admin=request_is_admin(request)
+    return {
+        "role":"admin" if is_admin else "viewer",
+        "can_write":is_admin,
+        "session_hours":SESSION_HOURS,
+    }
+
+@app.post("/api/auth/login")
+def auth_login(body:AdminLoginRequest):
+    if not verify_admin_password(body.password):
+        raise HTTPException(401,"Clave de administrador inválida")
+    token,expires_at=create_admin_session()
+    response=JSONResponse({
+        "ok":True,
+        "role":"admin",
+        "can_write":True,
+        "expires_at":expires_at.isoformat(),
+    })
+    response.set_cookie(
+        key=COOKIE_NAME,
+        value=token,
+        max_age=SESSION_HOURS*60*60,
+        httponly=True,
+        secure=True,
+        samesite="strict",
+        path="/",
+    )
+    return response
+
+@app.post("/api/auth/logout")
+def auth_logout(request:Request):
+    revoke_admin_session(request.cookies.get(COOKIE_NAME))
+    response=JSONResponse({"ok":True,"role":"viewer","can_write":False})
+    response.delete_cookie(key=COOKIE_NAME,path="/",samesite="strict")
+    return response
 
 async def read_upload(file:UploadFile)->bytes:
     if not file.filename or not file.filename.lower().endswith(".xlsx"):

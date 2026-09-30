@@ -1890,3 +1890,177 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
   .weekly-test-banner{align-items:flex-start;flex-direction:column}
 }
 
+/* === ACCESO GERENCIA · SOLO LECTURA / ADMINISTRADOR === */
+.v2-access-control{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  flex-wrap:wrap;
+}
+.v2-access-control>span{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  min-height:30px;
+  padding:0 10px;
+  border-radius:999px;
+  font-size:7.5px;
+  font-weight:950;
+  letter-spacing:.35px;
+  white-space:nowrap;
+}
+.v2-access-control>span i{
+  width:7px;
+  height:7px;
+  border-radius:50%;
+  background:currentColor;
+}
+.v2-access-control.viewer>span{
+  color:#8a6415;
+  background:#fff7dd;
+  border:1px solid #ead69b;
+}
+.v2-access-control.admin>span{
+  color:#18714b;
+  background:#edf8f2;
+  border:1px solid #c8e5d5;
+}
+.v2-access-control button{
+  min-height:30px;
+  border:1px solid #d7e1e9;
+  border-radius:8px;
+  background:#fff;
+  color:#35516a;
+  padding:0 9px;
+  font-size:7.5px;
+  font-weight:900;
+  cursor:pointer;
+}
+.v2-readonly-banner{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  margin:0 0 14px;
+  padding:9px 12px;
+  border:1px solid #ead69b;
+  border-radius:10px;
+  background:#fffaf0;
+  color:#765d25;
+}
+.v2-readonly-banner b{
+  flex:0 0 auto;
+  font-size:8px;
+  letter-spacing:.35px;
+}
+.v2-readonly-banner span{
+  font-size:8px;
+  line-height:1.4;
+}
+.v2-access-modal-backdrop{
+  position:fixed;
+  inset:0;
+  z-index:9999;
+  display:grid;
+  place-items:center;
+  padding:20px;
+  background:rgba(13,32,49,.48);
+  backdrop-filter:blur(3px);
+}
+.v2-access-modal{
+  width:min(420px,100%);
+  padding:24px;
+  border:1px solid #d7e2ea;
+  border-radius:16px;
+  background:#fff;
+  box-shadow:0 24px 70px rgba(16,43,64,.24);
+}
+.v2-access-modal h3{
+  margin:5px 0 6px;
+  color:#153b59;
+  font-size:22px;
+}
+.v2-access-modal p{
+  margin:0 0 18px;
+  color:#718396;
+  font-size:9px;
+  line-height:1.5;
+}
+.v2-access-modal label{
+  display:grid;
+  gap:6px;
+}
+.v2-access-modal label>span{
+  color:#5e7387;
+  font-size:8px;
+  font-weight:900;
+}
+.v2-access-modal input{
+  width:100%;
+  min-height:42px;
+  border:1px solid #cfdce6;
+  border-radius:9px;
+  padding:8px 11px;
+  color:#173a56;
+  background:#fff;
+  font-size:12px;
+  outline:none;
+}
+.v2-access-modal input:focus{
+  border-color:#43a6d2;
+  box-shadow:0 0 0 3px rgba(67,166,210,.12);
+}
+.v2-access-modal-actions{
+  display:flex;
+  justify-content:flex-end;
+  gap:8px;
+  margin-top:18px;
+}
+.v2-access-modal-actions button{
+  min-height:36px;
+  border:1px solid #d5e0e8;
+  border-radius:8px;
+  padding:0 12px;
+  background:#fff;
+  color:#35516a;
+  font-size:8px;
+  font-weight:900;
+  cursor:pointer;
+}
+
+/* La API bloquea todas las escrituras; estos estilos también evitan edición accidental en la interfaz. */
+.access-viewer .v2-select,
+.access-viewer .v2-unselect,
+.access-viewer .v2-save,
+.access-viewer .tech-specialty-save,
+.access-viewer .tech-specialty-reset,
+.access-viewer .monthly-close-finalize,
+.access-viewer .v2-program-action-bar button,
+.access-viewer .v2-program-review .v2-primary,
+.access-viewer .technician-planning-actions button,
+.access-viewer .technician-excel-actions button,
+.access-viewer .v2-shift-settings .v2-save,
+.access-viewer .v2-view-closure .v2-toolbar button,
+.access-viewer .weekly-test-actions button{
+  pointer-events:none!important;
+  opacity:.42!important;
+  cursor:not-allowed!important;
+}
+.access-viewer .shift-cell select,
+.access-viewer .tech-specialty-editor select,
+.access-viewer .v2-shift-hour-field input,
+.access-viewer .v2-inline-field input,
+.access-viewer .v2-no-ot-resolution input,
+.access-viewer .v2-no-ot-resolution select,
+.access-viewer .v2-view-closure input[type="checkbox"],
+.access-viewer .v2-view-technicians input[type="file"],
+.access-viewer .v2-view-imports input[type="file"],
+.access-viewer .v2-view-imports .v2-program-review-actions button{
+  pointer-events:none!important;
+  opacity:.55!important;
+  cursor:not-allowed!important;
+}
+@media(max-width:760px){
+  .v2-readonly-banner{align-items:flex-start;flex-direction:column;gap:4px}
+  .v2-access-control{justify-content:flex-start}
+}
+

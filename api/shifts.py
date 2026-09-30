@@ -2,15 +2,20 @@ from __future__ import annotations
 
 from datetime import date
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from typing import Optional
 from sqlalchemy import text
 
 from backend.database import get_engine
+from backend.auth import admin_write_guard
 from backend.services.v2_programming_service import capacity_split, refresh_open_program_capacities
 
 app = FastAPI(title="Programación Team Food · Turnos")
+
+@app.middleware("http")
+async def protect_writes(request: Request, call_next):
+    return await admin_write_guard(request, call_next)
 
 
 ABSENCE_DAY_TYPE = {

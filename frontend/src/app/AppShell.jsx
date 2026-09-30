@@ -155,6 +155,9 @@ export default function AppShell({
   month,
   onMonthChange,
   health,
+  accessRole = "viewer",
+  onAdminLogin,
+  onAdminLogout,
   onTechnicianDataChanged,
   indicators = {},
   children,
@@ -166,13 +169,44 @@ export default function AppShell({
   const [openGroup, setOpenGroup] = useState(activeGroup);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [hoverGroup, setHoverGroup] = useState("");
+  const [accessOpen, setAccessOpen] = useState(false);
+  const [adminPassword, setAdminPassword] = useState("");
+  const [accessBusy, setAccessBusy] = useState(false);
+  const [accessError, setAccessError] = useState("");
+
+  async function submitAdminLogin(event) {
+    event.preventDefault();
+    try {
+      setAccessBusy(true);
+      setAccessError("");
+      await onAdminLogin?.(adminPassword);
+      setAdminPassword("");
+      setAccessOpen(false);
+    } catch (cause) {
+      setAccessError(cause.message || "No se pudo habilitar el modo administrador.");
+    } finally {
+      setAccessBusy(false);
+    }
+  }
+
+  async function leaveAdminMode() {
+    try {
+      setAccessBusy(true);
+      await onAdminLogout?.();
+      setAccessOpen(false);
+      setAdminPassword("");
+      setAccessError("");
+    } finally {
+      setAccessBusy(false);
+    }
+  }
 
   useEffect(() => {
     if (activeGroup) setOpenGroup(activeGroup);
   }, [activeGroup]);
 
   return (
-    <div className={`v2-shell ${sidebarOpen ? "sidebar-open" : "sidebar-collapsed"}`}>
+    <div className={`v2-shell ${sidebarOpen ? "sidebar-open" : "sidebar-collapsed"} ${accessRole === "admin" ? "access-admin" : "access-viewer"}`}>
       <aside className="v2-sidebar" aria-label="Navegación principal">
         <div className="v2-sidebar-head">
           <button
@@ -353,6 +387,19 @@ export default function AppShell({
                     : "Conectando..."}
               </div>
               <span className="v2-pilot-badge">PILOTO ACTIVO</span>
+              <div className={`v2-access-control ${accessRole === "admin" ? "admin" : "viewer"}`}>
+                <span>
+                  <i />
+                  {accessRole === "admin" ? "ADMINISTRADOR" : accessRole === "loading" ? "VERIFICANDO ACCESO" : "SOLO LECTURA"}
+                </span>
+                {accessRole === "admin" ? (
+                  <button type="button" onClick={leaveAdminMode} disabled={accessBusy}>Salir</button>
+                ) : (
+                  <button type="button" onClick={() => { setAccessError(""); setAccessOpen(true); }}>
+                    Acceso administrador
+                  </button>
+                )}
+              </div>
               <small className="v2-dashboard-provider">Gestión técnica · C.E.K Global Inspection</small>
             </div>
           </header>
@@ -391,8 +438,28 @@ export default function AppShell({
                     ? "Sin conexión"
                     : "Conectando..."}
               </div>
+              <div className={`v2-access-control ${accessRole === "admin" ? "admin" : "viewer"}`}>
+                <span>
+                  <i />
+                  {accessRole === "admin" ? "ADMINISTRADOR" : accessRole === "loading" ? "VERIFICANDO ACCESO" : "SOLO LECTURA"}
+                </span>
+                {accessRole === "admin" ? (
+                  <button type="button" onClick={leaveAdminMode} disabled={accessBusy}>Salir</button>
+                ) : (
+                  <button type="button" onClick={() => { setAccessError(""); setAccessOpen(true); }}>
+                    Acceso administrador
+                  </button>
+                )}
+              </div>
             </div>
           </header>
+        )}
+
+        {accessRole !== "admin" && accessRole !== "loading" && (
+          <div className="v2-readonly-banner" role="status">
+            <b>MODO CONSULTA · SOLO LECTURA</b>
+            <span>Puedes recorrer toda la plataforma y consultar la información, pero las acciones que modifican datos están bloqueadas.</span>
+          </div>
         )}
 
         {view === "pending" && <PendingDataIndicators year={year} month={month} />}
@@ -406,6 +473,38 @@ export default function AppShell({
           />
         )}
       </main>
+
+      {accessOpen && (
+        <div className="v2-access-modal-backdrop" role="presentation" onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setAccessOpen(false);
+        }}>
+          <form className="v2-access-modal" onSubmit={submitAdminLogin}>
+            <span className="v2-kicker">ACCESO RESTRINGIDO</span>
+            <h3>Modo administrador</h3>
+            <p>Ingresa la clave administrativa para habilitar cargas, cambios, programaciones y cierres.</p>
+            <label>
+              <span>Clave de administrador</span>
+              <input
+                type="password"
+                value={adminPassword}
+                autoFocus
+                autoComplete="current-password"
+                onChange={(event) => setAdminPassword(event.target.value)}
+                placeholder="••••••••••••"
+              />
+            </label>
+            {accessError && <div className="v2-error">{accessError}</div>}
+            <div className="v2-access-modal-actions">
+              <button type="button" onClick={() => { setAccessOpen(false); setAdminPassword(""); setAccessError(""); }}>
+                Cancelar
+              </button>
+              <button type="submit" className="v2-primary" disabled={accessBusy || !adminPassword}>
+                {accessBusy ? "Verificando..." : "Entrar como administrador"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }
