@@ -6,106 +6,50 @@ import {toggleWeeklySelection} from '../features/planning/weeklyProgrammingSelec
 import Badge from '../shared/Badge'
 import alianzaTeamLogo from '../assets/alianzaTeamLogoData.js'
 
-const MONTHS=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 const SPEC_NAMES={MEC:'Mecánica',ELE:'Eléctrica',MET:'Metrología',SER:'Servicios'}
 const SPECS=['MEC','ELE','MET','SER']
 
 function number(value,fallback=0){const parsed=Number(value);return Number.isFinite(parsed)?parsed:fallback}
 function fmt(value,decimals=1){return number(value).toLocaleString('es-CO',{minimumFractionDigits:decimals,maximumFractionDigits:decimals})}
 
-function ActivityGroup({kind,rows,dashboard,editing,filters,onFiltersChange,onToggle}){
-  const config={operating:{kicker:'EQUIPO OPERANDO',title:'Actividades con equipo operando',description:'Trabajos que pueden ejecutarse sin detener el equipo.',tone:'ok'},stopped:{kicker:'PARADA REQUERIDA',title:'Actividades que requieren parada',description:'Trabajos que necesitan coordinación de detención.',tone:'stop'},backlog:{kicker:'BACKLOG',title:'Backlog de programaciones anteriores',description:'OT retiradas de una programación anterior que debes revisar primero.',tone:'backlog'}}[kind]
+function ActivityGroup({kind,rows,dashboard,editing,selected,filters,onFiltersChange,onToggle}){
+  const config={
+    operating:{title:'Equipo operando',description:'Actividades que no requieren detener el equipo.',tone:'ok'},
+    stopped:{title:'Equipo detenido',description:'Actividades que requieren coordinación de parada.',tone:'stop'},
+    backlog:{title:'Backlog',description:'Pendientes provenientes de programaciones anteriores.',tone:'backlog'}
+  }[kind]
   const visible=matchesFilters(rows,filters)
-  return <section className={'v2-activity-section '+kind} aria-label={config.title}>
-    <div className="v2-activity-head"><div><span className="v2-kicker">{config.kicker}</span><h3>{config.title}</h3><p>{config.description}</p></div><Badge tone={config.tone}>{visible.length} disponibles</Badge></div>
-    <div className="v2-group-filters" aria-label={`Filtros de ${config.title}`}><div className="v2-group-filter-title"><b>{config.kicker}</b></div><label><span>Area</span><select aria-label={`Área en ${config.title}`} value={filters.area} onChange={event=>onFiltersChange({area:event.target.value})}><option value="">Todas las áreas</option>{(dashboard?.areas||[]).map(area=><option key={area.codigo} value={area.codigo}>{area.codigo} · {area.nombre||area.codigo}</option>)}</select></label><label><span>Buscar</span><input aria-label={`Buscar en ${config.title}`} placeholder="OT, equipo o plan..." value={filters.search} onChange={event=>onFiltersChange({search:event.target.value})}/></label></div>
-    <div className="v2-table-wrap v2-program-table"><table><thead><tr>{kind==='backlog'&&<th>Origen</th>}<th>OT</th><th>Área</th><th>Equipo</th><th>Plan de trabajo</th><th>Personas</th><th>Tiempo</th><th>H-H</th><th>Seleccionar</th></tr></thead><tbody>{visible.map(row=><tr key={row.orden_mantenimiento_id}>{kind==='backlog'&&<td><div className="v2-backlog-origin"><b>Movida</b><small>{row.semana_origen_inicio||'Semana anterior'} → {row.semana_origen_fin||''}</small></div></td>}<td><b>{row.numero_ot||'SIN ASIGNAR'}</b></td><td><Badge>{row.area_codigo||'—'}</Badge><small>{row.area_nombre||''}</small></td><td><b>{row.activo_codigo}</b><small>{row.activo_descripcion}</small></td><td><span className="v2-plan">{row.plan_trabajo}</span><small>{row.descripcion_grupo||''}</small></td><td><b>{row.numero_personas_efectivo}</b></td><td>{fmt(row.tiempo_min,0)} min</td><td><b>{fmt(row.hh,1)}</b></td><td><button type="button" className="v2-select" disabled={!editing} onClick={()=>onToggle(row)}>{editing?'Seleccionar':'Solo lectura'}</button></td></tr>)}{!visible.length&&<tr><td colSpan={kind==='backlog'?9:8} className="v2-empty">No hay actividades con estos filtros.</td></tr>}</tbody></table></div>
-  </section>
-}
-
-function SelectionSummary({rows,editing,onToggle}){
-  const operatingHH=rows.filter(row=>row.requiere_parada===false).reduce((sum,row)=>sum+number(row.hh),0)
-  const stoppedHH=rows.filter(row=>row.requiere_parada===true).reduce((sum,row)=>sum+number(row.hh),0)
-  const totalHH=operatingHH+stoppedHH
-  return <section className={'v2-selected-section '+(!editing?'readonly':'')}><div className="v2-selected-head"><div><span className="v2-kicker">{editing?'PROGRAMACIÓN EN EDICIÓN':'PROGRAMACIÓN GUARDADA'}</span><h3>{editing?'Selección actual':'Programación actual de la semana'}</h3><p>{editing?'Revisa lo que ya agregaste antes de seguir buscando actividades.':'Consulta la última versión guardada.'}</p></div><div className="v2-selected-totals"><span><b>{rows.length}</b> actividades</span><span><b>{fmt(operatingHH,1)}</b> H-H operando</span><span><b>{fmt(stoppedHH,1)}</b> H-H detenido</span><span className="total"><b>{fmt(totalHH,1)}</b> H-H total</span></div></div><div className="v2-table-wrap v2-selected-table"><table><thead><tr><th>Condición</th><th>Origen</th><th>OT</th><th>Área</th><th>Equipo</th><th>Plan de trabajo</th><th>Personas</th><th>Tiempo</th><th>H-H</th>{editing&&<th>Acción</th>}</tr></thead><tbody>{rows.map(row=><tr key={row.orden_mantenimiento_id}><td>{row.requiere_parada?<Badge tone="stop">Equipo detenido</Badge>:<Badge tone="ok">Equipo funcionando</Badge>}</td><td>{row.origen==='BACKLOG'||row.origen_backlog?<Badge tone="backlog">BACKLOG</Badge>:<Badge>PMP DEL MES</Badge>}</td><td><b>{row.numero_ot||'SIN ASIGNAR'}</b></td><td><Badge>{row.area_codigo||'—'}</Badge><small>{row.area_nombre||''}</small></td><td><b>{row.activo_codigo}</b><small>{row.activo_descripcion}</small></td><td><span className="v2-plan">{row.plan_trabajo}</span><small>{row.descripcion_grupo||''}</small></td><td><b>{row.numero_personas_efectivo}</b></td><td>{fmt(row.tiempo_min,0)} min</td><td><b>{fmt(row.hh,1)}</b></td>{editing&&<td><button type="button" className="v2-unselect" onClick={()=>onToggle(row)}>Quitar → Backlog</button></td>}</tr>)}{!rows.length&&<tr><td colSpan={editing?10:9} className="v2-empty">Todavía no has seleccionado actividades para esta semana.</td></tr>}</tbody></table></div></section>
-}
-
-function MonthlyDemandSummary({data,selectedRows,target,specialty,week}){
-  const base=data?.monthly_demand||{}
-  const monthKey=String(week?.from||'').slice(0,7)
-  const selectedMonthRows=selectedRows.filter(row=>String(row.periodo||'').slice(0,7)===monthKey)
-  const selectedMonthHH=selectedMonthRows.reduce((sum,row)=>sum+number(row.hh),0)
-  const pmpCount=number(base.pmp_count)
-  const pmpHH=number(base.pmp_hh)
-  const coveredCount=Math.min(pmpCount,number(base.covered_count_base)+selectedMonthRows.length)
-  const coveredHH=Math.min(pmpHH,number(base.covered_hh_base)+selectedMonthHH)
-  const pendingCount=Math.max(0,pmpCount-coveredCount)
-  const pendingHH=Math.max(0,pmpHH-coveredHH)
-  const demandBeforeWeekCount=Math.max(0,pmpCount-number(base.covered_count_base))
-  const demandBeforeWeekHH=Math.max(0,pmpHH-number(base.covered_hh_base))
-  const suggested=Math.min(target,demandBeforeWeekHH)
-  const coveragePossible=demandBeforeWeekHH>0?Math.min(100,target/demandBeforeWeekHH*100):100
-  const freePreventive=Math.max(0,target-suggested)
-  const hhProgress=pmpHH>0?Math.min(100,coveredHH/pmpHH*100):(pmpCount?0:100)
-  const countProgress=pmpCount>0?Math.min(100,coveredCount/pmpCount*100):100
-  const missingHH=number(base.missing_hh_count)
-
-  let statusTitle='Cobertura parcial del PMP mensual'
-  let statusText=`La capacidad preventiva de esta semana puede absorber hasta ${fmt(coveragePossible,1)}% de las H-H PMP que estaban pendientes antes de esta programación.`
-  let tone='partial'
-  if(demandBeforeWeekHH<=.01){
-    statusTitle='PMP mensual cubierto'
-    statusText='No quedan H-H PMP calculables pendientes del mes. La capacidad preventiva disponible puede usarse para backlog u otros trabajos preventivos.'
-    tone='complete'
-  }else if(target>=demandBeforeWeekHH-.01){
-    statusTitle='La semana puede cubrir todo lo pendiente'
-    statusText=`La meta preventiva semanal alcanza para cubrir las ${fmt(demandBeforeWeekHH,1)} H-H PMP pendientes. Quedarían ${fmt(freePreventive,1)} H-H de capacidad preventiva libre.`
-    tone='enough'
-  }
-
-  return <section className="tf-month-demand">
-    <div className="tf-month-demand-head">
-      <div>
-        <span className="v2-kicker">DEMANDA DEL MES · {SPEC_NAMES[specialty]||specialty}</span>
-        <h3>PMP mensual frente a la capacidad de la semana</h3>
-        <p>Compara lo que realmente queda por programar en el mes con la capacidad preventiva disponible en el corte seleccionado.</p>
-      </div>
-      <Badge>{monthKey||'Mes actual'}</Badge>
+  const selectedVisible=visible.filter(row=>selected.has(Number(row.orden_mantenimiento_id))).length
+  return <section className={'v2-activity-section tf-program-table-section '+kind} aria-label={config.title}>
+    <div className="tf-program-table-head">
+      <div><h3>{config.title}</h3><p>{config.description}</p></div>
+      <Badge tone={config.tone}>{selectedVisible} seleccionadas · {visible.length} total</Badge>
     </div>
-
-    <div className="tf-month-demand-grid">
-      <article><span>PMP del mes</span><b>{pmpCount}</b><small>cartera mensual</small></article>
-      <article><span>H-H PMP del mes</span><b>{fmt(pmpHH,1)}</b><small>demanda calculable</small></article>
-      <article className="covered"><span>PMP programados / cubiertos</span><b>{coveredCount}</b><small>{fmt(countProgress,1)}% del mes</small></article>
-      <article className="covered"><span>H-H cubiertas</span><b>{fmt(coveredHH,1)}</b><small>{fmt(hhProgress,1)}% de las H-H</small></article>
-      <article className="pending"><span>PMP pendientes</span><b>{pendingCount}</b><small>por cubrir</small></article>
-      <article className="pending"><span>H-H pendientes</span><b>{fmt(pendingHH,1)}</b><small>del PMP mensual</small></article>
+    <div className="tf-table-filterbar" aria-label={'Filtros de '+config.title}>
+      <label><span>Área</span><select aria-label={'Área en '+config.title} value={filters.area} onChange={event=>onFiltersChange({area:event.target.value})}><option value="">Todas</option>{(dashboard?.areas||[]).map(area=><option key={area.codigo} value={area.codigo}>{area.codigo} · {area.nombre||area.codigo}</option>)}</select></label>
+      <label className="search"><span>Buscar</span><input aria-label={'Buscar en '+config.title} placeholder="OT, equipo o plan..." value={filters.search} onChange={event=>onFiltersChange({search:event.target.value})}/></label>
     </div>
-
-    <div className="tf-month-progress-grid">
-      <div>
-        <div className="tf-month-progress-copy"><span>Avance mensual por H-H</span><b>{fmt(hhProgress,1)}%</b></div>
-        <div className="tf-month-progress-track"><i style={{width:`${hhProgress}%`}}/></div>
-      </div>
-      <div>
-        <div className="tf-month-progress-copy"><span>Avance mensual por cantidad de PMP</span><b>{fmt(countProgress,1)}%</b></div>
-        <div className="tf-month-progress-track count"><i style={{width:`${countProgress}%`}}/></div>
-      </div>
-    </div>
-
-    <div className="tf-month-capacity-compare">
-      <div><span>Meta preventiva semanal</span><b>{fmt(target,1)} H-H</b></div>
-      <div><span>Demanda antes de esta semana</span><b>{fmt(demandBeforeWeekHH,1)} H-H</b><small>{demandBeforeWeekCount} PMP</small></div>
-      <div className="suggested"><span>Objetivo sugerido esta semana</span><b>{fmt(suggested,1)} H-H</b><small>menor entre demanda y capacidad</small></div>
-      <div><span>Capacidad preventiva libre</span><b>{fmt(freePreventive,1)} H-H</b><small>para backlog / otros preventivos</small></div>
-    </div>
-
-    <div className={`tf-month-status ${tone}`}>
-      <div><strong>{statusTitle}</strong><span>{statusText}</span></div>
-      <b>{fmt(coveragePossible,1)}%</b>
-    </div>
-
-    {missingHH>0&&<div className="v2-warning">{missingHH} PMP del mes no tienen H-H calculables todavía; no están incluidos en la comparación de capacidad por horas.</div>}
+    <div className="v2-table-wrap v2-program-table"><table><thead><tr>{kind==='backlog'&&<th>Origen</th>}<th>OT</th><th>Área</th><th>Equipo</th><th>Plan de trabajo</th><th>Personas</th><th>Tiempo</th><th>H-H</th><th>Acción</th></tr></thead><tbody>
+      {visible.map(row=>{
+        const id=Number(row.orden_mantenimiento_id)
+        const chosen=selected.has(id)
+        return <tr key={id} className={chosen?'v2-selected-row':''}>
+          {kind==='backlog'&&<td><div className="v2-backlog-origin"><b>Backlog</b><small>{row.semana_origen_inicio||'Semana anterior'} {row.semana_origen_fin?'→ '+row.semana_origen_fin:''}</small></div></td>}
+          <td><b>{row.numero_ot||'SIN ASIGNAR'}</b></td>
+          <td><Badge>{row.area_codigo||'—'}</Badge><small>{row.area_nombre||''}</small></td>
+          <td><b>{row.activo_codigo}</b><small>{row.activo_descripcion}</small></td>
+          <td><span className="v2-plan">{row.plan_trabajo}</span><small>{row.descripcion_grupo||''}</small></td>
+          <td><b>{row.numero_personas_efectivo}</b></td>
+          <td>{fmt(row.tiempo_min,0)} min</td>
+          <td><b>{fmt(row.hh,1)}</b></td>
+          <td>{editing
+            ? <button type="button" className={chosen?'v2-unselect':'v2-select'} onClick={()=>onToggle(row)}>{chosen?'Quitar':'Agregar'}</button>
+            : <span className={chosen?'tf-programmed-tag':'tf-readonly-dash'}>{chosen?'Programada ✓':'—'}</span>}
+          </td>
+        </tr>
+      })}
+      {!visible.length&&<tr><td colSpan={kind==='backlog'?9:8} className="v2-empty">No hay actividades con estos filtros.</td></tr>}
+    </tbody></table></div>
   </section>
 }
 
@@ -119,35 +63,112 @@ export default function WeeklyProgramming({year,month,dashboard}){
   const rowMap=useMemo(()=>new Map(allRows.map(row=>[Number(row.orden_mantenimiento_id),row])),[allRows])
   const selectedRows=useMemo(()=>[...selected].map(id=>rowMap.get(Number(id))).filter(Boolean).sort((left,right)=>Number(left.requiere_parada)-Number(right.requiere_parada)||String(left.area_codigo||'').localeCompare(String(right.area_codigo||''))||String(left.numero_ot||'').localeCompare(String(right.numero_ot||''))),[selected,rowMap])
   const selectedHH=useMemo(()=>selectedRows.reduce((sum,row)=>sum+number(row.hh),0),[selectedRows])
-  const target=number(data?.capacity?.target);const available=number(data?.capacity?.available);const effective=number(data?.capacity?.effective);const reserve=number(data?.capacity?.reserve);const initialMargin=number(data?.capacity?.initial_margin);const techniciansAvailable=number(data?.capacity?.technicians_available,data?.capacity?.technicians||0);const techniciansAssigned=number(data?.capacity?.technicians_assigned,data?.capacity?.technicians||0);const remaining=Math.max(0,target-selectedHH);const progress=target>0?Math.min(100,selectedHH/target*100):0
+  const target=number(data?.capacity?.target)
+  const techniciansAvailable=number(data?.capacity?.technicians_available,data?.capacity?.technicians||0)
+  const techniciansAssigned=number(data?.capacity?.technicians_assigned,data?.capacity?.technicians||0)
+  const remaining=Math.max(0,target-selectedHH)
+
+  const monthly=useMemo(()=>{
+    const base=data?.monthly_demand||{}
+    const monthKey=String(week?.from||'').slice(0,7)
+    const selectedMonthRows=selectedRows.filter(row=>String(row.periodo||'').slice(0,7)===monthKey)
+    const selectedMonthHH=selectedMonthRows.reduce((sum,row)=>sum+number(row.hh),0)
+    const pmpCount=number(base.pmp_count)
+    const pmpHH=number(base.pmp_hh)
+    const coveredCount=Math.min(pmpCount,number(base.covered_count_base)+selectedMonthRows.length)
+    const coveredHH=Math.min(pmpHH,number(base.covered_hh_base)+selectedMonthHH)
+    const pendingCount=Math.max(0,pmpCount-coveredCount)
+    const pendingHH=Math.max(0,pmpHH-coveredHH)
+    const demandBeforeWeekHH=Math.max(0,pmpHH-number(base.covered_hh_base))
+    const coveragePossible=demandBeforeWeekHH>0?Math.min(100,target/demandBeforeWeekHH*100):100
+    return {
+      pmpCount,pmpHH,coveredCount,coveredHH,pendingCount,pendingHH,
+      demandBeforeWeekHH,coveragePossible,missingHH:number(base.missing_hh_count)
+    }
+  },[data,selectedRows,target,week?.from])
+
+  const groupedRows=useMemo(()=>{
+    const backlog=[]
+    const stopped=[]
+    const operating=[]
+    for(const row of allRows){
+      const isBacklog=row.origen==='BACKLOG'||row.origen_backlog===true||row.es_backlog===true
+      if(isBacklog)backlog.push(row)
+      else if(row.requiere_parada===true)stopped.push(row)
+      else operating.push(row)
+    }
+    return {operating,stopped,backlog}
+  },[allRows])
   function updateFilters(kind,patch){setFilters(current=>updateGroupFilters(current,kind,patch))}
   function toggle(row){if(!editing)return;const id=Number(row.orden_mantenimiento_id);setError('');setMessage('');setSelected(current=>{const result=toggleWeeklySelection({selected:current,id,row,rowMap,target});if(result.error){setError(`No se puede seleccionar esta actividad: llegarías a ${fmt(result.nextHH,1)} H-H y la meta máxima es ${fmt(target,1)} H-H.`);return current}if(result.changed)setDirty(true);return result.selected})}
   async function save(){if(!selected.size){setError('Selecciona al menos una orden para guardar la semana.');return}try{setSaving(true);setError('');setMessage('');const result=await saveV2WeekProgramming({date_from:week.from,date_to:week.to,specialty,order_ids:[...selected]});setProgrammingId(result.programming_id);setDirty(false);await load();setMessage(`Programación guardada: ${fmt(result.hh_programmed,1)} H-H de ${fmt(result.hh_target,1)} H-H objetivo.${result.moved_to_backlog?` ${result.moved_to_backlog} OT movida(s) a BACKLOG.`:''}`)}catch(cause){setError(cause.message)}finally{setSaving(false)}}
   async function report(format){if(!programmingId||dirty){setError('Guarda la programación antes de generar el reporte.');return}try{setError('');await downloadV2WeeklyReport(programmingId,format)}catch(cause){setError(cause.message)}}
   function cancelEdit(){load();setMessage('Cambios descartados. La programación vuelve a la última versión guardada.')}
-  const groups=[{kind:'operating',rows:(data?.operating||[]).filter(row=>!selected.has(Number(row.orden_mantenimiento_id)))},{kind:'stopped',rows:(data?.stopped||[]).filter(row=>!selected.has(Number(row.orden_mantenimiento_id)))},{kind:'backlog',rows:(data?.backlog||[]).filter(row=>!selected.has(Number(row.orden_mantenimiento_id)))}]
-  return <div className="v2-stack v2-weekly-programming">
-    <section className="tf-program-brand" aria-label="Team Foods · CEK Global">
-      <div className="tf-program-brand-logo">
-        <img src={alianzaTeamLogo} alt="Team Foods" />
-      </div>
-      <div className="tf-program-brand-copy">
+  const groups=[
+    {kind:'operating',rows:groupedRows.operating},
+    {kind:'stopped',rows:groupedRows.stopped},
+    {kind:'backlog',rows:groupedRows.backlog}
+  ]
+  const coverageText=monthly.demandBeforeWeekHH<=.01
+    ? 'PMP mensual cubierto'
+    : target>=monthly.demandBeforeWeekHH-.01
+      ? 'La capacidad de esta semana puede cubrir todo el PMP pendiente'
+      : 'Cobertura posible esta semana: '+fmt(monthly.coveragePossible,1)+'% de las H-H PMP pendientes'
+  return <div className="v2-stack v2-weekly-programming tf-weekly-compact">
+    <section className="tf-program-brand tf-program-brand-compact" aria-label="Team Foods · CEK Global">
+      <img src={alianzaTeamLogo} alt="Team Foods" />
+      <div>
         <span>TEAM FOODS · MANTENIMIENTO</span>
         <h2>Programación semanal</h2>
-        <p>Planta Barranquilla · {SPEC_NAMES[specialty]||specialty} · {week?.label||''}</p>
       </div>
-      <div className="tf-program-brand-partner">
-        <span>Gestión técnica</span>
-        <strong>CEK Global</strong>
-        <small>Inspection Services</small>
+      <div className="tf-compact-brand-meta">
+        <b>{SPEC_NAMES[specialty]||specialty}</b>
+        <small>{week?.label||''}</small>
+      </div>
+      <div className="tf-compact-cek"><span>Gestión técnica</span><b>CEK Global</b></div>
+    </section>
+
+    <section className="tf-program-controls">
+      <div className="tf-program-selectors">
+        <label><span>Semana</span><select value={weekIndex} onChange={event=>setWeekIndex(Number(event.target.value))}>{weeks.map((item,index)=><option key={item.from} value={index}>{item.transition?'Transición':'Semana '+item.weekNumber} · {item.label}</option>)}</select></label>
+        <label><span>Especialidad</span><select value={specialty} onChange={event=>setSpecialty(event.target.value)}>{SPECS.map(item=><option key={item} value={item}>{item} · {SPEC_NAMES[item]}</option>)}</select></label>
+        <div className="tf-tech-count">{loading?'Calculando...':<><b>{techniciansAvailable}</b> disponibles / {techniciansAssigned} asignados</>}</div>
+      </div>
+      <div className="tf-program-actions">
+        {programmingId&&!editing&&<button type="button" className="v2-primary" onClick={()=>{setEditing(true);setMessage('Modo edición activado.')}}>Modificar</button>}
+        {programmingId&&editing&&<button type="button" onClick={cancelEdit}>Cancelar cambios</button>}
+        {programmingId&&<button type="button" disabled={dirty} onClick={()=>report('xlsx')}>Excel</button>}
+        {programmingId&&<button type="button" disabled={dirty} onClick={()=>report('pdf')}>PDF</button>}
       </div>
     </section>
-    <section className="v2-panel v2-week-context"><div className="v2-section-head"><div><span className="v2-kicker">PROGRAMACIÓN SEMANAL</span><h3>Semana y especialidad de trabajo</h3><p>Selecciona el contexto antes de revisar capacidad, actividades y programación actual.</p></div><Badge>{loading?'Calculando...':`${techniciansAvailable} disponibles / ${techniciansAssigned} asignados`}</Badge></div><div className="v2-week-selector"><div className="v2-week-buttons">{weeks.map((item,index)=><button type="button" key={item.from} className={weekIndex===index?'active':''} onClick={()=>setWeekIndex(index)}><b>{item.transition?'Transición':`Semana ${item.weekNumber}`}</b><span>{item.label}</span></button>)}</div><div className="v2-specialty-buttons">{SPECS.map(item=><button type="button" key={item} className={specialty===item?'active':''} onClick={()=>setSpecialty(item)}><b>{item}</b><span>{SPEC_NAMES[item]}</span></button>)}</div></div></section>
-    <MonthlyDemandSummary data={data} selectedRows={selectedRows} target={target} specialty={specialty} week={week}/>
-    {programmingId&&<section className="v2-program-review"><div><span className="v2-kicker">PROGRAMACIÓN EXISTENTE</span><h3>{editing?'Modificando programación guardada':'Programación disponible para consulta'}</h3><p>{editing?'Los cambios no afectan la programación hasta que los guardes.':'Puedes revisar o exportar esta versión; activa edición para modificarla.'}</p></div><div className="v2-program-review-actions">{!editing?<button type="button" className="v2-primary" onClick={()=>{setEditing(true);setMessage('Modo edición activado. Los cambios no afectan la programación hasta que presiones Guardar cambios.')}}>Modificar programación</button>:<button type="button" onClick={cancelEdit}>Cancelar cambios</button>}<button type="button" disabled={dirty} onClick={()=>report('xlsx')}>Exportar Excel</button><button type="button" disabled={dirty} onClick={()=>report('pdf')}>Exportar PDF</button></div></section>}
-    <section className="v2-capacity-panel v2-capacity-summary tf-team-capacity"><div className="v2-capacity-cards"><div className="gross"><span>H-H brutas</span><b>{fmt(available,1)}</b><small>turnos programados · 100%</small></div><div className="effective"><span>H-H efectivas</span><b>{fmt(effective,1)}</b><small>80% de las H-H brutas</small></div><div className="target"><span>Meta preventivo</span><b>{fmt(target,1)}</b><small>80% de las H-H efectivas</small></div><div className="selected"><span>H-H seleccionadas</span><b>{fmt(selectedHH,1)}</b><small>{selected.size} actividades</small></div><div className={remaining<=.01?'complete':'remaining'}><span>{remaining<=.01?'Meta alcanzada':'Faltan para meta'}</span><b>{fmt(remaining,1)}</b><small>H-H</small></div></div><div className="v2-capacity-details"><span>H-H efectivas · 80% <b>{fmt(effective,1)}</b></span><span>Alistamiento / tiempo no programable · 20% bruto <b>{fmt(initialMargin,1)}</b></span><span>Correctivo / reserva · 20% efectivas <b>{fmt(reserve,1)}</b></span></div><div className="v2-capacity-rule"><b>Regla:</b> H-H brutas × 80% = H-H efectivas. El 20% inicial contempla cambio de ropa, charla, alistamiento, búsqueda de herramientas, desplazamientos y otros tiempos operativos. Luego las H-H efectivas se distribuyen 80% preventivo / 20% correctivo-reserva.</div><div className="v2-progress-block"><div className="v2-progress-copy"><span>Avance hacia la meta preventiva</span><b>{fmt(progress,1)}%</b></div><div className="v2-progress-track"><i style={{width:`${progress}%`}}/></div><div className="v2-progress-foot"><span>{fmt(selectedHH,1)} H-H programadas</span><span>Objetivo preventivo {fmt(target,1)} H-H</span></div></div>{available===0&&<div className="v2-warning">Esta especialidad no tiene disponibilidad cargada para esta semana. Revisa la programación de técnicos.</div>}</section>
-    <SelectionSummary rows={selectedRows} editing={editing} onToggle={toggle}/>
-    {(editing||!programmingId)&&<section className="v2-save-program v2-program-action-bar"><div className="v2-save-program-copy"><span className="v2-kicker">{programmingId?'GUARDAR MODIFICACIÓN':'CIERRE DE PROGRAMACIÓN'}</span><h3>{dirty?'Hay cambios sin guardar':programmingId?'Programación abierta para edición':'Guarda la selección de esta semana'}</h3><div className="v2-save-summary"><span><b>{fmt(selectedHH,1)}</b> H-H seleccionadas</span><span><b>{fmt(target,1)}</b> H-H meta</span><span><b>{fmt(remaining,1)}</b> H-H faltantes</span></div>{error&&<div className="v2-error v2-error-bottom">{error}</div>}{message&&<div className="v2-success v2-success-bottom">{message}</div>}</div><div className="v2-report-actions"><button type="button" className="v2-primary" disabled={saving||!selected.size||selectedHH>target+.001||(!dirty&&!!programmingId)} onClick={save}>{saving?'Guardando...':programmingId?'Guardar cambios':'Guardar programación'}</button>{programmingId&&<button type="button" onClick={cancelEdit}>Cancelar</button>}</div></section>}
-    <section className="v2-panel v2-available-work"><div className="v2-program-toolbar"><div><span className="v2-kicker">ACTIVIDADES DISPONIBLES</span>{!editing&&<h3>Cartera de actividades · solo lectura</h3>}</div></div>{groups.map(group=><ActivityGroup key={group.kind} {...group} dashboard={dashboard} editing={editing} filters={filters[group.kind]} onFiltersChange={patch=>updateFilters(group.kind,patch)} onToggle={toggle}/>)}</section>
+
+    <section className="tf-key-kpis">
+      <article><span>PMP del mes</span><b>{monthly.pmpCount}</b><small>{monthly.coveredCount} cubiertos</small></article>
+      <article><span>H-H PMP del mes</span><b>{fmt(monthly.pmpHH,1)}</b><small>demanda mensual</small></article>
+      <article className="pending"><span>H-H pendientes mes</span><b>{fmt(monthly.pendingHH,1)}</b><small>{monthly.pendingCount} PMP pendientes</small></article>
+      <article className="target"><span>Meta preventiva semana</span><b>{fmt(target,1)}</b><small>capacidad máxima</small></article>
+      <article className="selected"><span>H-H seleccionadas</span><b>{fmt(selectedHH,1)}</b><small>{selected.size} actividades</small></article>
+      <article className={remaining<=.01?'complete':'remaining'}><span>Disponible semana</span><b>{fmt(remaining,1)}</b><small>H-H por programar</small></article>
+    </section>
+
+    <div className={'tf-coverage-note '+(target>=monthly.demandBeforeWeekHH-.01?'enough':'partial')}>
+      <span>{coverageText}</span>
+      {monthly.missingHH>0&&<small>{monthly.missingHH} PMP sin H-H calculables</small>}
+    </div>
+
+    {(editing||!programmingId)&&<section className="tf-save-strip">
+      <div><b>{selected.size} actividades · {fmt(selectedHH,1)} H-H</b><span>{dirty?'Cambios sin guardar':'Selección actual'}</span></div>
+      <div className="tf-save-strip-actions">
+        {programmingId&&<button type="button" onClick={cancelEdit}>Descartar</button>}
+        <button type="button" className="v2-primary" disabled={saving||!selected.size||selectedHH>target+.001||(!dirty&&!!programmingId)} onClick={save}>{saving?'Guardando...':programmingId?'Guardar cambios':'Guardar programación'}</button>
+      </div>
+    </section>}
+
+    {error&&<div className="v2-error">{error}</div>}
+    {message&&<div className="v2-success">{message}</div>}
+
+    <section className="v2-panel tf-three-program-tables">
+      {groups.map(group=><ActivityGroup key={group.kind} {...group} dashboard={dashboard} editing={editing} selected={selected} filters={filters[group.kind]} onFiltersChange={patch=>updateFilters(group.kind,patch)} onToggle={toggle}/>)}
+    </section>
   </div>
 }
