@@ -115,19 +115,6 @@ export default function WeeklyProgramming({year,month,dashboard}){
       ? 'La capacidad de esta semana puede cubrir todo el PMP pendiente'
       : 'Cobertura posible esta semana: '+fmt(monthly.coveragePossible,1)+'% de las H-H PMP pendientes'
   return <div className="v2-stack v2-weekly-programming tf-weekly-compact">
-    <section className="tf-program-brand tf-program-brand-compact" aria-label="Team Foods · CEK Global">
-      <img src={alianzaTeamLogo} alt="Team Foods" />
-      <div>
-        <span>TEAM FOODS · MANTENIMIENTO</span>
-        <h2>Programación semanal</h2>
-      </div>
-      <div className="tf-compact-brand-meta">
-        <b>{SPEC_NAMES[specialty]||specialty}</b>
-        <small>{week?.label||''}</small>
-      </div>
-      <div className="tf-compact-cek"><span>Gestión técnica</span><b>CEK Global</b></div>
-    </section>
-
     <section className="tf-program-controls">
       <div className="tf-program-selectors">
         <label><span>Semana</span><select value={weekIndex} onChange={event=>setWeekIndex(Number(event.target.value))}>{weeks.map((item,index)=><option key={item.from} value={index}>{item.transition?'Transición':'Semana '+item.weekNumber} · {item.label}</option>)}</select></label>
