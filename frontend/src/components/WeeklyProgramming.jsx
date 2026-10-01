@@ -253,7 +253,7 @@ export default function WeeklyProgramming({year,month,dashboard}){
       <div><b>{selected.size} actividades · {fmt(selectedHH,1)} H-H</b><span>{dirty?'Cambios sin guardar':'Selección actual'}</span></div>
       <div className="tf-save-strip-actions">
         {programmingId&&<button type="button" onClick={cancelEdit}>Descartar</button>}
-        <button type="button" className="v2-primary" disabled={saving||!selected.size||selectedHH>target+.001||(!dirty&&!!programmingId)} onClick={save}>{saving?'Guardando...':programmingId?'Guardar cambios':'Guardar programación'}</button>
+        <button type="button" className="v2-primary" disabled={saving||!selected.size||selectedHH>target+.001||(!dirty&&!!programmingId&&!capacityChange)} onClick={save}>{saving?'Guardando...':programmingId?(capacityChange&&!dirty?'Aceptar nueva capacidad':'Guardar cambios'):'Guardar programación'}</button>
       </div>
     </section>}
 
