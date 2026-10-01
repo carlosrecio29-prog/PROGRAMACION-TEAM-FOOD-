@@ -152,7 +152,7 @@ def _monthly_demand(conn, month_date: date, specialty: str, exclude_programming_
 
 def refresh_open_program_capacities(conn)->int:
     rows=conn.execute(text("""
-        SELECT id,semana_inicio,semana_fin,especialidad
+        SELECT id,semana_inicio,semana_fin,especialidad,hh_objetivo
         FROM programacion.programacion_semanal_v2
         WHERE estado<>'CERRADA'
     """)).mappings().all()
@@ -164,17 +164,30 @@ def refresh_open_program_capacities(conn)->int:
             row["semana_fin"],
             row["especialidad"],
         )
+        old_target=round(float(row["hh_objetivo"] or 0),2)
+        new_target=round(float(capacity["target"] or 0),2)
+        changed=abs(new_target-old_target)>.005
         conn.execute(text("""
             UPDATE programacion.programacion_semanal_v2
             SET hh_disponibles=:available,
                 hh_objetivo=:target,
                 hh_reserva=:reserve,
+                hh_objetivo_anterior=CASE
+                  WHEN :changed THEN COALESCE(hh_objetivo_anterior,:old_target)
+                  ELSE hh_objetivo_anterior
+                END,
+                capacidad_modificada_en=CASE
+                  WHEN :changed THEN now()
+                  ELSE capacidad_modificada_en
+                END,
                 actualizado_en=now()
             WHERE id=:id
         """),{
             "available":capacity["available"],
-            "target":capacity["target"],
+            "target":new_target,
             "reserve":capacity["reserve"],
+            "old_target":old_target,
+            "changed":changed,
             "id":row["id"],
         })
         updated+=1
@@ -345,6 +358,7 @@ def save_week_programming(*,date_from:date,date_to:date,specialty:str,order_ids:
             ON CONFLICT(semana_inicio,semana_fin,especialidad)
             DO UPDATE SET hh_disponibles=EXCLUDED.hh_disponibles,hh_objetivo=EXCLUDED.hh_objetivo,
               hh_reserva=EXCLUDED.hh_reserva,estado='GUARDADA',
+              hh_objetivo_anterior=NULL,capacidad_modificada_en=NULL,
               creado_por=COALESCE(EXCLUDED.creado_por,programacion.programacion_semanal_v2.creado_por),actualizado_en=now()
             RETURNING id
         """),{"date_from":date_from,"date_to":date_to,"specialty":specialty,

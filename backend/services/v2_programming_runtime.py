@@ -21,7 +21,8 @@ def get_week_programming(*, date_from: date, date_to: date, specialty: str) -> d
     with get_engine().connect() as conn:
         capacity = _capacity(conn, date_from, date_to, specialty)
         programming = conn.execute(text("""
-            SELECT id,estado,hh_disponibles,hh_objetivo,hh_reserva,creado_en,actualizado_en,emitido_en,
+            SELECT id,estado,hh_disponibles,hh_objetivo,hh_reserva,hh_objetivo_anterior,capacidad_modificada_en,
+                   creado_en,actualizado_en,emitido_en,
                    cierre_en,cierre_por,cierre_archivo,cierre_total,cierre_finalizadas,cierre_pendientes,cierre_no_encontradas
             FROM programacion.programacion_semanal_v2
             WHERE semana_inicio=:date_from AND semana_fin=:date_to AND especialidad=:specialty
@@ -172,6 +173,7 @@ def save_week_programming(*, date_from: date, date_to: date, specialty: str, ord
             ON CONFLICT(semana_inicio,semana_fin,especialidad)
             DO UPDATE SET hh_disponibles=EXCLUDED.hh_disponibles,hh_objetivo=EXCLUDED.hh_objetivo,
               hh_reserva=EXCLUDED.hh_reserva,estado='GUARDADA',
+              hh_objetivo_anterior=NULL,capacidad_modificada_en=NULL,
               creado_por=COALESCE(EXCLUDED.creado_por,programacion.programacion_semanal_v2.creado_por),actualizado_en=now()
             RETURNING id
         """), {"date_from": date_from, "date_to": date_to, "specialty": specialty,

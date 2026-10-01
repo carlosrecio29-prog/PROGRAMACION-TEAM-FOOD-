@@ -11,6 +11,7 @@ const SPECS=['MEC','ELE','MET','SER']
 
 function number(value,fallback=0){const parsed=Number(value);return Number.isFinite(parsed)?parsed:fallback}
 function fmt(value,decimals=1){return number(value).toLocaleString('es-CO',{minimumFractionDigits:decimals,maximumFractionDigits:decimals})}
+function round2(value){return Math.round((number(value)+Number.EPSILON)*100)/100}
 
 function ActivityGroup({kind,rows,dashboard,editing,selected,filters,onFiltersChange,onToggle}){
   const config={
@@ -169,6 +170,40 @@ export default function WeeklyProgramming({year,month,dashboard}){
     : target>=monthly.demandBeforeWeekHH-.01
       ? 'La capacidad de esta semana puede cubrir todo el PMP pendiente'
       : 'Cobertura posible esta semana: '+fmt(monthly.coveragePossible,1)+'% de las H-H PMP pendientes'
+
+  const capacityChange=useMemo(()=>{
+    const programming=data?.programming
+    const previous=Number(programming?.hh_objetivo_anterior)
+    if(!programmingId||!programming?.capacidad_modificada_en||!Number.isFinite(previous)||Math.abs(previous-target)<.01)return null
+    const delta=round2(target-previous)
+    const excess=round2(Math.max(0,selectedHH-target))
+    const free=round2(Math.max(0,target-selectedHH))
+    if(excess>.01){
+      return {
+        tone:'danger',
+        kicker:'CAPACIDAD MODIFICADA',
+        title:'Programación por encima de la nueva capacidad',
+        text:'La meta preventiva cambió de '+fmt(previous,1)+' a '+fmt(target,1)+' H-H. Tienes '+fmt(selectedHH,1)+' H-H programadas y un exceso de '+fmt(excess,1)+' H-H.',
+        previous,delta,excess,free,
+      }
+    }
+    if(delta<0){
+      return {
+        tone:'warn',
+        kicker:'CAPACIDAD REDUCIDA',
+        title:'La programación sigue dentro de la nueva capacidad',
+        text:'La meta preventiva bajó de '+fmt(previous,1)+' a '+fmt(target,1)+' H-H. Todavía quedan '+fmt(free,1)+' H-H disponibles.',
+        previous,delta,excess,free,
+      }
+    }
+    return {
+      tone:'ok',
+      kicker:'CAPACIDAD ADICIONAL DISPONIBLE',
+      title:'Aumentó la capacidad preventiva de la semana',
+      text:'La meta preventiva subió de '+fmt(previous,1)+' a '+fmt(target,1)+' H-H. Ahora tienes '+fmt(free,1)+' H-H disponibles para agregar actividades.',
+      previous,delta,excess,free,
+    }
+  },[data?.programming,programmingId,target,selectedHH])
   return <div className="v2-stack v2-weekly-programming tf-weekly-compact">
     <section className="tf-program-controls">
       <div className="tf-program-selectors">
@@ -197,6 +232,20 @@ export default function WeeklyProgramming({year,month,dashboard}){
       <span>{coverageText}</span>
       {monthly.missingHH>0&&<small>{monthly.missingHH} PMP sin H-H calculables</small>}
     </div>
+
+    {capacityChange&&<section className={'tf-capacity-change '+capacityChange.tone}>
+      <div className="tf-capacity-change-copy">
+        <span>{capacityChange.kicker}</span>
+        <strong>{capacityChange.title}</strong>
+        <small>{capacityChange.text} No se eliminó ninguna actividad automáticamente.</small>
+      </div>
+      <div className="tf-capacity-change-actions">
+        {capacityChange.tone==='danger'&&<b>Exceso {fmt(capacityChange.excess,1)} H-H</b>}
+        {capacityChange.tone==='ok'&&<b>+{fmt(Math.max(0,capacityChange.delta),1)} H-H</b>}
+        {capacityChange.tone==='warn'&&<b>{fmt(capacityChange.delta,1)} H-H</b>}
+        {!editing&&<button type="button" onClick={()=>{setEditing(true);setMessage('Revisa la programación frente a la nueva capacidad y guarda cuando quede ajustada.')}}>Revisar programación</button>}
+      </div>
+    </section>}
 
     <SelectionSummary rows={selectedRows} editing={editing} onToggle={toggle} dashboard={dashboard}/>
 

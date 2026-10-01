@@ -2526,3 +2526,75 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
   .tf-save-strip{align-items:stretch;flex-direction:column}
 }
 
+/* === ALERTA DE CAMBIO DE CAPACIDAD DESPUÉS DE TURNOS === */
+.tf-capacity-change{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  padding:10px 12px;
+  border:1px solid #d9e4de;
+  border-radius:10px;
+  background:#f8fbf9;
+}
+.tf-capacity-change-copy{min-width:0}
+.tf-capacity-change-copy>span{
+  display:block;
+  margin-bottom:2px;
+  font-size:6.8px;
+  font-weight:950;
+  letter-spacing:.4px;
+  text-transform:uppercase;
+}
+.tf-capacity-change-copy strong{
+  display:block;
+  color:#263f35;
+  font-size:9px;
+}
+.tf-capacity-change-copy small{
+  display:block;
+  margin-top:3px;
+  color:#687b72;
+  font-size:7.5px;
+  line-height:1.35;
+}
+.tf-capacity-change-actions{
+  flex:0 0 auto;
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.tf-capacity-change-actions>b{
+  white-space:nowrap;
+  font-size:12px;
+}
+.tf-capacity-change-actions button{
+  min-height:30px;
+  padding:0 9px;
+  border:1px solid currentColor;
+  border-radius:7px;
+  background:#fff;
+  font-size:7.5px;
+  font-weight:900;
+  cursor:pointer;
+}
+.tf-capacity-change.danger{
+  border-color:#e4b8b8;
+  background:#fff4f4;
+  color:#a32929;
+}
+.tf-capacity-change.warn{
+  border-color:#e9d69b;
+  background:#fffaf0;
+  color:#8a6800;
+}
+.tf-capacity-change.ok{
+  border-color:#c7e2d2;
+  background:#eff9f3;
+  color:#167044;
+}
+@media(max-width:700px){
+  .tf-capacity-change{align-items:flex-start;flex-direction:column}
+  .tf-capacity-change-actions{width:100%;justify-content:space-between}
+}
+

@@ -113,7 +113,7 @@ export default function TechnicianSchedule({ year, month, revision = 0, onChange
       setError("");
       const result = await saveTechnicianSchedule(changes);
       setMessage(
-        `${result.updated} asignaciones actualizadas${result.cleared ? ` · ${result.cleared} eliminadas` : ""}. La disponibilidad quedó recalculada.`,
+        `${result.updated} asignaciones actualizadas${result.cleared ? ` · ${result.cleared} eliminadas` : ""}. La disponibilidad quedó recalculada en ${result.programs_refreshed || 0} programación(es) abierta(s). Si una meta cambió, Programación semanal mostrará la alerta correspondiente.`,
       );
       await load();
       onChanged?.();
