@@ -641,15 +641,15 @@ def export_weekly_excel(programming_id:int)->tuple[bytes,str]:
     ws.merge_cells("A14:L14")
     if demand_before<=0:
         comparison_text="El PMP mensual ya se encuentra cubierto. La capacidad preventiva semanal puede destinarse a backlog u otros trabajos preventivos."
-    elif weekly_target>=demand_before:
+    elif hh_target>=demand_before:
         comparison_text=(
-            f"CAPACIDAD SEMANAL SUFICIENTE · Meta preventiva: {weekly_target:.1f} H-H · "
+            f"CAPACIDAD SEMANAL SUFICIENTE · Meta preventiva: {hh_target:.1f} H-H · "
             f"Demanda pendiente antes de esta semana: {demand_before:.1f} H-H · "
             f"Objetivo sugerido: {suggested:.1f} H-H · Capacidad preventiva libre: {free_capacity:.1f} H-H"
         )
     else:
         comparison_text=(
-            f"COBERTURA PARCIAL · Meta preventiva: {weekly_target:.1f} H-H · "
+            f"COBERTURA PARCIAL · Meta preventiva: {hh_target:.1f} H-H · "
             f"Demanda pendiente antes de esta semana: {demand_before:.1f} H-H · "
             f"Cobertura posible esta semana: {coverage:.1f}%"
         )

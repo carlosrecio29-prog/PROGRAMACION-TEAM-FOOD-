@@ -53,6 +53,45 @@ function ActivityGroup({kind,rows,dashboard,editing,selected,filters,onFiltersCh
   </section>
 }
 
+function SelectionSummary({rows,editing,onToggle}){
+  const operatingHH=rows.filter(row=>row.requiere_parada===false).reduce((sum,row)=>sum+number(row.hh),0)
+  const stoppedHH=rows.filter(row=>row.requiere_parada===true).reduce((sum,row)=>sum+number(row.hh),0)
+  const totalHH=operatingHH+stoppedHH
+  return <section className={'v2-selected-section '+(!editing?'readonly':'')}>
+    <div className="v2-selected-head">
+      <div>
+        <span className="v2-kicker">{editing?'PROGRAMACIÓN EN EDICIÓN':'PROGRAMACIÓN GUARDADA'}</span>
+        <h3>{editing?'Selección actual':'Programación actual de la semana'}</h3>
+        <p>{editing?'Aquí ves únicamente las actividades que estás programando.':'Estas son las actividades guardadas para la semana.'}</p>
+      </div>
+      <div className="v2-selected-totals">
+        <span><b>{rows.length}</b> actividades</span>
+        <span><b>{fmt(operatingHH,1)}</b> H-H operando</span>
+        <span><b>{fmt(stoppedHH,1)}</b> H-H detenido</span>
+        <span className="total"><b>{fmt(totalHH,1)}</b> H-H total</span>
+      </div>
+    </div>
+    <div className="v2-table-wrap v2-selected-table"><table>
+      <thead><tr><th>Condición</th><th>Origen</th><th>OT</th><th>Área</th><th>Equipo</th><th>Plan de trabajo</th><th>Personas</th><th>Tiempo</th><th>H-H</th>{editing&&<th>Acción</th>}</tr></thead>
+      <tbody>
+        {rows.map(row=><tr key={row.orden_mantenimiento_id}>
+          <td>{row.requiere_parada?<Badge tone="stop">Equipo detenido</Badge>:<Badge tone="ok">Equipo funcionando</Badge>}</td>
+          <td>{row.origen==='BACKLOG'||row.origen_backlog?<Badge tone="backlog">BACKLOG</Badge>:<Badge>PMP DEL MES</Badge>}</td>
+          <td><b>{row.numero_ot||'SIN ASIGNAR'}</b></td>
+          <td><Badge>{row.area_codigo||'—'}</Badge><small>{row.area_nombre||''}</small></td>
+          <td><b>{row.activo_codigo}</b><small>{row.activo_descripcion}</small></td>
+          <td><span className="v2-plan">{row.plan_trabajo}</span><small>{row.descripcion_grupo||''}</small></td>
+          <td><b>{row.numero_personas_efectivo}</b></td>
+          <td>{fmt(row.tiempo_min,0)} min</td>
+          <td><b>{fmt(row.hh,1)}</b></td>
+          {editing&&<td><button type="button" className="v2-unselect" onClick={()=>onToggle(row)}>Quitar</button></td>}
+        </tr>)}
+        {!rows.length&&<tr><td colSpan={editing?10:9} className="v2-empty">Todavía no has seleccionado actividades para esta semana.</td></tr>}
+      </tbody>
+    </table></div>
+  </section>
+}
+
 export default function WeeklyProgramming({year,month,dashboard}){
   const weeks=useMemo(()=>monthWeeks(year,month),[year,month])
   const [weekIndex,setWeekIndex]=useState(()=>initialWeekIndex(weeks));const [specialty,setSpecialty]=useState('MEC');const [data,setData]=useState(null);const [selected,setSelected]=useState(new Set());const [filters,setFilters]=useState(emptyFilters);const [loading,setLoading]=useState(false);const [saving,setSaving]=useState(false);const [error,setError]=useState('');const [message,setMessage]=useState('');const [dirty,setDirty]=useState(false);const [programmingId,setProgrammingId]=useState(null);const [editing,setEditing]=useState(true)
@@ -142,6 +181,8 @@ export default function WeeklyProgramming({year,month,dashboard}){
       <span>{coverageText}</span>
       {monthly.missingHH>0&&<small>{monthly.missingHH} PMP sin H-H calculables</small>}
     </div>
+
+    <SelectionSummary rows={selectedRows} editing={editing} onToggle={toggle}/>
 
     {(editing||!programmingId)&&<section className="tf-save-strip">
       <div><b>{selected.size} actividades · {fmt(selectedHH,1)} H-H</b><span>{dirty?'Cambios sin guardar':'Selección actual'}</span></div>
