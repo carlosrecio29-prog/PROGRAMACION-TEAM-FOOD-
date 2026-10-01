@@ -53,7 +53,18 @@ function ActivityGroup({kind,rows,dashboard,editing,selected,filters,onFiltersCh
   </section>
 }
 
-function SelectionSummary({rows,editing,onToggle}){
+function SelectionSummary({rows,editing,onToggle,dashboard}){
+  const [area,setArea]=useState('')
+  const [search,setSearch]=useState('')
+  const term=search.trim().toLowerCase()
+  const visibleRows=rows.filter(row=>{
+    if(area&&String(row.area_codigo||'')!==area)return false
+    if(!term)return true
+    return [
+      row.numero_ot,row.area_codigo,row.area_nombre,row.activo_codigo,row.activo_descripcion,
+      row.plan_trabajo,row.descripcion_grupo,row.origen
+    ].some(value=>String(value||'').toLowerCase().includes(term))
+  })
   const operatingHH=rows.filter(row=>row.requiere_parada===false).reduce((sum,row)=>sum+number(row.hh),0)
   const stoppedHH=rows.filter(row=>row.requiere_parada===true).reduce((sum,row)=>sum+number(row.hh),0)
   const totalHH=operatingHH+stoppedHH
@@ -71,10 +82,15 @@ function SelectionSummary({rows,editing,onToggle}){
         <span className="total"><b>{fmt(totalHH,1)}</b> H-H total</span>
       </div>
     </div>
+    <div className="tf-table-filterbar tf-selected-filterbar">
+      <label><span>Área</span><select value={area} onChange={event=>setArea(event.target.value)}><option value="">Todas</option>{(dashboard?.areas||[]).map(item=><option key={item.codigo} value={item.codigo}>{item.codigo} · {item.nombre||item.codigo}</option>)}</select></label>
+      <label className="search"><span>Buscar</span><input placeholder="OT, equipo o plan..." value={search} onChange={event=>setSearch(event.target.value)}/></label>
+      <small>{visibleRows.length} de {rows.length}</small>
+    </div>
     <div className="v2-table-wrap v2-selected-table"><table>
       <thead><tr><th>Condición</th><th>Origen</th><th>OT</th><th>Área</th><th>Equipo</th><th>Plan de trabajo</th><th>Personas</th><th>Tiempo</th><th>H-H</th>{editing&&<th>Acción</th>}</tr></thead>
       <tbody>
-        {rows.map(row=><tr key={row.orden_mantenimiento_id}>
+        {visibleRows.map(row=><tr key={row.orden_mantenimiento_id}>
           <td>{row.requiere_parada?<Badge tone="stop">Equipo detenido</Badge>:<Badge tone="ok">Equipo funcionando</Badge>}</td>
           <td>{row.origen==='BACKLOG'||row.origen_backlog?<Badge tone="backlog">BACKLOG</Badge>:<Badge>PMP DEL MES</Badge>}</td>
           <td><b>{row.numero_ot||'SIN ASIGNAR'}</b></td>
@@ -86,7 +102,7 @@ function SelectionSummary({rows,editing,onToggle}){
           <td><b>{fmt(row.hh,1)}</b></td>
           {editing&&<td><button type="button" className="v2-unselect" onClick={()=>onToggle(row)}>Quitar</button></td>}
         </tr>)}
-        {!rows.length&&<tr><td colSpan={editing?10:9} className="v2-empty">Todavía no has seleccionado actividades para esta semana.</td></tr>}
+        {!visibleRows.length&&<tr><td colSpan={editing?10:9} className="v2-empty">{rows.length?'No hay actividades con estos filtros.':'Todavía no has seleccionado actividades para esta semana.'}</td></tr>}
       </tbody>
     </table></div>
   </section>
@@ -182,7 +198,7 @@ export default function WeeklyProgramming({year,month,dashboard}){
       {monthly.missingHH>0&&<small>{monthly.missingHH} PMP sin H-H calculables</small>}
     </div>
 
-    <SelectionSummary rows={selectedRows} editing={editing} onToggle={toggle}/>
+    <SelectionSummary rows={selectedRows} editing={editing} onToggle={toggle} dashboard={dashboard}/>
 
     {(editing||!programmingId)&&<section className="tf-save-strip">
       <div><b>{selected.size} actividades · {fmt(selectedHH,1)} H-H</b><span>{dirty?'Cambios sin guardar':'Selección actual'}</span></div>

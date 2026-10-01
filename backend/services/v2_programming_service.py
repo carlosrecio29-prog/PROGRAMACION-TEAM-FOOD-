@@ -473,9 +473,20 @@ def export_weekly_excel(programming_id:int)->tuple[bytes,str]:
 
     header,rows=_report_data(programming_id)
 
+    week_start=header["semana_inicio"]
+    first_day=week_start.replace(day=1)
+    first_thursday_day=1+((3-first_day.weekday())%7)
+    week_number=(
+        None
+        if week_start.day<first_thursday_day
+        else 1+((week_start.day-first_thursday_day)//7)
+    )
+    week_label=f"SEMANA {week_number}" if week_number is not None else "TRANSICIÓN"
+    specialty_code=str(header["especialidad"] or "").upper()
+
     wb=Workbook()
     ws=wb.active
-    ws.title="Programación semanal"
+    ws.title=(f"{specialty_code} - {week_label.title()}")[:31]
     ws.sheet_view.showGridLines=False
     ws.freeze_panes="A16"
     ws.sheet_properties.tabColor="009B5A"
@@ -516,7 +527,7 @@ def export_weekly_excel(programming_id:int)->tuple[bytes,str]:
 
     # Cabecera corporativa.
     ws.merge_cells("C1:I2")
-    ws["C1"]="PROGRAMACIÓN SEMANAL DE MANTENIMIENTO"
+    ws["C1"]=f"PROGRAMACIÓN SEMANAL DE MANTENIMIENTO · {week_label}"
     ws["C1"].font=Font(size=19,bold=True,color=dark)
     ws["C1"].alignment=Alignment(horizontal="left",vertical="center")
 
@@ -530,7 +541,7 @@ def export_weekly_excel(programming_id:int)->tuple[bytes,str]:
     ws["J2"].alignment=Alignment(horizontal="right",vertical="top")
 
     ws.merge_cells("C3:I3")
-    ws["C3"]=f"Planta Barranquilla  ·  {specialty_name}  ·  Semana {header['semana_inicio']:%d/%m/%Y} al {header['semana_fin']:%d/%m/%Y}"
+    ws["C3"]=f"Planta Barranquilla  ·  {specialty_name}  ·  {week_label}  ·  {header['semana_inicio']:%d/%m/%Y} al {header['semana_fin']:%d/%m/%Y}"
     ws["C3"].font=Font(size=9,bold=True,color=gray)
     ws["C3"].alignment=Alignment(horizontal="left",vertical="center")
 
@@ -722,7 +733,8 @@ def export_weekly_excel(programming_id:int)->tuple[bytes,str]:
     out=BytesIO()
     wb.save(out)
     out.seek(0)
-    return out.getvalue(),f"programacion_{header['especialidad']}_{header['semana_inicio']:%Y%m%d}_{header['semana_fin']:%Y%m%d}.xlsx"
+    week_file=f"semana_{week_number}" if week_number is not None else "transicion"
+    return out.getvalue(),f"programacion_{specialty_code}_{week_file}.xlsx"
 
 
 def export_weekly_pdf(programming_id:int)->tuple[bytes,str]:
