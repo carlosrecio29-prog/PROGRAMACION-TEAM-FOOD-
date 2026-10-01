@@ -2192,3 +2192,198 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
   .tf-team-capacity .v2-capacity-cards{grid-template-columns:1fr}
 }
 
+/* === DEMANDA MENSUAL VS CAPACIDAD SEMANAL === */
+.tf-month-demand{
+  background:#fff;
+  border:1px solid #cfe6d9;
+  border-radius:16px;
+  padding:17px 18px;
+  box-shadow:0 8px 24px rgba(0,121,75,.06);
+}
+.tf-month-demand-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:16px;
+  margin-bottom:12px;
+}
+.tf-month-demand-head h3{
+  margin:4px 0 4px;
+  font-size:17px;
+  color:#173b31;
+}
+.tf-month-demand-head p{
+  margin:0;
+  color:var(--muted);
+  font-size:8.5px;
+  max-width:850px;
+}
+.tf-month-demand-grid{
+  display:grid;
+  grid-template-columns:repeat(6,minmax(0,1fr));
+  gap:8px;
+}
+.tf-month-demand-grid article{
+  min-width:0;
+  padding:11px 10px;
+  border:1px solid #d9e9e0;
+  border-top:3px solid #009b5a;
+  border-radius:10px;
+  background:#f8fcfa;
+}
+.tf-month-demand-grid article.covered{
+  border-top-color:#55c42f;
+  background:#f2faf5;
+}
+.tf-month-demand-grid article.pending{
+  border-top-color:#f4c20d;
+  background:#fffaf0;
+}
+.tf-month-demand-grid span{
+  display:block;
+  color:#667b72;
+  font-size:7.2px;
+  line-height:1.2;
+  font-weight:950;
+  text-transform:uppercase;
+  letter-spacing:.28px;
+}
+.tf-month-demand-grid b{
+  display:block;
+  margin:5px 0 2px;
+  color:#173b31;
+  font-size:21px;
+  line-height:1;
+}
+.tf-month-demand-grid small{
+  display:block;
+  color:#7a8d85;
+  font-size:7.2px;
+}
+.tf-month-progress-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+  margin-top:11px;
+}
+.tf-month-progress-grid>div{
+  padding:10px 11px;
+  border:1px solid #e0ebe5;
+  border-radius:10px;
+  background:#fbfdfc;
+}
+.tf-month-progress-copy{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  color:#657b71;
+  font-size:8px;
+  font-weight:850;
+}
+.tf-month-progress-copy b{color:#008c53}
+.tf-month-progress-track{
+  height:7px;
+  margin-top:7px;
+  overflow:hidden;
+  border-radius:999px;
+  background:#e6efe9;
+}
+.tf-month-progress-track i{
+  display:block;
+  height:100%;
+  border-radius:999px;
+  background:linear-gradient(90deg,#009b5a,#55c42f);
+}
+.tf-month-progress-track.count i{
+  background:linear-gradient(90deg,#008b55,#f4c20d);
+}
+.tf-month-capacity-compare{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:8px;
+  margin-top:11px;
+}
+.tf-month-capacity-compare>div{
+  padding:10px 11px;
+  border:1px solid #dde8e2;
+  border-radius:10px;
+  background:#fff;
+}
+.tf-month-capacity-compare>div.suggested{
+  border-color:#d9c46b;
+  background:#fff9df;
+}
+.tf-month-capacity-compare span{
+  display:block;
+  color:#6e8078;
+  font-size:7.2px;
+  font-weight:900;
+  text-transform:uppercase;
+  letter-spacing:.25px;
+}
+.tf-month-capacity-compare b{
+  display:block;
+  margin-top:4px;
+  color:#173b31;
+  font-size:17px;
+}
+.tf-month-capacity-compare small{
+  display:block;
+  margin-top:2px;
+  color:#7b8c84;
+  font-size:7px;
+}
+.tf-month-status{
+  margin-top:11px;
+  padding:11px 12px;
+  border-radius:10px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  border:1px solid #d7e5dd;
+  background:#f7fbf8;
+}
+.tf-month-status>div strong{
+  display:block;
+  color:#173b31;
+  font-size:9px;
+}
+.tf-month-status>div span{
+  display:block;
+  margin-top:3px;
+  color:#64796f;
+  font-size:8px;
+  line-height:1.4;
+}
+.tf-month-status>b{
+  flex:0 0 auto;
+  font-size:19px;
+  color:#008c53;
+}
+.tf-month-status.enough{
+  border-color:#c8e3d3;
+  background:#eff9f3;
+}
+.tf-month-status.complete{
+  border-color:#c9e6d5;
+  background:#edf8f2;
+}
+.tf-month-status.partial{
+  border-color:#eadb9f;
+  background:#fffaf0;
+}
+.tf-month-status.partial>b{color:#9c7800}
+
+@media(max-width:1200px){
+  .tf-month-demand-grid{grid-template-columns:repeat(3,1fr)}
+  .tf-month-capacity-compare{grid-template-columns:repeat(2,1fr)}
+}
+@media(max-width:700px){
+  .tf-month-demand-head{flex-direction:column}
+  .tf-month-demand-grid,
+  .tf-month-progress-grid,
+  .tf-month-capacity-compare{grid-template-columns:1fr}
+  .tf-month-status{align-items:flex-start;flex-direction:column}
+}
+

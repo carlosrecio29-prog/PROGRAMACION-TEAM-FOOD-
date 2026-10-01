@@ -9,6 +9,7 @@ from backend.database import get_engine
 from backend.services.v2_programming_service import (
     V2ProgrammingError,
     _capacity,
+    _monthly_demand,
     _validate_week,
     export_weekly_excel,
     export_weekly_pdf,
@@ -81,6 +82,7 @@ def get_week_programming(*, date_from: date, date_to: date, specialty: str) -> d
         """), {"date_from": date_from, "specialty": specialty, "programming_id": programming_id}).mappings()]
 
         selected_hh = round(sum(float(r["hh"] or 0) for r in rows if r["seleccionado"]), 2)
+        monthly_demand = _monthly_demand(conn, date_from, specialty, programming_id)
 
     backlog = [r for r in rows if r["es_backlog"]]
     regular = [r for r in rows if not r["es_backlog"]]
@@ -89,6 +91,7 @@ def get_week_programming(*, date_from: date, date_to: date, specialty: str) -> d
     return {
         "date_from": str(date_from), "date_to": str(date_to), "specialty": specialty,
         "capacity": capacity, "programming": dict(programming) if programming else None,
+        "monthly_demand": monthly_demand,
         "selected_hh": selected_hh,
         "selected_ids": [int(r["orden_mantenimiento_id"]) for r in rows if r["seleccionado"]],
         "operating": operating, "stopped": stopped, "backlog": backlog, "backlog_count": len(backlog),

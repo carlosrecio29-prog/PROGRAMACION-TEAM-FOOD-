@@ -30,6 +30,85 @@ function SelectionSummary({rows,editing,onToggle}){
   return <section className={'v2-selected-section '+(!editing?'readonly':'')}><div className="v2-selected-head"><div><span className="v2-kicker">{editing?'PROGRAMACIÓN EN EDICIÓN':'PROGRAMACIÓN GUARDADA'}</span><h3>{editing?'Selección actual':'Programación actual de la semana'}</h3><p>{editing?'Revisa lo que ya agregaste antes de seguir buscando actividades.':'Consulta la última versión guardada.'}</p></div><div className="v2-selected-totals"><span><b>{rows.length}</b> actividades</span><span><b>{fmt(operatingHH,1)}</b> H-H operando</span><span><b>{fmt(stoppedHH,1)}</b> H-H detenido</span><span className="total"><b>{fmt(totalHH,1)}</b> H-H total</span></div></div><div className="v2-table-wrap v2-selected-table"><table><thead><tr><th>Condición</th><th>Origen</th><th>OT</th><th>Área</th><th>Equipo</th><th>Plan de trabajo</th><th>Personas</th><th>Tiempo</th><th>H-H</th>{editing&&<th>Acción</th>}</tr></thead><tbody>{rows.map(row=><tr key={row.orden_mantenimiento_id}><td>{row.requiere_parada?<Badge tone="stop">Equipo detenido</Badge>:<Badge tone="ok">Equipo funcionando</Badge>}</td><td>{row.origen==='BACKLOG'||row.origen_backlog?<Badge tone="backlog">BACKLOG</Badge>:<Badge>PMP DEL MES</Badge>}</td><td><b>{row.numero_ot||'SIN ASIGNAR'}</b></td><td><Badge>{row.area_codigo||'—'}</Badge><small>{row.area_nombre||''}</small></td><td><b>{row.activo_codigo}</b><small>{row.activo_descripcion}</small></td><td><span className="v2-plan">{row.plan_trabajo}</span><small>{row.descripcion_grupo||''}</small></td><td><b>{row.numero_personas_efectivo}</b></td><td>{fmt(row.tiempo_min,0)} min</td><td><b>{fmt(row.hh,1)}</b></td>{editing&&<td><button type="button" className="v2-unselect" onClick={()=>onToggle(row)}>Quitar → Backlog</button></td>}</tr>)}{!rows.length&&<tr><td colSpan={editing?10:9} className="v2-empty">Todavía no has seleccionado actividades para esta semana.</td></tr>}</tbody></table></div></section>
 }
 
+function MonthlyDemandSummary({data,selectedRows,target,specialty,week}){
+  const base=data?.monthly_demand||{}
+  const monthKey=String(week?.from||'').slice(0,7)
+  const selectedMonthRows=selectedRows.filter(row=>String(row.periodo||'').slice(0,7)===monthKey)
+  const selectedMonthHH=selectedMonthRows.reduce((sum,row)=>sum+number(row.hh),0)
+  const pmpCount=number(base.pmp_count)
+  const pmpHH=number(base.pmp_hh)
+  const coveredCount=Math.min(pmpCount,number(base.covered_count_base)+selectedMonthRows.length)
+  const coveredHH=Math.min(pmpHH,number(base.covered_hh_base)+selectedMonthHH)
+  const pendingCount=Math.max(0,pmpCount-coveredCount)
+  const pendingHH=Math.max(0,pmpHH-coveredHH)
+  const demandBeforeWeekCount=Math.max(0,pmpCount-number(base.covered_count_base))
+  const demandBeforeWeekHH=Math.max(0,pmpHH-number(base.covered_hh_base))
+  const suggested=Math.min(target,demandBeforeWeekHH)
+  const coveragePossible=demandBeforeWeekHH>0?Math.min(100,target/demandBeforeWeekHH*100):100
+  const freePreventive=Math.max(0,target-suggested)
+  const hhProgress=pmpHH>0?Math.min(100,coveredHH/pmpHH*100):(pmpCount?0:100)
+  const countProgress=pmpCount>0?Math.min(100,coveredCount/pmpCount*100):100
+  const missingHH=number(base.missing_hh_count)
+
+  let statusTitle='Cobertura parcial del PMP mensual'
+  let statusText=`La capacidad preventiva de esta semana puede absorber hasta ${fmt(coveragePossible,1)}% de las H-H PMP que estaban pendientes antes de esta programación.`
+  let tone='partial'
+  if(demandBeforeWeekHH<=.01){
+    statusTitle='PMP mensual cubierto'
+    statusText='No quedan H-H PMP calculables pendientes del mes. La capacidad preventiva disponible puede usarse para backlog u otros trabajos preventivos.'
+    tone='complete'
+  }else if(target>=demandBeforeWeekHH-.01){
+    statusTitle='La semana puede cubrir todo lo pendiente'
+    statusText=`La meta preventiva semanal alcanza para cubrir las ${fmt(demandBeforeWeekHH,1)} H-H PMP pendientes. Quedarían ${fmt(freePreventive,1)} H-H de capacidad preventiva libre.`
+    tone='enough'
+  }
+
+  return <section className="tf-month-demand">
+    <div className="tf-month-demand-head">
+      <div>
+        <span className="v2-kicker">DEMANDA DEL MES · {SPEC_NAMES[specialty]||specialty}</span>
+        <h3>PMP mensual frente a la capacidad de la semana</h3>
+        <p>Compara lo que realmente queda por programar en el mes con la capacidad preventiva disponible en el corte seleccionado.</p>
+      </div>
+      <Badge>{monthKey||'Mes actual'}</Badge>
+    </div>
+
+    <div className="tf-month-demand-grid">
+      <article><span>PMP del mes</span><b>{pmpCount}</b><small>cartera mensual</small></article>
+      <article><span>H-H PMP del mes</span><b>{fmt(pmpHH,1)}</b><small>demanda calculable</small></article>
+      <article className="covered"><span>PMP programados / cubiertos</span><b>{coveredCount}</b><small>{fmt(countProgress,1)}% del mes</small></article>
+      <article className="covered"><span>H-H cubiertas</span><b>{fmt(coveredHH,1)}</b><small>{fmt(hhProgress,1)}% de las H-H</small></article>
+      <article className="pending"><span>PMP pendientes</span><b>{pendingCount}</b><small>por cubrir</small></article>
+      <article className="pending"><span>H-H pendientes</span><b>{fmt(pendingHH,1)}</b><small>del PMP mensual</small></article>
+    </div>
+
+    <div className="tf-month-progress-grid">
+      <div>
+        <div className="tf-month-progress-copy"><span>Avance mensual por H-H</span><b>{fmt(hhProgress,1)}%</b></div>
+        <div className="tf-month-progress-track"><i style={{width:`${hhProgress}%`}}/></div>
+      </div>
+      <div>
+        <div className="tf-month-progress-copy"><span>Avance mensual por cantidad de PMP</span><b>{fmt(countProgress,1)}%</b></div>
+        <div className="tf-month-progress-track count"><i style={{width:`${countProgress}%`}}/></div>
+      </div>
+    </div>
+
+    <div className="tf-month-capacity-compare">
+      <div><span>Meta preventiva semanal</span><b>{fmt(target,1)} H-H</b></div>
+      <div><span>Demanda antes de esta semana</span><b>{fmt(demandBeforeWeekHH,1)} H-H</b><small>{demandBeforeWeekCount} PMP</small></div>
+      <div className="suggested"><span>Objetivo sugerido esta semana</span><b>{fmt(suggested,1)} H-H</b><small>menor entre demanda y capacidad</small></div>
+      <div><span>Capacidad preventiva libre</span><b>{fmt(freePreventive,1)} H-H</b><small>para backlog / otros preventivos</small></div>
+    </div>
+
+    <div className={`tf-month-status ${tone}`}>
+      <div><strong>{statusTitle}</strong><span>{statusText}</span></div>
+      <b>{fmt(coveragePossible,1)}%</b>
+    </div>
+
+    {missingHH>0&&<div className="v2-warning">{missingHH} PMP del mes no tienen H-H calculables todavía; no están incluidos en la comparación de capacidad por horas.</div>}
+  </section>
+}
+
 export default function WeeklyProgramming({year,month,dashboard}){
   const weeks=useMemo(()=>monthWeeks(year,month),[year,month])
   const [weekIndex,setWeekIndex]=useState(()=>initialWeekIndex(weeks));const [specialty,setSpecialty]=useState('MEC');const [data,setData]=useState(null);const [selected,setSelected]=useState(new Set());const [filters,setFilters]=useState(emptyFilters);const [loading,setLoading]=useState(false);const [saving,setSaving]=useState(false);const [error,setError]=useState('');const [message,setMessage]=useState('');const [dirty,setDirty]=useState(false);const [programmingId,setProgrammingId]=useState(null);const [editing,setEditing]=useState(true)
@@ -64,6 +143,7 @@ export default function WeeklyProgramming({year,month,dashboard}){
       </div>
     </section>
     <section className="v2-panel v2-week-context"><div className="v2-section-head"><div><span className="v2-kicker">PROGRAMACIÓN SEMANAL</span><h3>Semana y especialidad de trabajo</h3><p>Selecciona el contexto antes de revisar capacidad, actividades y programación actual.</p></div><Badge>{loading?'Calculando...':`${techniciansAvailable} disponibles / ${techniciansAssigned} asignados`}</Badge></div><div className="v2-week-selector"><div className="v2-week-buttons">{weeks.map((item,index)=><button type="button" key={item.from} className={weekIndex===index?'active':''} onClick={()=>setWeekIndex(index)}><b>{item.transition?'Transición':`Semana ${item.weekNumber}`}</b><span>{item.label}</span></button>)}</div><div className="v2-specialty-buttons">{SPECS.map(item=><button type="button" key={item} className={specialty===item?'active':''} onClick={()=>setSpecialty(item)}><b>{item}</b><span>{SPEC_NAMES[item]}</span></button>)}</div></div></section>
+    <MonthlyDemandSummary data={data} selectedRows={selectedRows} target={target} specialty={specialty} week={week}/>
     {programmingId&&<section className="v2-program-review"><div><span className="v2-kicker">PROGRAMACIÓN EXISTENTE</span><h3>{editing?'Modificando programación guardada':'Programación disponible para consulta'}</h3><p>{editing?'Los cambios no afectan la programación hasta que los guardes.':'Puedes revisar o exportar esta versión; activa edición para modificarla.'}</p></div><div className="v2-program-review-actions">{!editing?<button type="button" className="v2-primary" onClick={()=>{setEditing(true);setMessage('Modo edición activado. Los cambios no afectan la programación hasta que presiones Guardar cambios.')}}>Modificar programación</button>:<button type="button" onClick={cancelEdit}>Cancelar cambios</button>}<button type="button" disabled={dirty} onClick={()=>report('xlsx')}>Exportar Excel</button><button type="button" disabled={dirty} onClick={()=>report('pdf')}>Exportar PDF</button></div></section>}
     <section className="v2-capacity-panel v2-capacity-summary tf-team-capacity"><div className="v2-capacity-cards"><div className="gross"><span>H-H brutas</span><b>{fmt(available,1)}</b><small>turnos programados · 100%</small></div><div className="effective"><span>H-H efectivas</span><b>{fmt(effective,1)}</b><small>80% de las H-H brutas</small></div><div className="target"><span>Meta preventivo</span><b>{fmt(target,1)}</b><small>80% de las H-H efectivas</small></div><div className="selected"><span>H-H seleccionadas</span><b>{fmt(selectedHH,1)}</b><small>{selected.size} actividades</small></div><div className={remaining<=.01?'complete':'remaining'}><span>{remaining<=.01?'Meta alcanzada':'Faltan para meta'}</span><b>{fmt(remaining,1)}</b><small>H-H</small></div></div><div className="v2-capacity-details"><span>H-H efectivas · 80% <b>{fmt(effective,1)}</b></span><span>Alistamiento / tiempo no programable · 20% bruto <b>{fmt(initialMargin,1)}</b></span><span>Correctivo / reserva · 20% efectivas <b>{fmt(reserve,1)}</b></span></div><div className="v2-capacity-rule"><b>Regla:</b> H-H brutas × 80% = H-H efectivas. El 20% inicial contempla cambio de ropa, charla, alistamiento, búsqueda de herramientas, desplazamientos y otros tiempos operativos. Luego las H-H efectivas se distribuyen 80% preventivo / 20% correctivo-reserva.</div><div className="v2-progress-block"><div className="v2-progress-copy"><span>Avance hacia la meta preventiva</span><b>{fmt(progress,1)}%</b></div><div className="v2-progress-track"><i style={{width:`${progress}%`}}/></div><div className="v2-progress-foot"><span>{fmt(selectedHH,1)} H-H programadas</span><span>Objetivo preventivo {fmt(target,1)} H-H</span></div></div>{available===0&&<div className="v2-warning">Esta especialidad no tiene disponibilidad cargada para esta semana. Revisa la programación de técnicos.</div>}</section>
     <SelectionSummary rows={selectedRows} editing={editing} onToggle={toggle}/>

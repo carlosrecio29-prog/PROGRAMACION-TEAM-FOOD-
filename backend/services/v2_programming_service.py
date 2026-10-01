@@ -75,6 +75,81 @@ def _capacity(conn,date_from:date,date_to:date,specialty:str)->dict[str,Any]:
     }
 
 
+def _monthly_demand(conn, month_date: date, specialty: str, exclude_programming_id: int | None = None) -> dict[str, Any]:
+    period = month_date.replace(day=1)
+    row = conn.execute(text("""
+        WITH candidate AS (
+          SELECT
+            o.id AS orden_mantenimiento_id,
+            CASE
+              WHEN p.numero_personas_efectivo IS NOT NULL
+               AND COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min) IS NOT NULL
+              THEN round(
+                COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min)/60.0
+                * p.numero_personas_efectivo,
+                2
+              )
+              ELSE NULL
+            END AS hh,
+            upper(COALESCE(o.estado,'')) LIKE 'FINALIZ%' AS finalizada_software
+          FROM programacion.orden_mantenimiento o
+          JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
+          WHERE o.especialidad=:specialty
+            AND o.periodo=:period
+            AND NOT COALESCE(p.es_operacion,false)
+        ),
+        coverage AS (
+          SELECT
+            c.*,
+            CASE
+              WHEN c.finalizada_software THEN true
+              WHEN EXISTS (
+                SELECT 1
+                FROM programacion.programacion_item_v2 pi
+                JOIN programacion.programacion_semanal_v2 ps ON ps.id=pi.programacion_id
+                WHERE pi.orden_mantenimiento_id=c.orden_mantenimiento_id
+                  AND (
+                    CAST(:exclude_programming_id AS bigint) IS NULL
+                    OR pi.programacion_id<>CAST(:exclude_programming_id AS bigint)
+                  )
+                  AND (
+                    ps.estado<>'CERRADA'
+                    OR COALESCE(pi.finalizado,false)=true
+                  )
+              ) THEN true
+              ELSE false
+            END AS cubierta
+          FROM candidate c
+        )
+        SELECT
+          count(*)::int AS pmp_count,
+          count(*) FILTER (WHERE hh IS NULL)::int AS missing_hh_count,
+          round(COALESCE(sum(hh),0),2) AS pmp_hh,
+          count(*) FILTER (WHERE cubierta)::int AS covered_count_base,
+          round(COALESCE(sum(hh) FILTER (WHERE cubierta),0),2) AS covered_hh_base
+        FROM coverage
+    """), {
+        "period": period,
+        "specialty": specialty,
+        "exclude_programming_id": exclude_programming_id,
+    }).mappings().one()
+
+    total_count = int(row["pmp_count"] or 0)
+    total_hh = round(float(row["pmp_hh"] or 0), 2)
+    covered_count = int(row["covered_count_base"] or 0)
+    covered_hh = round(float(row["covered_hh_base"] or 0), 2)
+    return {
+        "period": period.isoformat(),
+        "pmp_count": total_count,
+        "pmp_hh": total_hh,
+        "missing_hh_count": int(row["missing_hh_count"] or 0),
+        "covered_count_base": min(total_count, covered_count),
+        "covered_hh_base": min(total_hh, covered_hh),
+        "pending_count_base": max(0, total_count-covered_count),
+        "pending_hh_base": round(max(0.0, total_hh-covered_hh), 2),
+    }
+
+
 def refresh_open_program_capacities(conn)->int:
     rows=conn.execute(text("""
         SELECT id,semana_inicio,semana_fin,especialidad
@@ -321,7 +396,7 @@ def _report_data(programming_id:int)->tuple[dict[str,Any],list[dict[str,Any]]]:
         """),{"id":programming_id}).mappings().first()
         if not header: raise V2ProgrammingError("Programación no encontrada")
         rows=[dict(r) for r in conn.execute(text("""
-            SELECT o.numero_ot,a.area_codigo,COALESCE(root.descripcion,a.area_codigo) AS area_nombre,
+            SELECT o.id AS orden_mantenimiento_id,o.periodo,o.numero_ot,a.area_codigo,COALESCE(root.descripcion,a.area_codigo) AS area_nombre,
               a.codigo AS activo_codigo,a.descripcion AS activo_descripcion,p.descripcion_grupo,p.plan_trabajo,
               p.numero_personas_efectivo AS personas,COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min) AS tiempo_min,
               pi.hh_programadas,pi.requiere_parada,pi.origen,a.criticidad,
@@ -334,7 +409,57 @@ def _report_data(programming_id:int)->tuple[dict[str,Any],list[dict[str,Any]]]:
             WHERE pi.programacion_id=:id
             ORDER BY pi.requiere_parada,a.area_codigo,o.numero_ot NULLS LAST,a.codigo
         """),{"id":programming_id}).mappings()]
-    return dict(header),rows
+        monthly=_monthly_demand(
+            conn,
+            header["semana_inicio"],
+            header["especialidad"],
+            programming_id,
+        )
+        month_period=header["semana_inicio"].replace(day=1)
+        selected_month_rows=[
+            row for row in rows
+            if row.get("periodo")==month_period
+        ]
+        selected_month_ids={
+            int(row["orden_mantenimiento_id"])
+            for row in selected_month_rows
+            if row.get("orden_mantenimiento_id") is not None
+        }
+        selected_month_hh=round(sum(float(row.get("hh_programadas") or 0) for row in selected_month_rows),2)
+        monthly["covered_count"]=min(
+            monthly["pmp_count"],
+            monthly["covered_count_base"]+len(selected_month_ids),
+        )
+        monthly["covered_hh"]=round(min(
+            monthly["pmp_hh"],
+            monthly["covered_hh_base"]+selected_month_hh,
+        ),2)
+        monthly["pending_count"]=max(0,monthly["pmp_count"]-monthly["covered_count"])
+        monthly["pending_hh"]=round(max(0.0,monthly["pmp_hh"]-monthly["covered_hh"]),2)
+        monthly["demand_before_week_count"]=max(
+            0,
+            monthly["pmp_count"]-monthly["covered_count_base"],
+        )
+        monthly["demand_before_week_hh"]=round(max(
+            0.0,
+            monthly["pmp_hh"]-monthly["covered_hh_base"],
+        ),2)
+        weekly_target=float(header["hh_objetivo"] or 0)
+        monthly["suggested_week_hh"]=round(min(
+            weekly_target,
+            monthly["demand_before_week_hh"],
+        ),2)
+        monthly["coverage_possible_pct"]=round(
+            min(100.0,weekly_target/monthly["demand_before_week_hh"]*100.0),
+            1,
+        ) if monthly["demand_before_week_hh"]>0 else 100.0
+        monthly["free_preventive_hh"]=round(max(
+            0.0,
+            weekly_target-monthly["suggested_week_hh"],
+        ),2)
+        header=dict(header)
+        header["monthly_demand"]=monthly
+    return header,rows
 
 
 def export_weekly_excel(programming_id:int)->tuple[bytes,str]:
@@ -352,7 +477,7 @@ def export_weekly_excel(programming_id:int)->tuple[bytes,str]:
     ws=wb.active
     ws.title="Programación semanal"
     ws.sheet_view.showGridLines=False
-    ws.freeze_panes="A11"
+    ws.freeze_panes="A16"
     ws.sheet_properties.tabColor="009B5A"
     ws.page_setup.orientation="landscape"
     ws.page_setup.fitToWidth=1
@@ -475,16 +600,76 @@ def export_weekly_excel(programming_id:int)->tuple[bytes,str]:
     ws["A9"].alignment=Alignment(horizontal="left",vertical="center",wrap_text=True)
     ws.row_dimensions[9].height=24
 
+    monthly=header.get("monthly_demand") or {}
+    ws.merge_cells("A10:L10")
+    ws["A10"]="DEMANDA DEL MES · PMP VS CAPACIDAD SEMANAL"
+    ws["A10"].font=Font(size=9,bold=True,color=white)
+    ws["A10"].fill=PatternFill("solid",fgColor=team_dark)
+    ws["A10"].alignment=Alignment(horizontal="left",vertical="center")
+    ws.row_dimensions[10].height=20
+
+    month_cards=[
+        ("A11:B11","A12:B13","PMP DEL MES",int(monthly.get("pmp_count") or 0),team_green,team_pale),
+        ("C11:D11","C12:D13","H-H PMP DEL MES",float(monthly.get("pmp_hh") or 0),team_green,team_pale),
+        ("E11:F11","E12:F13","PMP CUBIERTOS",int(monthly.get("covered_count") or 0),team_lime,team_pale),
+        ("G11:H11","G12:H13","H-H CUBIERTAS",float(monthly.get("covered_hh") or 0),team_lime,team_pale),
+        ("I11:J11","I12:J13","PMP PENDIENTES",int(monthly.get("pending_count") or 0),team_yellow,team_yellow_pale),
+        ("K11:L11","K12:L13","H-H PENDIENTES",float(monthly.get("pending_hh") or 0),team_yellow,team_yellow_pale),
+    ]
+    for title_range,value_range,label,value,accent,value_fill in month_cards:
+        ws.merge_cells(title_range)
+        ws.merge_cells(value_range)
+        tc=ws[title_range.split(":")[0]]
+        vc=ws[value_range.split(":")[0]]
+        tc.value=label
+        tc.font=Font(size=7.5,bold=True,color=white)
+        tc.fill=PatternFill("solid",fgColor=accent)
+        tc.alignment=Alignment(horizontal="center",vertical="center")
+        vc.value=value
+        vc.font=Font(size=15,bold=True,color=dark if accent!=team_yellow else navy)
+        vc.fill=PatternFill("solid",fgColor=value_fill)
+        vc.alignment=Alignment(horizontal="center",vertical="center")
+        vc.number_format="0" if isinstance(value,int) else "0.0"
+        for row_num in range(ws[title_range.split(":")[0]].row,ws[value_range.split(":")[0]].row+2):
+            for col_num in range(ws[title_range.split(":")[0]].column,ws[value_range.split(":")[1]].column+1):
+                ws.cell(row_num,col_num).border=Border(left=thin,right=thin,top=thin,bottom=thin)
+
+    demand_before=float(monthly.get("demand_before_week_hh") or 0)
+    suggested=float(monthly.get("suggested_week_hh") or 0)
+    coverage=float(monthly.get("coverage_possible_pct") or 0)
+    free_capacity=float(monthly.get("free_preventive_hh") or 0)
+    ws.merge_cells("A14:L14")
+    if demand_before<=0:
+        comparison_text="El PMP mensual ya se encuentra cubierto. La capacidad preventiva semanal puede destinarse a backlog u otros trabajos preventivos."
+    elif weekly_target>=demand_before:
+        comparison_text=(
+            f"CAPACIDAD SEMANAL SUFICIENTE · Meta preventiva: {weekly_target:.1f} H-H · "
+            f"Demanda pendiente antes de esta semana: {demand_before:.1f} H-H · "
+            f"Objetivo sugerido: {suggested:.1f} H-H · Capacidad preventiva libre: {free_capacity:.1f} H-H"
+        )
+    else:
+        comparison_text=(
+            f"COBERTURA PARCIAL · Meta preventiva: {weekly_target:.1f} H-H · "
+            f"Demanda pendiente antes de esta semana: {demand_before:.1f} H-H · "
+            f"Cobertura posible esta semana: {coverage:.1f}%"
+        )
+    ws["A14"]=comparison_text
+    ws["A14"].font=Font(size=8,bold=True,color=team_dark)
+    ws["A14"].fill=PatternFill("solid",fgColor="F7FBF8")
+    ws["A14"].alignment=Alignment(horizontal="left",vertical="center",wrap_text=True)
+    ws["A14"].border=Border(left=thin,right=thin,top=thin,bottom=thin)
+    ws.row_dimensions[14].height=28
+
     headers=["OT","Área","Criticidad","Código equipo","Descripción equipo","Plan de trabajo","Condición","Origen","Personas","Tiempo min","H-H","Grupo"]
     for col,label in enumerate(headers,1):
-        c=ws.cell(10,col,label)
+        c=ws.cell(15,col,label)
         c.font=Font(bold=True,color=white,size=8.5)
         c.fill=PatternFill("solid",fgColor=team_dark)
         c.alignment=Alignment(horizontal="center",vertical="center",wrap_text=True)
         c.border=Border(left=thin,right=thin,top=thin,bottom=thin)
-    ws.row_dimensions[10].height=26
+    ws.row_dimensions[15].height=26
 
-    for idx,row in enumerate(rows,11):
+    for idx,row in enumerate(rows,16):
         origin="BACKLOG" if str(row.get("origen") or "").upper()=="BACKLOG" else "PMP DEL MES"
         vals=[
             row.get("numero_ot") or "SIN ASIGNAR",
@@ -525,9 +710,9 @@ def export_weekly_excel(programming_id:int)->tuple[bytes,str]:
     for i,w in enumerate(widths,1):
         ws.column_dimensions[get_column_letter(i)].width=w
 
-    last_row=max(10,10+len(rows))
-    ws.auto_filter.ref=f"A10:L{last_row}"
-    ws.print_title_rows="1:10"
+    last_row=max(15,15+len(rows))
+    ws.auto_filter.ref=f"A15:L{last_row}"
+    ws.print_title_rows="1:15"
     ws.print_area=f"A1:L{last_row}"
     ws.oddFooter.left.text="Team Foods · CEK Global Inspection Services"
     ws.oddFooter.left.size=8
