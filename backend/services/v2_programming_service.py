@@ -324,7 +324,7 @@ def _report_data(programming_id:int)->tuple[dict[str,Any],list[dict[str,Any]]]:
             SELECT o.numero_ot,a.area_codigo,COALESCE(root.descripcion,a.area_codigo) AS area_nombre,
               a.codigo AS activo_codigo,a.descripcion AS activo_descripcion,p.descripcion_grupo,p.plan_trabajo,
               p.numero_personas_efectivo AS personas,COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min) AS tiempo_min,
-              pi.hh_programadas,pi.requiere_parada,
+              pi.hh_programadas,pi.requiere_parada,pi.origen,a.criticidad,
               CASE WHEN pi.requiere_parada THEN 'EQUIPO DETENIDO' ELSE 'EQUIPO FUNCIONANDO' END AS condicion
             FROM programacion.programacion_item_v2 pi
             JOIN programacion.orden_mantenimiento o ON o.id=pi.orden_mantenimiento_id
@@ -338,30 +338,205 @@ def _report_data(programming_id:int)->tuple[dict[str,Any],list[dict[str,Any]]]:
 
 
 def export_weekly_excel(programming_id:int)->tuple[bytes,str]:
+    import base64
+    from pathlib import Path
+
     from openpyxl import Workbook
+    from openpyxl.drawing.image import Image as XLImage
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     from openpyxl.utils import get_column_letter
+
     header,rows=_report_data(programming_id)
-    wb=Workbook();ws=wb.active;ws.title="Programación semanal";ws.sheet_view.showGridLines=False;ws.freeze_panes="A9"
-    ws.page_setup.orientation="landscape";ws.page_setup.fitToWidth=1;ws.sheet_properties.pageSetUpPr.fitToPage=True
-    navy="17365D";blue="2F75B5";light="D9EAF7";pale="F3F6FA";white="FFFFFF";dark="1F2937";gray="6B7280";thin=Side(style="thin",color="D9E2F3")
-    ws.merge_cells("A1:J1");ws["A1"]="PROGRAMACIÓN SEMANAL DE MANTENIMIENTO";ws["A1"].font=Font(size=18,bold=True,color=white);ws["A1"].fill=PatternFill("solid",fgColor=navy);ws["A1"].alignment=Alignment(horizontal="center",vertical="center");ws.row_dimensions[1].height=30
-    ws.merge_cells("A2:J2");ws["A2"]=f"Semana {header['semana_inicio']:%d/%m/%Y} al {header['semana_fin']:%d/%m/%Y}  |  Especialidad: {header['especialidad']}";ws["A2"].font=Font(size=10,bold=True,color=dark);ws["A2"].alignment=Alignment(horizontal="center")
-    cards=[("A4:B4","A5:B6","H-H BRUTAS",float(header["hh_disponibles"] or 0)),("C4:D4","C5:D6","META PREVENTIVO",float(header["hh_objetivo"] or 0)),("E4:F4","E5:F6","H-H PROGRAMADAS",float(header["hh_programadas"] or 0)),("G4:H4","G5:H6","RESERVA CORRECTIVO",float(header["hh_reserva"] or 0)),("I4:J4","I5:J6","ÓRDENES / ACTIVIDADES",int(header["items"] or 0))]
-    for title_range,value_range,label,value in cards:
-        ws.merge_cells(title_range);ws.merge_cells(value_range);tc=ws[title_range.split(":")[0]];vc=ws[value_range.split(":")[0]];tc.value=label;tc.font=Font(size=9,bold=True,color=gray);tc.fill=PatternFill("solid",fgColor=pale);tc.alignment=Alignment(horizontal="center");vc.value=value;vc.font=Font(size=16,bold=True,color=navy);vc.fill=PatternFill("solid",fgColor=light);vc.alignment=Alignment(horizontal="center",vertical="center");vc.number_format='0.0' if isinstance(value,float) else '0'
-    ws.merge_cells("A7:J7");ws["A7"]="Criterio de capacidad: 80% de H-H brutas = H-H efectivas; el 20% inicial cubre alistamiento y tiempos operativos. De las H-H efectivas: 80% preventivo y 20% correctivo/reserva.";ws["A7"].font=Font(size=8,italic=True,color=gray);ws["A7"].alignment=Alignment(horizontal="left",vertical="center",wrap_text=True);ws.row_dimensions[7].height=24
-    headers=["OT","Área","Código equipo","Descripción equipo","Plan de trabajo","Condición","Personas","Tiempo min","H-H","Grupo"]
+
+    wb=Workbook()
+    ws=wb.active
+    ws.title="Programación semanal"
+    ws.sheet_view.showGridLines=False
+    ws.freeze_panes="A11"
+    ws.sheet_properties.tabColor="009B5A"
+    ws.page_setup.orientation="landscape"
+    ws.page_setup.fitToWidth=1
+    ws.page_setup.fitToHeight=0
+    ws.sheet_properties.pageSetUpPr.fitToPage=True
+    ws.page_margins.left=0.25
+    ws.page_margins.right=0.25
+    ws.page_margins.top=0.35
+    ws.page_margins.bottom=0.35
+
+    team_green="009B5A"
+    team_dark="007C49"
+    team_lime="55C42F"
+    team_yellow="F4C20D"
+    team_pale="EFF9F3"
+    team_yellow_pale="FFF8D9"
+    dark="173B31"
+    navy="17365D"
+    gray="66776F"
+    white="FFFFFF"
+    border_color="D6E5DC"
+    thin=Side(style="thin",color=border_color)
+
+    hh_raw=float(header["hh_disponibles"] or 0)
+    hh_effective=round(hh_raw*0.80,2)
+    hh_target=float(header["hh_objetivo"] or 0)
+    hh_programmed=float(header["hh_programadas"] or 0)
+    hh_reserve=float(header["hh_reserva"] or 0)
+    items=int(header["items"] or 0)
+    specialty_name={
+        "MEC":"MECÁNICA",
+        "ELE":"ELÉCTRICA",
+        "MET":"METROLOGÍA",
+        "SER":"SERVICIOS",
+    }.get(str(header["especialidad"] or "").upper(),str(header["especialidad"] or ""))
+
+    # Cabecera corporativa.
+    ws.merge_cells("C1:I2")
+    ws["C1"]="PROGRAMACIÓN SEMANAL DE MANTENIMIENTO"
+    ws["C1"].font=Font(size=19,bold=True,color=dark)
+    ws["C1"].alignment=Alignment(horizontal="left",vertical="center")
+
+    ws.merge_cells("J1:L1")
+    ws["J1"]="CEK GLOBAL"
+    ws["J1"].font=Font(size=13,bold=True,color=navy)
+    ws["J1"].alignment=Alignment(horizontal="right",vertical="bottom")
+    ws.merge_cells("J2:L2")
+    ws["J2"]="Inspection Services"
+    ws["J2"].font=Font(size=8,bold=True,color=gray)
+    ws["J2"].alignment=Alignment(horizontal="right",vertical="top")
+
+    ws.merge_cells("C3:I3")
+    ws["C3"]=f"Planta Barranquilla  ·  {specialty_name}  ·  Semana {header['semana_inicio']:%d/%m/%Y} al {header['semana_fin']:%d/%m/%Y}"
+    ws["C3"].font=Font(size=9,bold=True,color=gray)
+    ws["C3"].alignment=Alignment(horizontal="left",vertical="center")
+
+    ws.merge_cells("J3:L3")
+    ws["J3"]=f"Estado: {str(header.get('estado') or 'GUARDADA').upper()}"
+    ws["J3"].font=Font(size=8,bold=True,color=team_dark)
+    ws["J3"].alignment=Alignment(horizontal="right",vertical="center")
+
+    for col in range(1,13):
+        ws.cell(4,col).fill=PatternFill("solid",fgColor=team_green if col<=8 else (team_lime if col<=10 else team_yellow))
+    ws.row_dimensions[1].height=30
+    ws.row_dimensions[2].height=25
+    ws.row_dimensions[3].height=22
+    ws.row_dimensions[4].height=5
+
+    # Logo Team Foods.
+    try:
+        logo_path=Path(__file__).resolve().parents[1]/"assets"/"team_foods_logo.b64"
+        logo_bytes=base64.b64decode(logo_path.read_text(encoding="utf-8").strip())
+        logo_stream=BytesIO(logo_bytes)
+        logo=XLImage(logo_stream)
+        logo.width=165
+        logo.height=64
+        ws.add_image(logo,"A1")
+    except Exception:
+        ws.merge_cells("A1:B3")
+        ws["A1"]="TEAM\nFOODS"
+        ws["A1"].font=Font(size=18,bold=True,color=team_green)
+        ws["A1"].alignment=Alignment(horizontal="left",vertical="center",wrap_text=True)
+
+    # Tarjetas KPI en colores Team Foods.
+    cards=[
+        ("A5:B5","A6:B7","H-H BRUTAS",hh_raw,team_green,team_pale),
+        ("C5:D5","C6:D7","H-H EFECTIVAS",hh_effective,team_green,team_pale),
+        ("E5:F5","E6:F7","META PREVENTIVO",hh_target,team_yellow,team_yellow_pale),
+        ("G5:H5","G6:H7","H-H PROGRAMADAS",hh_programmed,team_lime,team_pale),
+        ("I5:J5","I6:J7","RESERVA CORRECTIVO",hh_reserve,team_green,team_pale),
+        ("K5:L5","K6:L7","ACTIVIDADES",items,team_yellow,team_yellow_pale),
+    ]
+    for title_range,value_range,label,value,accent,value_fill in cards:
+        ws.merge_cells(title_range)
+        ws.merge_cells(value_range)
+        tc=ws[title_range.split(":")[0]]
+        vc=ws[value_range.split(":")[0]]
+        tc.value=label
+        tc.font=Font(size=8,bold=True,color=white)
+        tc.fill=PatternFill("solid",fgColor=accent)
+        tc.alignment=Alignment(horizontal="center",vertical="center")
+        vc.value=value
+        vc.font=Font(size=17,bold=True,color=dark if accent!=team_yellow else navy)
+        vc.fill=PatternFill("solid",fgColor=value_fill)
+        vc.alignment=Alignment(horizontal="center",vertical="center")
+        vc.number_format="0" if isinstance(value,int) else "0.0"
+        for row_num in range(ws[title_range.split(":")[0]].row,ws[value_range.split(":")[0]].row+2):
+            for col_num in range(ws[title_range.split(":")[0]].column,ws[value_range.split(":")[1]].column+1):
+                ws.cell(row_num,col_num).border=Border(left=thin,right=thin,top=thin,bottom=thin)
+
+    ws.merge_cells("A8:L8")
+    ws["A8"]="Team Foods · Programación preventiva gestionada por CEK Global Inspection Services"
+    ws["A8"].font=Font(size=8,bold=True,color=team_dark)
+    ws["A8"].fill=PatternFill("solid",fgColor="F7FBF8")
+    ws["A8"].alignment=Alignment(horizontal="left",vertical="center")
+
+    ws.merge_cells("A9:L9")
+    ws["A9"]="Criterio: H-H brutas × 80% = H-H efectivas. De las H-H efectivas, 80% se destina a preventivo y 20% a correctivo/reserva. El 20% inicial contempla alistamiento y tiempos operativos."
+    ws["A9"].font=Font(size=7.5,italic=True,color=gray)
+    ws["A9"].alignment=Alignment(horizontal="left",vertical="center",wrap_text=True)
+    ws.row_dimensions[9].height=24
+
+    headers=["OT","Área","Criticidad","Código equipo","Descripción equipo","Plan de trabajo","Condición","Origen","Personas","Tiempo min","H-H","Grupo"]
     for col,label in enumerate(headers,1):
-        c=ws.cell(8,col,label);c.font=Font(bold=True,color=white,size=9);c.fill=PatternFill("solid",fgColor=blue);c.alignment=Alignment(horizontal="center",vertical="center",wrap_text=True);c.border=Border(left=thin,right=thin,top=thin,bottom=thin)
-    for idx,row in enumerate(rows,9):
-        vals=[row.get("numero_ot") or "SIN ASIGNAR",row.get("area_nombre") or row.get("area_codigo") or "",row.get("activo_codigo") or "",row.get("activo_descripcion") or "",row.get("plan_trabajo") or "",row.get("condicion") or "",float(row["personas"]) if row.get("personas") is not None else "",float(row["tiempo_min"]) if row.get("tiempo_min") is not None else "",float(row["hh_programadas"]) if row.get("hh_programadas") is not None else "",row.get("descripcion_grupo") or ""]
+        c=ws.cell(10,col,label)
+        c.font=Font(bold=True,color=white,size=8.5)
+        c.fill=PatternFill("solid",fgColor=team_dark)
+        c.alignment=Alignment(horizontal="center",vertical="center",wrap_text=True)
+        c.border=Border(left=thin,right=thin,top=thin,bottom=thin)
+    ws.row_dimensions[10].height=26
+
+    for idx,row in enumerate(rows,11):
+        origin="BACKLOG" if str(row.get("origen") or "").upper()=="BACKLOG" else "PMP DEL MES"
+        vals=[
+            row.get("numero_ot") or "SIN ASIGNAR",
+            row.get("area_nombre") or row.get("area_codigo") or "",
+            row.get("criticidad") or "",
+            row.get("activo_codigo") or "",
+            row.get("activo_descripcion") or "",
+            row.get("plan_trabajo") or "",
+            row.get("condicion") or "",
+            origin,
+            float(row["personas"]) if row.get("personas") is not None else "",
+            float(row["tiempo_min"]) if row.get("tiempo_min") is not None else "",
+            float(row["hh_programadas"]) if row.get("hh_programadas") is not None else "",
+            row.get("descripcion_grupo") or "",
+        ]
+        base_fill="FFFFFF" if idx%2 else "F8FBF9"
+        if origin=="BACKLOG":
+            base_fill="FFF8D9"
         for col,value in enumerate(vals,1):
-            c=ws.cell(idx,col,value);c.font=Font(size=8,color=dark);c.alignment=Alignment(vertical="top",wrap_text=True);c.border=Border(left=thin,right=thin,top=thin,bottom=thin)
-            if idx%2==0:c.fill=PatternFill("solid",fgColor="F8FAFC")
-    widths=[17,24,22,38,38,20,10,12,10,22]
-    for i,w in enumerate(widths,1):ws.column_dimensions[get_column_letter(i)].width=w
-    ws.auto_filter.ref=f"A8:J{max(8,8+len(rows))}";out=BytesIO();wb.save(out);out.seek(0)
+            c=ws.cell(idx,col,value)
+            c.font=Font(size=8,color=dark)
+            c.fill=PatternFill("solid",fgColor=base_fill)
+            c.alignment=Alignment(vertical="top",wrap_text=True,horizontal="center" if col in (3,8,9,10,11) else "left")
+            c.border=Border(left=thin,right=thin,top=thin,bottom=thin)
+
+        condition_cell=ws.cell(idx,7)
+        if bool(row.get("requiere_parada")):
+            condition_cell.fill=PatternFill("solid",fgColor=team_yellow_pale)
+            condition_cell.font=Font(size=8,bold=True,color="7A5B00")
+        else:
+            condition_cell.fill=PatternFill("solid",fgColor=team_pale)
+            condition_cell.font=Font(size=8,bold=True,color=team_dark)
+
+        origin_cell=ws.cell(idx,8)
+        origin_cell.font=Font(size=8,bold=True,color="7A5B00" if origin=="BACKLOG" else team_dark)
+
+    widths=[16,24,11,20,34,40,21,15,10,12,10,25]
+    for i,w in enumerate(widths,1):
+        ws.column_dimensions[get_column_letter(i)].width=w
+
+    last_row=max(10,10+len(rows))
+    ws.auto_filter.ref=f"A10:L{last_row}"
+    ws.print_title_rows="1:10"
+    ws.print_area=f"A1:L{last_row}"
+    ws.oddFooter.left.text="Team Foods · CEK Global Inspection Services"
+    ws.oddFooter.left.size=8
+    ws.oddFooter.right.text="Página &P de &N"
+    ws.oddFooter.right.size=8
+
+    out=BytesIO()
+    wb.save(out)
+    out.seek(0)
     return out.getvalue(),f"programacion_{header['especialidad']}_{header['semana_inicio']:%Y%m%d}_{header['semana_fin']:%Y%m%d}.xlsx"
 
 
