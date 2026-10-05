@@ -45,7 +45,7 @@ from backend.services.v2_closure_service import (
 from backend.services.v2_backlog_service import get_accumulated_backlog
 from backend.services.v2_backlog_bootstrap_service import bootstrap_initial_backlog
 from backend.services.v2_week_tracking_service import (
-    V2WeeklyTrackingError, get_week_tracking, record_week_tracking,
+    V2WeeklyTrackingError, export_week_tracking_excel, get_week_tracking, record_week_tracking,
 )
 from backend.services.v2_operation_exclusion_service import get_operation_exclusions
 from backend.services.v2_progress_service import get_progress, export_progress_pdf
@@ -365,6 +365,20 @@ def v2_week_tracking(programming_id:int):
         raise HTTPException(404,str(exc)) from exc
     except SQLAlchemyError as exc:
         raise HTTPException(503,"No se pudo consultar el seguimiento semanal") from exc
+
+@app.get("/api/v2/programming/{programming_id}/tracking/export.xlsx")
+def v2_export_week_tracking(programming_id:int,area:str|None=None):
+    try:
+        content,filename=export_week_tracking_excel(programming_id,area=area)
+        return StreamingResponse(
+            iter([content]),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition":f'attachment; filename="{filename}"'}
+        )
+    except V2WeeklyTrackingError as exc:
+        raise HTTPException(404,str(exc)) from exc
+    except SQLAlchemyError as exc:
+        raise HTTPException(503,"No se pudo generar el Excel de seguimiento") from exc
 
 @app.post("/api/v2/programming/{programming_id}/tracking-file")
 async def v2_record_week_tracking(

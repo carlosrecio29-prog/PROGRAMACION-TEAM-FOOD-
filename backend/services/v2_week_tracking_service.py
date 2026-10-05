@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import base64
 from collections import defaultdict
+from datetime import date
+from io import BytesIO
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import text
@@ -15,6 +19,14 @@ class V2WeeklyTrackingError(ValueError):
 
 def _pct(value: float, total: float) -> float:
     return round(value / total * 100.0, 1) if total else 0.0
+
+
+def _week_number(week_start: date) -> int | None:
+    first_day = week_start.replace(day=1)
+    first_thursday_day = 1 + ((3 - first_day.weekday()) % 7)
+    if week_start.day < first_thursday_day:
+        return None
+    return 1 + ((week_start.day - first_thursday_day) // 7)
 
 
 def _area_summary(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -56,6 +68,27 @@ def _area_summary(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(result, key=lambda row: (-row["programadas"], row["area_codigo"]))
 
 
+def _programmed_rows(conn, programming_id: int) -> list[dict[str, Any]]:
+    return [dict(row) for row in conn.execute(text("""
+        SELECT pi.id AS programacion_item_id,pi.orden_mantenimiento_id,o.numero_ot,
+               a.area_codigo,root.descripcion AS area_nombre,pi.hh_programadas,
+               NULL::text AS estado_calendario,NULL::boolean AS finalizado,
+               'SIN SEGUIMIENTO'::text AS coincidencia,
+               a.codigo AS activo_codigo,a.descripcion AS activo_descripcion,
+               p.plan_trabajo,p.descripcion_grupo,
+               pi.requiere_parada,pi.origen,pi.origen_backlog,
+               COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min) AS tiempo_min,
+               p.numero_personas_efectivo AS personas
+        FROM programacion.programacion_item_v2 pi
+        JOIN programacion.orden_mantenimiento o ON o.id=pi.orden_mantenimiento_id
+        JOIN programacion.activo a ON a.id=o.activo_id
+        LEFT JOIN programacion.activo root ON root.codigo='BA-'||a.area_codigo
+        LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
+        WHERE pi.programacion_id=:id
+        ORDER BY a.area_codigo,o.numero_ot NULLS LAST,a.codigo
+    """), {"id": programming_id}).mappings()]
+
+
 def get_week_tracking(programming_id: int) -> dict[str, Any]:
     with get_engine().connect() as conn:
         programming = conn.execute(text("""
@@ -77,7 +110,6 @@ def get_week_tracking(programming_id: int) -> dict[str, Any]:
             LIMIT 30
         """), {"id": programming_id}).mappings()]
 
-        latest_rows: list[dict[str, Any]] = []
         if history:
             latest_id = int(history[0]["id"])
             latest_rows = [dict(row) for row in conn.execute(text("""
@@ -85,14 +117,20 @@ def get_week_tracking(programming_id: int) -> dict[str, Any]:
                        s.area_codigo,s.area_nombre,s.hh_programadas,
                        s.estado_calendario,s.finalizado,s.coincidencia,
                        a.codigo AS activo_codigo,a.descripcion AS activo_descripcion,
-                       p.plan_trabajo,p.descripcion_grupo
+                       p.plan_trabajo,p.descripcion_grupo,
+                       pi.requiere_parada,pi.origen,pi.origen_backlog,
+                       COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min) AS tiempo_min,
+                       p.numero_personas_efectivo AS personas
                 FROM programacion.seguimiento_semanal_item_v2 s
+                JOIN programacion.programacion_item_v2 pi ON pi.id=s.programacion_item_id
                 JOIN programacion.orden_mantenimiento o ON o.id=s.orden_mantenimiento_id
                 JOIN programacion.activo a ON a.id=o.activo_id
                 LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
                 WHERE s.seguimiento_id=:tracking_id
-                ORDER BY s.finalizado DESC NULLS LAST,s.area_codigo,s.numero_ot NULLS LAST,a.codigo
+                ORDER BY s.area_codigo,s.finalizado DESC NULLS LAST,s.numero_ot NULLS LAST,a.codigo
             """), {"tracking_id": latest_id}).mappings()]
+        else:
+            latest_rows = _programmed_rows(conn, programming_id)
 
     for row in history:
         for key in ("hh_programadas", "hh_finalizadas", "hh_pendientes",
@@ -125,15 +163,35 @@ def record_week_tracking(
             "La semana ya está cerrada. El seguimiento histórico se conserva en modo consulta."
         )
 
-    summary = preview["summary"]
-    rows = preview["rows"]
-    programmed = int(summary.get("programmed") or 0)
-    finalized = int(summary.get("finalized") or 0)
-    pending = int(summary.get("pending") or 0)
-    unmatched = int(summary.get("not_found") or 0)
-    hh_programmed = round(float(summary.get("hh_programmed") or 0), 2)
-    hh_finalized = round(float(summary.get("hh_finalized") or 0), 2)
-    hh_pending = round(float(summary.get("hh_pending") or 0), 2)
+    rows = [dict(row) for row in preview["rows"]]
+
+    # Seguimiento acumulativo: una OT ya detectada como finalizada no vuelve a
+    # aparecer como pendiente/sin coincidencia en una carga posterior.
+    with get_engine().connect() as conn:
+        previous_finalized = {
+            int(row[0])
+            for row in conn.execute(text("""
+                SELECT DISTINCT si.orden_mantenimiento_id
+                FROM programacion.seguimiento_semanal_item_v2 si
+                JOIN programacion.seguimiento_semanal_v2 s ON s.id=si.seguimiento_id
+                WHERE s.programacion_id=:id
+                  AND si.finalizado=true
+            """), {"id": programming_id}).all()
+        }
+
+    for row in rows:
+        if int(row["orden_mantenimiento_id"]) in previous_finalized and row.get("finalizado") is not True:
+            row["finalizado"] = True
+            row["estado_excel"] = row.get("estado_excel") or "FINALIZADA PREVIAMENTE"
+            row["coincidencia"] = "SEGUIMIENTO PREVIO"
+
+    programmed = len(rows)
+    finalized = sum(1 for row in rows if row.get("finalizado") is True)
+    pending = sum(1 for row in rows if row.get("finalizado") is False)
+    unmatched = sum(1 for row in rows if row.get("finalizado") is None)
+    hh_programmed = round(sum(float(row.get("hh") or 0) for row in rows), 2)
+    hh_finalized = round(sum(float(row.get("hh") or 0) for row in rows if row.get("finalizado") is True), 2)
+    hh_pending = round(sum(float(row.get("hh") or 0) for row in rows if row.get("finalizado") is False), 2)
     ot_pct = _pct(finalized, programmed)
     hh_pct = _pct(hh_finalized, hh_programmed)
 
@@ -202,3 +260,189 @@ def record_week_tracking(
         "avance_hh_pct": hh_pct,
     }
     return result
+
+
+def export_week_tracking_excel(
+    programming_id: int,
+    area: str | None = None,
+) -> tuple[bytes, str]:
+    from openpyxl import Workbook
+    from openpyxl.drawing.image import Image as XLImage
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
+
+    data = get_week_tracking(programming_id)
+    programming = data["programming"]
+    rows = list(data.get("rows") or [])
+    area = (area or "").strip().upper()
+    if area:
+        rows = [row for row in rows if str(row.get("area_codigo") or "").upper() == area]
+
+    week_start = programming["semana_inicio"]
+    week_end = programming["semana_fin"]
+    week_number = _week_number(week_start)
+    week_label = f"SEMANA {week_number}" if week_number is not None else "TRANSICIÓN"
+    specialty = str(programming["especialidad"] or "").upper()
+    specialty_name = {
+        "MEC": "MECÁNICA",
+        "ELE": "ELÉCTRICA",
+        "MET": "METROLOGÍA",
+        "SER": "SERVICIOS",
+    }.get(specialty, specialty)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = (f"{specialty} - {week_label.title()}")[:31]
+    ws.sheet_view.showGridLines = False
+    ws.freeze_panes = "A8"
+    ws.page_setup.orientation = "landscape"
+    ws.page_setup.fitToWidth = 1
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+
+    green = "009B5A"
+    dark_green = "16603D"
+    light_green = "EAF7EF"
+    yellow = "F4C20D"
+    pale_yellow = "FFF8D9"
+    navy = "17365D"
+    gray = "67776F"
+    light_gray = "F2F4F3"
+    line = Side(style="thin", color="D6E4DC")
+    border = Border(left=line, right=line, top=line, bottom=line)
+
+    try:
+        logo_path = Path(__file__).resolve().parents[1] / "assets" / "team_foods_logo.b64"
+        logo_bytes = base64.b64decode(logo_path.read_text(encoding="utf-8").strip())
+        image = XLImage(BytesIO(logo_bytes))
+        image.width = 145
+        image.height = 56
+        ws.add_image(image, "A1")
+    except Exception:
+        ws["A1"] = "TEAM FOODS"
+        ws["A1"].font = Font(size=16, bold=True, color=green)
+
+    ws.merge_cells("C1:J2")
+    ws["C1"] = f"SEGUIMIENTO DE PROGRAMACIÓN · {week_label}"
+    ws["C1"].font = Font(size=18, bold=True, color=dark_green)
+    ws["C1"].alignment = Alignment(vertical="center")
+
+    ws.merge_cells("C3:J3")
+    area_text = f" · ÁREA {area}" if area else " · TODAS LAS ÁREAS"
+    ws["C3"] = (
+        f"Planta Barranquilla · {specialty_name}{area_text} · "
+        f"{week_start:%d/%m/%Y} al {week_end:%d/%m/%Y}"
+    )
+    ws["C3"].font = Font(size=9, bold=True, color=gray)
+
+    ws.merge_cells("K1:L1")
+    ws["K1"] = "CEK GLOBAL"
+    ws["K1"].font = Font(size=12, bold=True, color=navy)
+    ws["K1"].alignment = Alignment(horizontal="right")
+    ws.merge_cells("K2:L2")
+    ws["K2"] = "Inspection Services"
+    ws["K2"].font = Font(size=8, bold=True, color=gray)
+    ws["K2"].alignment = Alignment(horizontal="right")
+
+    total = len(rows)
+    finalized = sum(1 for row in rows if row.get("finalizado") is True)
+    pending = sum(1 for row in rows if row.get("finalizado") is False)
+    unmatched = sum(1 for row in rows if row.get("finalizado") is None)
+    progress = _pct(finalized, total)
+
+    cards = [
+        ("A5:C5", "PROGRAMADAS", total, green, light_green),
+        ("D5:F5", "FINALIZADAS", finalized, green, light_green),
+        ("G5:I5", "PENDIENTES", pending, yellow, pale_yellow),
+        ("J5:L5", "AVANCE OT", progress, green, light_green),
+    ]
+    for cell_range, label, value, accent, fill in cards:
+        ws.merge_cells(cell_range)
+        start = cell_range.split(":")[0]
+        cell = ws[start]
+        cell.value = f"{label}  ·  {value:.1f}%" if label == "AVANCE OT" else f"{label}  ·  {value}"
+        cell.font = Font(size=10, bold=True, color=dark_green if accent != yellow else navy)
+        cell.fill = PatternFill("solid", fgColor=fill)
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        for row_cells in ws[cell_range]:
+            for item in row_cells:
+                item.border = border
+
+    ws.merge_cells("A6:L6")
+    ws["A6"] = (
+        "Las filas tachadas corresponden a OT detectadas como FINALIZADAS en el seguimiento. "
+        "El seguimiento no sustituye el Cierre semanal oficial."
+    )
+    ws["A6"].font = Font(size=8, italic=True, color=gray)
+    ws["A6"].alignment = Alignment(vertical="center")
+
+    headers = [
+        "Estado", "OT", "Área", "Equipo", "Descripción equipo", "Plan de trabajo",
+        "Condición", "Origen", "Personas", "Tiempo min", "H-H", "Estado calendario",
+    ]
+    for col, label in enumerate(headers, 1):
+        cell = ws.cell(7, col, label)
+        cell.font = Font(size=8, bold=True, color="FFFFFF")
+        cell.fill = PatternFill("solid", fgColor=dark_green)
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        cell.border = border
+
+    for row_number, row in enumerate(rows, 8):
+        finalized_row = row.get("finalizado") is True
+        state = (
+            "FINALIZADA" if finalized_row
+            else "PENDIENTE" if row.get("finalizado") is False
+            else "SIN VALIDAR"
+        )
+        origin = "BACKLOG" if row.get("origen") == "BACKLOG" or row.get("origen_backlog") else "PMP DEL MES"
+        values = [
+            state,
+            row.get("numero_ot") or "SIN ASIGNAR",
+            row.get("area_codigo") or "",
+            row.get("activo_codigo") or "",
+            row.get("activo_descripcion") or "",
+            row.get("plan_trabajo") or "",
+            "EQUIPO DETENIDO" if row.get("requiere_parada") else "EQUIPO OPERANDO",
+            origin,
+            row.get("personas") if row.get("personas") is not None else "",
+            row.get("tiempo_min") if row.get("tiempo_min") is not None else "",
+            float(row.get("hh_programadas") or 0),
+            row.get("estado_calendario") or "",
+        ]
+        for col, value in enumerate(values, 1):
+            cell = ws.cell(row_number, col, value)
+            cell.border = border
+            cell.alignment = Alignment(
+                vertical="top",
+                horizontal="center" if col in (1, 3, 7, 8, 9, 10, 11) else "left",
+                wrap_text=True,
+            )
+            if finalized_row:
+                cell.font = Font(size=8, strike=True, color="74827A")
+                cell.fill = PatternFill("solid", fgColor=light_gray)
+            else:
+                cell.font = Font(size=8, color="20382E")
+                if state == "PENDIENTE":
+                    cell.fill = PatternFill("solid", fgColor="FFFCF0")
+        if finalized_row:
+            ws.cell(row_number, 1).font = Font(size=8, bold=True, strike=True, color=dark_green)
+        elif state == "PENDIENTE":
+            ws.cell(row_number, 1).font = Font(size=8, bold=True, color="8A6800")
+
+    widths = [14, 17, 12, 21, 31, 39, 20, 15, 10, 12, 10, 22]
+    for idx, width in enumerate(widths, 1):
+        ws.column_dimensions[get_column_letter(idx)].width = width
+
+    last_row = max(7, 7 + len(rows))
+    ws.auto_filter.ref = f"A7:L{last_row}"
+    ws.print_title_rows = "1:7"
+    ws.print_area = f"A1:L{last_row}"
+    ws.oddFooter.left.text = "Team Foods · CEK Global Inspection Services"
+    ws.oddFooter.right.text = "Página &P de &N"
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    week_file = f"semana_{week_number}" if week_number is not None else "transicion"
+    area_file = f"_{area}" if area else ""
+    return output.getvalue(), f"seguimiento_{specialty}_{week_file}{area_file}.xlsx"

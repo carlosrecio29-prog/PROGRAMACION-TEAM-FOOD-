@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { monthWeeks, initialWeekIndex } from "../features/planning/monthWeeks.js";
 import {
+  downloadV2WeekTrackingExcel,
   getV2WeekProgramming,
   getV2WeekTracking,
   uploadV2WeekTracking,
@@ -50,6 +51,9 @@ export default function WeeklyTracking({ year, month, onOpenClosure }) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [areaFilter, setAreaFilter] = useState("");
+  const [search, setSearch] = useState("");
+  const [downloading, setDownloading] = useState(false);
 
   const week = weeks[Math.min(weekIndex, weeks.length - 1)] || weeks[0];
 
@@ -80,6 +84,8 @@ export default function WeeklyTracking({ year, month, onOpenClosure }) {
   useEffect(() => {
     setFile(null);
     setMessage("");
+    setAreaFilter("");
+    setSearch("");
     load();
   }, [week?.from, week?.to, specialty]);
 
@@ -110,12 +116,46 @@ export default function WeeklyTracking({ year, month, onOpenClosure }) {
   const id = programming?.programming?.id;
   const closed = programming?.programming?.estado === "CERRADA";
   const latest = tracking?.latest;
-  const programmed = number(latest?.total_items, programming?.selected_ids?.length || 0);
+  const programmed = latest ? number(latest.total_items) : number(tracking?.rows?.length, programming?.selected_ids?.length || 0);
   const finalized = number(latest?.finalizados);
   const remaining = Math.max(0, programmed - finalized);
   const unmatched = number(latest?.sin_coincidencia);
   const otPct = number(latest?.avance_ot_pct);
   const hhPct = number(latest?.avance_hh_pct);
+  const liveRows = tracking?.rows || [];
+  const areas = useMemo(() => {
+    const unique = new Map();
+    liveRows.forEach((row) => {
+      const code = row.area_codigo || "SIN ÁREA";
+      if (!unique.has(code)) unique.set(code, row.area_nombre || "");
+    });
+    return [...unique.entries()].sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+  }, [liveRows]);
+  const visibleRows = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return liveRows.filter((row) => {
+      if (areaFilter && String(row.area_codigo || "") !== areaFilter) return false;
+      if (!term) return true;
+      return [
+        row.numero_ot, row.area_codigo, row.area_nombre,
+        row.activo_codigo, row.activo_descripcion,
+        row.plan_trabajo, row.descripcion_grupo, row.estado_calendario,
+      ].some((value) => String(value || "").toLowerCase().includes(term));
+    });
+  }, [liveRows, areaFilter, search]);
+
+  async function downloadTracking() {
+    if (!id) return;
+    try {
+      setDownloading(true);
+      setError("");
+      await downloadV2WeekTrackingExcel(id, areaFilter);
+    } catch (cause) {
+      setError(cause.message || "No se pudo descargar el Excel de seguimiento.");
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   return (
     <div className="v2-stack weekly-tracking">
@@ -217,6 +257,95 @@ export default function WeeklyTracking({ year, month, onOpenClosure }) {
             <article><span>Última actualización</span><b className="tracking-date">{latest ? when(latest.registrado_en) : "—"}</b><small>{latest?.archivo_nombre || "Aún sin carga"}</small></article>
           </section>
 
+          <section className="v2-panel weekly-tracking-board">
+            <div className="v2-section-head weekly-tracking-board-head">
+              <div>
+                <span className="v2-kicker">PROGRAMACIÓN EN SEGUIMIENTO</span>
+                <h3>Programación de la semana</h3>
+                <p>Las OT finalizadas permanecen visibles y se tachan automáticamente. Las pendientes continúan activas para seguimiento.</p>
+              </div>
+              <div className="weekly-tracking-board-actions">
+                <Badge tone="ok">{liveRows.filter((row) => row.finalizado === true).length} tachadas</Badge>
+                <button type="button" onClick={downloadTracking} disabled={downloading}>
+                  {downloading ? "Generando..." : "Descargar Excel"}
+                </button>
+              </div>
+            </div>
+
+            <div className="weekly-tracking-filters">
+              <label>
+                <span>Área</span>
+                <select value={areaFilter} onChange={(event) => setAreaFilter(event.target.value)}>
+                  <option value="">Todas las áreas</option>
+                  {areas.map(([code, name]) => (
+                    <option key={code} value={code}>{code}{name ? ` · ${name}` : ""}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="search">
+                <span>Buscar</span>
+                <input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="OT, equipo o plan..."
+                />
+              </label>
+              <div className="weekly-tracking-visible">
+                <span>Visibles</span>
+                <b>{visibleRows.length} / {liveRows.length}</b>
+              </div>
+            </div>
+
+            <div className="v2-table-wrap weekly-tracking-board-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Estado</th>
+                    <th>OT</th>
+                    <th>Área</th>
+                    <th>Equipo</th>
+                    <th>Plan de trabajo</th>
+                    <th>Condición</th>
+                    <th>Origen</th>
+                    <th>H-H</th>
+                    <th>Estado calendario</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleRows.map((row) => {
+                    const done = row.finalizado === true;
+                    const pendingRow = row.finalizado === false;
+                    return (
+                      <tr
+                        key={row.programacion_item_id}
+                        className={done ? "tracking-row-finished" : pendingRow ? "tracking-row-pending" : "tracking-row-unchecked"}
+                      >
+                        <td>
+                          {done
+                            ? <Badge tone="ok">FINALIZADA ✓</Badge>
+                            : pendingRow
+                              ? <Badge tone="warn">PENDIENTE</Badge>
+                              : <Badge>SIN VALIDAR</Badge>}
+                        </td>
+                        <td><b>{row.numero_ot || "SIN ASIGNAR"}</b></td>
+                        <td><Badge>{row.area_codigo || "—"}</Badge><small>{row.area_nombre || ""}</small></td>
+                        <td><b>{row.activo_codigo || "—"}</b><small>{row.activo_descripcion || ""}</small></td>
+                        <td><span className="v2-plan">{row.plan_trabajo || "—"}</span><small>{row.descripcion_grupo || ""}</small></td>
+                        <td>{row.requiere_parada ? <Badge tone="stop">Equipo detenido</Badge> : <Badge tone="ok">Equipo operando</Badge>}</td>
+                        <td>{row.origen === "BACKLOG" || row.origen_backlog ? <Badge tone="backlog">BACKLOG</Badge> : <Badge>PMP DEL MES</Badge>}</td>
+                        <td><b>{fmt(row.hh_programadas)}</b></td>
+                        <td><span>{row.estado_calendario || (latest ? "Sin coincidencia" : "Aún sin carga")}</span></td>
+                      </tr>
+                    );
+                  })}
+                  {!visibleRows.length && (
+                    <tr><td colSpan="9" className="v2-empty">No hay actividades con estos filtros.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
           <section className="v2-panel">
             <div className="v2-section-head">
               <div>
@@ -252,7 +381,7 @@ export default function WeeklyTracking({ year, month, onOpenClosure }) {
                     </tr>
                   ))}
                   {!tracking?.by_area?.length && (
-                    <tr><td colSpan="7" className="v2-empty">Carga una Lista de Calendario para comenzar el seguimiento.</td></tr>
+                    <tr><td colSpan="7" className="v2-empty">No hay actividades disponibles para esta programación.</td></tr>
                   )}
                 </tbody>
               </table>

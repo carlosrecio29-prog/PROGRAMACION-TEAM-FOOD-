@@ -264,6 +264,34 @@ export async function getV2WeekTracking(programmingId) {
   return check(await fetch(`/api/v2/programming/${programmingId}/tracking`, { cache: "no-store" }));
 }
 
+export async function downloadV2WeekTrackingExcel(programmingId, area = "") {
+  const qs = new URLSearchParams();
+  if (area) qs.set("area", area);
+  const url = `/api/v2/programming/${programmingId}/tracking/export.xlsx${qs.size ? `?${qs}` : ""}`;
+  const response = await fetch(url, { cache: "no-store" });
+  if (!response.ok) {
+    let detail = `HTTP ${response.status}`;
+    try {
+      const payload = await response.json();
+      detail = payload.detail || detail;
+    } catch {}
+    throw new Error(detail);
+  }
+  const blob = await response.blob();
+  if (!blob.size) throw new Error("El servidor no devolvió el Excel de seguimiento.");
+  const disposition = response.headers.get("content-disposition") || "";
+  const filename = disposition.match(/filename="?([^";]+)"?/i)?.[1]
+    || `seguimiento_programacion.xlsx`;
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+}
+
 export async function uploadV2WeekTracking(programmingId, file, recordedBy = "") {
   const form = new FormData();
   form.append("file", file);
