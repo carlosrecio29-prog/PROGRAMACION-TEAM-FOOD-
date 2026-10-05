@@ -66,14 +66,14 @@ def bootstrap_initial_backlog(
               ultimo_resultado_cierre,ultima_programacion_id
             )
             SELECT
-              o.id,NULL,:period,:period_end,
+              o.id,NULL,:period_end,:period_end,
               CASE
                 WHEN upper(btrim(COALESCE(o.especialidad,''))) IN ('MEC','ELE','MET','SER')
                 THEN upper(btrim(o.especialidad))
                 ELSE 'SIN'
               END,
               :reason,:moved_by,now(),now(),
-              'PENDIENTE_DISPONIBLE',:period,:period_end,
+              'PENDIENTE_DISPONIBLE',:period_end,:period_end,
               'PENDIENTE',NULL
             FROM programacion.orden_mantenimiento o
             LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
