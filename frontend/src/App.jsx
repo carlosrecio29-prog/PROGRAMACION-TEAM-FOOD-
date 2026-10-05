@@ -97,6 +97,7 @@ function ControlIcon({ type }) {
 function Summary({ data, onNavigate, year, month }) {
   const s = data?.summary || {};
   const p = data?.pending || {};
+  const workload = data?.workload || {};
   const ready = number(s.registros_listos);
   const total = number(s.registros_pmp);
   const readyPct = total > 0 ? Math.round((ready / total) * 100) : 0;
@@ -128,6 +129,14 @@ function Summary({ data, onNavigate, year, month }) {
             <span>H-H CALCULABLES</span>
             <strong>{fmt(s.hh_calculables, 1)}</strong>
             <small>carga preventiva calculable</small>
+          </div>
+        </article>
+        <article className="workload">
+          <div className="v2-control-icon"><ControlIcon type="alert" /></div>
+          <div>
+            <span>CARGA TOTAL PENDIENTE</span>
+            <strong>{fmt(workload.total_pending_hh, 1)}</strong>
+            <small>{number(workload.total_pending_count)} OT únicas · PMP pendiente + Backlog disponible</small>
           </div>
         </article>
         <article>
