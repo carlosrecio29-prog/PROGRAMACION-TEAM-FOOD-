@@ -405,3 +405,41 @@ tbody tr{transition:background .13s ease}tbody tr:hover{background:#f6faff}
   .v2-program-action-bar{top:8px}
   .v2-backlog-indicators{grid-template-columns:1fr}
 }
+
+/* ---------- Arranque de Backlog ---------- */
+.v2-backlog-bootstrap{
+  border-color:#e5d39a;
+  background:linear-gradient(135deg,#fffdf7,#fff);
+}
+.v2-backlog-bootstrap-controls{
+  display:grid;
+  grid-template-columns:110px 170px minmax(280px,1fr) auto;
+  gap:9px;
+  align-items:end;
+}
+.v2-backlog-bootstrap-controls label{display:grid;gap:4px}
+.v2-backlog-bootstrap-controls label>span{
+  color:var(--cek-muted);font-size:7px;font-weight:900;text-transform:uppercase;letter-spacing:.45px
+}
+.v2-backlog-bootstrap-controls input,.v2-backlog-bootstrap-controls select{width:100%}
+.v2-backlog-bootstrap-controls label.file input{padding:6px 8px;font-size:8px}
+.v2-backlog-bootstrap-note{
+  margin-top:10px;padding:8px 10px;border-radius:9px;background:#fff8e5;color:#71591c;font-size:8px;line-height:1.4
+}
+.v2-backlog-bootstrap-result{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;padding:10px 11px;
+  border:1px solid #b9dfc9;border-radius:10px;background:#eef9f3;color:#245e43
+}
+.v2-backlog-bootstrap-result b{font-size:10px}
+.v2-backlog-bootstrap-result span,.v2-backlog-bootstrap-result small{font-size:8px}
+.v2-backlog-indicators{grid-template-columns:repeat(4,1fr)}
+.v2-backlog-indicators>div.initial{border-color:#e7cf82;background:linear-gradient(145deg,#fff5cf,#fffdf7)}
+.access-viewer .v2-backlog-bootstrap-controls{pointer-events:none;opacity:.5}
+@media(max-width:1050px){
+  .v2-backlog-bootstrap-controls{grid-template-columns:repeat(2,1fr)}
+}
+@media(max-width:620px){
+  .v2-backlog-bootstrap-controls{grid-template-columns:1fr}
+  .v2-backlog-indicators{grid-template-columns:1fr}
+}
+

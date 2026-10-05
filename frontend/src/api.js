@@ -249,6 +249,32 @@ export async function saveV2WeekProgramming(payload) {
     }),
   );
 }
+export async function bootstrapV2Backlog(file, year, month, movedBy = "") {
+  const form = new FormData();
+  form.append("file", file);
+  const qs = new URLSearchParams({ year, month });
+  if (movedBy) qs.set("moved_by", movedBy);
+  return check(await fetch(`/api/v2/backlog/bootstrap?${qs}`, {
+    method: "POST",
+    body: form,
+  }));
+}
+
+export async function getV2WeekTracking(programmingId) {
+  return check(await fetch(`/api/v2/programming/${programmingId}/tracking`, { cache: "no-store" }));
+}
+
+export async function uploadV2WeekTracking(programmingId, file, recordedBy = "") {
+  const form = new FormData();
+  form.append("file", file);
+  const qs = new URLSearchParams();
+  if (recordedBy) qs.set("recorded_by", recordedBy);
+  return check(await fetch(
+    `/api/v2/programming/${programmingId}/tracking-file${qs.size ? `?${qs}` : ""}`,
+    { method: "POST", body: form },
+  ));
+}
+
 export async function getV2Backlog(filters = {}) {
   const qs = new URLSearchParams();
   Object.entries(filters).forEach(([key, value]) => {

@@ -13,6 +13,7 @@ import {
   downloadV2WeeklyReport,
 } from "./api";
 import WeeklyClosure from "./components/WeeklyClosure";
+import WeeklyTracking from "./components/WeeklyTracking";
 import ProgressDashboard from "./components/ProgressDashboard";
 import AdvanceStops from "./components/AdvanceStops";
 import WeeklyProgramming from "./components/WeeklyProgramming";
@@ -26,6 +27,7 @@ import { navigationIds } from "./app/navigation";
 import Badge from "./shared/Badge";
 import "./styles.css";
 import "./backlog.css";
+import "./components/weeklyTracking.css";
 
 const MONTHS = [
   "Enero",
@@ -103,6 +105,7 @@ function Summary({ data, onNavigate, year, month }) {
     { id: "technicians", title: "Programación de técnicos", text: "Turnos, especialidades y capacidad del mes", icon: "team" },
     { id: "programming", title: "Programación semanal", text: "Seleccionar y guardar actividades por especialidad", icon: "tools" },
     { id: "pmp", title: "PMP del mes", text: "Consultar la cartera preventiva del período", icon: "report" },
+    { id: "tracking", title: "Seguimiento semanal", text: "Actualizar avance sin cerrar la semana", icon: "bars" },
     { id: "closure", title: "Cierre semanal", text: "Conciliar OT contra el calendario", icon: "check" },
     { id: "monthly", title: "Cierre mensual", text: "Consolidar y formalizar el cierre del mes", icon: "bars" },
     { id: "backlog", title: "Backlog acumulado", text: "Dar seguimiento a OT pendientes", icon: "alert" },
@@ -1717,8 +1720,9 @@ export default function App() {
           <WeeklyProgramming year={year} month={month} dashboard={dashboard} />
         )}{" "}
         {view === "monthly" && <MonthlyClose year={year} month={month} />}
+        {view === "tracking" && <WeeklyTracking year={year} month={month} onOpenClosure={() => navigate("closure")} />}{" "}
         {view === "closure" && <WeeklyClosure year={year} month={month} onOpenBacklog={(orderId) => { setBacklogOrderId(orderId); navigate("backlog"); }} />}{" "}
-        {view === "backlog" && <AccumulatedBacklog areas={dashboard?.areas || []} initialOrderId={backlogOrderId} onClearOrder={() => setBacklogOrderId("")} />}{" "}
+        {view === "backlog" && <AccumulatedBacklog areas={dashboard?.areas || []} initialOrderId={backlogOrderId} onClearOrder={() => setBacklogOrderId("")} year={year} month={month} />}{" "}
         {view === "operationExclusions" && (
           <OperationExclusions year={year} month={month} />
         )}{" "}

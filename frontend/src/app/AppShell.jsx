@@ -85,6 +85,14 @@ function SubmenuIcon({ id }) {
     );
   }
 
+  if (id === "tracking") {
+    return (
+      <svg {...common}>
+        <path d="M3 20h18v2H3v-2Zm2-3V9h3v8H5Zm5 0V4h3v13h-3Zm5 0v-6h3v6h-3Zm4-10-4 3-4-3-5 4-1.2-1.6L11 4.5l4 3 3-2.2L19 7Z" />
+      </svg>
+    );
+  }
+
   if (id === "closure") {
     return (
       <svg {...common}>
