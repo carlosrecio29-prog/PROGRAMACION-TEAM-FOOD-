@@ -413,3 +413,123 @@
   .v2-progress-report{align-items:flex-start;flex-direction:column}
   .v2-progress-report-actions{width:100%}
 }
+
+/* ---------- Avance operativo alimentado por Seguimiento semanal ---------- */
+.v2-progress-live{
+  margin-top:13px;
+  padding:13px 14px;
+  border:1px solid #c8dfd3;
+  border-radius:13px;
+  background:linear-gradient(135deg,#f5fbf8,#fff);
+}
+.v2-progress-live-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:16px;
+}
+.v2-progress-live-head h4{
+  margin:4px 0 4px;
+  color:#1f513d;
+  font-size:15px;
+}
+.v2-progress-live-head p{
+  margin:0;
+  max-width:760px;
+  color:#6b8176;
+  font-size:8px;
+  line-height:1.4;
+}
+.v2-progress-live-status{
+  flex:0 0 auto;
+  min-width:160px;
+  padding:8px 10px;
+  border:1px solid #d5e8de;
+  border-radius:9px;
+  background:#fff;
+  text-align:right;
+}
+.v2-progress-live-status b{
+  display:block;
+  color:#1e6f4b;
+  font-size:10px;
+}
+.v2-progress-live-status span{
+  display:block;
+  margin-top:2px;
+  color:#7a8e83;
+  font-size:7px;
+}
+.v2-progress-live-grid{
+  display:grid;
+  grid-template-columns:repeat(5,minmax(0,1fr));
+  gap:7px;
+  margin-top:11px;
+}
+.v2-progress-live-grid article{
+  min-height:83px;
+  padding:9px 10px;
+  border:1px solid #dce7e1;
+  border-radius:9px;
+  background:#fff;
+}
+.v2-progress-live-grid article.done{background:#f1faf5;border-color:#cde5d8}
+.v2-progress-live-grid article.pending{background:#fffaf0;border-color:#eadfc4}
+.v2-progress-live-grid article.unchecked{background:#f7f8fa;border-color:#dfe4e8}
+.v2-progress-live-grid span{
+  display:block;
+  color:#6c8075;
+  font-size:6.6px;
+  font-weight:900;
+  text-transform:uppercase;
+  letter-spacing:.2px;
+}
+.v2-progress-live-grid b{
+  display:block;
+  margin:6px 0 3px;
+  color:#214b39;
+  font-size:20px;
+  line-height:1;
+}
+.v2-progress-live-grid small{
+  color:#829188;
+  font-size:6.8px;
+  line-height:1.25;
+}
+.v2-progress-live-note{
+  margin-top:9px;
+  color:#698076;
+  font-size:7.5px;
+  line-height:1.4;
+}
+.v2-progress-live-note b{color:#2c6049}
+.v2-progress-official-label{
+  display:flex;
+  align-items:baseline;
+  gap:8px;
+  margin:13px 2px 0;
+}
+.v2-progress-official-label span{
+  color:#567086;
+  font-size:7px;
+  font-weight:950;
+  letter-spacing:.5px;
+}
+.v2-progress-official-label small{
+  color:#8a99a5;
+  font-size:7px;
+}
+.v2-progress-status.tracking{
+  background:#fff4cf;
+  color:#8a6500;
+}
+@media(max-width:1000px){
+  .v2-progress-live-grid{grid-template-columns:repeat(3,1fr)}
+}
+@media(max-width:650px){
+  .v2-progress-live-head{flex-direction:column}
+  .v2-progress-live-status{width:100%;min-width:0;text-align:left}
+  .v2-progress-live-grid{grid-template-columns:1fr}
+  .v2-progress-official-label{align-items:flex-start;flex-direction:column;gap:2px}
+}
+

@@ -39,6 +39,7 @@ export default function ProgressDashboard({year,month,full=false,onOpenMonthly})
   const weeks=useMemo(()=> (data?.weeks||[]).filter(row=>!specialty||row.especialidad===specialty),[data,specialty]);
   const top=data?.monthly||{};
   const totals=data?.weekly_totals||{};
+  const operational=data?.operational||{};
   const overallProgress=Math.max(0,Math.min(100,number(top.progress_ot_pct||0)));
   const showReport=async(programmingId=null)=>{
     const key=programmingId===null?"month":String(programmingId);
@@ -78,6 +79,59 @@ export default function ProgressDashboard({year,month,full=false,onOpenMonthly})
         CIERRE DE PRUEBA / ANTICIPADO: existen semanas cerradas con fecha de fin posterior a hoy.
         No presentar este informe como cierre operativo definitivo del mes.
       </div>}
+
+      <div className="v2-progress-live">
+        <div className="v2-progress-live-head">
+          <div>
+            <span className="v2-kicker">AVANCE OPERATIVO ACTUAL</span>
+            <h4>{pct(operational.progress_ot_pct)} de las OT programadas detectadas como finalizadas</h4>
+            <p>
+              Combina la última Lista de Calendario de las semanas abiertas con el resultado oficial
+              de las semanas ya cerradas.
+            </p>
+          </div>
+          <div className="v2-progress-live-status">
+            <b>{count(operational.weeks_tracking)} en seguimiento</b>
+            <span>{count(operational.weeks_closed)} cerradas · {count(operational.weeks_open)} abiertas</span>
+          </div>
+        </div>
+        <div className="v2-progress-live-grid">
+          <article>
+            <span>OT programadas</span>
+            <b>{count(operational.programmed)}</b>
+            <small>ejecuciones semanales</small>
+          </article>
+          <article className="done">
+            <span>Finalizadas detectadas</span>
+            <b>{count(operational.finalized)}</b>
+            <small>{pct(operational.progress_ot_pct)} de avance operativo</small>
+          </article>
+          <article className="pending">
+            <span>Pendientes detectadas</span>
+            <b>{count(operational.pending)}</b>
+            <small>según último seguimiento/cierre</small>
+          </article>
+          <article className={number(operational.unchecked) ? "unchecked" : "done"}>
+            <span>Sin validar</span>
+            <b>{count(operational.unchecked)}</b>
+            <small>semanas sin carga o sin coincidencia</small>
+          </article>
+          <article>
+            <span>H-H finalizadas est.</span>
+            <b>{hh(operational.hh_finalized)}</b>
+            <small>de {hh(operational.hh_programmed)} H-H programadas</small>
+          </article>
+        </div>
+        <div className="v2-progress-live-note">
+          <b>Lectura operativa:</b> estos valores pueden cambiar con cada nueva Lista de Calendario.
+          El resultado definitivo continúa siendo el Cierre semanal.
+        </div>
+      </div>
+
+      <div className="v2-progress-official-label">
+        <span>CIERRE OFICIAL DEL PERÍODO</span>
+        <small>Resultado consolidado únicamente con semanas formalmente cerradas.</small>
+      </div>
 
       <div className="v2-progress-overview">
         <div className="v2-progress-focus">
@@ -141,25 +195,31 @@ export default function ProgressDashboard({year,month,full=false,onOpenMonthly})
           <div className="v2-progress-chart" aria-label="Avance semanal por OT programadas y finalizadas">
             {weeks.map(week=>{
               const closed=week.estado==="CERRADA";
-              const progress=Math.max(0,Math.min(100,number(week.progress_ot_pct||0)));
+              const tracked=week.operational_source==="SEGUIMIENTO";
+              const hasProgress=closed||tracked;
+              const progress=Math.max(0,Math.min(100,number(week.operational_progress_ot_pct||0)));
+              const statusLabel=closed?"Cerrada":tracked?"En seguimiento":"Abierta";
+              const statusClass=closed?"closed":tracked?"tracking":"open";
               return <div className="v2-progress-chart-row" key={week.programming_id}>
                 <div className="v2-progress-chart-label">
                   <div>
                     <b>{NAMES[week.especialidad]||week.especialidad}</b>
-                    <span className={"v2-progress-status "+(closed?"closed":"open")}>{closed?"Cerrada":"Abierta"}</span>
+                    <span className={"v2-progress-status "+statusClass}>{statusLabel}</span>
                   </div>
                   <span>{dateLabel(week.week_from)} – {dateLabel(week.week_to)}</span>
                 </div>
                 <div className="v2-progress-week-body">
                   <div className="v2-progress-week-copy">
-                    <span>{count(week.programmed)} OT programadas</span>
-                    <span>{closed?count(week.finalized)+" finalizadas":"Pendiente de cierre"}</span>
+                    <span>{count(week.operational_programmed)} OT programadas</span>
+                    <span>{hasProgress
+                      ? count(week.operational_finalized)+" finalizadas detectadas"
+                      : "Sin Lista de Calendario de seguimiento"}</span>
                   </div>
                   <div className="v2-progress-chart-track">
-                    <div className="v2-progress-chart-done" style={{width:(closed?progress:0)+"%"}}/>
+                    <div className="v2-progress-chart-done" style={{width:(hasProgress?progress:0)+"%"}}/>
                   </div>
                 </div>
-                <strong>{closed?pct(week.progress_ot_pct):"—"}</strong>
+                <strong>{hasProgress?pct(week.operational_progress_ot_pct):"—"}</strong>
               </div>;
             })}
           </div>
@@ -178,12 +238,17 @@ export default function ProgressDashboard({year,month,full=false,onOpenMonthly})
                 <tbody>{weeks.map(w=><tr key={w.programming_id}>
                   <td>{dateLabel(w.week_from)} – {dateLabel(w.week_to)}</td>
                   <td><b>{NAMES[w.especialidad]||w.especialidad}</b></td>
-                  <td><span className={"v2-progress-status "+(w.estado==="CERRADA"?"closed":"open")}>{w.estado}</span></td>
-                  <td>{count(w.programmed)}</td><td>{w.estado==="CERRADA"?count(w.finalized):"—"}</td>
-                  <td>{w.estado==="CERRADA"?count(w.pending):"—"}</td><td>{w.estado==="CERRADA"?count(w.not_found):"—"}</td>
-                  <td>{count(w.origin_backlog)}</td><td>{hh(w.hh_programmed)}</td>
-                  <td>{w.estado==="CERRADA"?hh(w.hh_finalized):"—"}</td>
-                  <td>{pct(w.progress_ot_pct)}</td><td>{pct(w.progress_hh_pct)}</td>
+                  <td><span className={"v2-progress-status "+(w.estado==="CERRADA"?"closed":w.operational_source==="SEGUIMIENTO"?"tracking":"open")}>
+                    {w.estado==="CERRADA"?"CERRADA":w.operational_source==="SEGUIMIENTO"?"EN SEGUIMIENTO":"ABIERTA"}
+                  </span></td>
+                  <td>{count(w.operational_programmed)}</td>
+                  <td>{w.estado==="CERRADA"||w.operational_source==="SEGUIMIENTO"?count(w.operational_finalized):"—"}</td>
+                  <td>{w.estado==="CERRADA"||w.operational_source==="SEGUIMIENTO"?count(w.operational_pending):"—"}</td>
+                  <td>{w.estado==="CERRADA"?count(w.not_found):w.operational_source==="SEGUIMIENTO"?count(w.operational_unchecked):"—"}</td>
+                  <td>{count(w.origin_backlog)}</td><td>{hh(w.operational_hh_programmed)}</td>
+                  <td>{w.estado==="CERRADA"||w.operational_source==="SEGUIMIENTO"?hh(w.operational_hh_finalized):"—"}</td>
+                  <td>{w.estado==="CERRADA"||w.operational_source==="SEGUIMIENTO"?pct(w.operational_progress_ot_pct):"—"}</td>
+                  <td>{w.estado==="CERRADA"||w.operational_source==="SEGUIMIENTO"?pct(w.operational_progress_hh_pct):"—"}</td>
                   <td><div className="v2-progress-row-actions">
                     <button type="button" disabled={!!downloading} onClick={()=>showReport(w.programming_id)}>
                       {downloading===String(w.programming_id)?"Generando...":"PDF"}
