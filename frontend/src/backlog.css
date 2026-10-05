@@ -443,3 +443,39 @@ tbody tr{transition:background .13s ease}tbody tr:hover{background:#f6faff}
   .v2-backlog-indicators{grid-template-columns:1fr}
 }
 
+/* ---------- Identificación del backlog histórico por mes ---------- */
+.v2-backlog-indicators>div.september{
+  border-color:#e0bf57;
+  background:linear-gradient(145deg,#fff2bd,#fffaf0);
+}
+.v2-backlog-indicators>div.september b{color:#805800}
+.v2-backlog-month{
+  display:grid;
+  gap:3px;
+  min-width:104px;
+}
+.v2-backlog-month>b{
+  width:max-content;
+  padding:5px 8px;
+  border:1px solid #d8e2e9;
+  border-radius:999px;
+  background:#f3f6f8;
+  color:#52687a;
+  font-size:8px;
+  letter-spacing:.2px;
+  white-space:nowrap;
+}
+.v2-backlog-month>small{
+  color:#7e8c97;
+  font-size:6.6px;
+  font-weight:900;
+  letter-spacing:.35px;
+  white-space:nowrap;
+}
+.v2-backlog-month.september>b{
+  border-color:#dfc15f;
+  background:#fff0b8;
+  color:#765300;
+}
+.v2-backlog-month.september>small{color:#8a6500}
+

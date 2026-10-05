@@ -12,12 +12,33 @@ function fmt(value) {
     maximumFractionDigits: 1,
   });
 }
+const MONTH_NAMES = [
+  "ENERO","FEBRERO","MARZO","ABRIL","MAYO","JUNIO",
+  "JULIO","AGOSTO","SEPTIEMBRE","OCTUBRE","NOVIEMBRE","DICIEMBRE",
+];
+
+function originMonth(row) {
+  const raw = String(
+    row.periodo_origen
+      || row.primera_semana_origen_inicio
+      || row.semana_origen_inicio
+      || "",
+  ).slice(0, 10);
+  const match = raw.match(/^(\d{4})-(\d{2})/);
+  if (!match) return "SIN PERÍODO";
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  return `${MONTH_NAMES[month - 1] || "MES"} ${year}`;
+}
+
 function backlogReason(row) {
   const reason = String(row.motivo || "").toUpperCase();
   if (reason.includes("ARRASTRE INICIAL")) {
     return {
       label: "BACKLOG INICIAL",
-      detail: "Pendiente heredada del cierre del mes anterior al inicio del piloto",
+      detail: reason.includes("SEPTIEMBRE 2026")
+        ? "Pendiente heredada del cierre de septiembre 2026"
+        : "Pendiente heredada del cierre del mes anterior",
       tone: "backlog",
     };
   }
@@ -50,7 +71,7 @@ function backlogReason(row) {
 }
 function originText(row) {
   if (String(row.motivo || "").toUpperCase().includes("ARRASTRE INICIAL") && row.periodo_origen) {
-    return `Cierre ${String(row.periodo_origen).slice(0, 7)}`;
+    return `Cierre ${originMonth(row)}`;
   }
   return row.primera_semana_origen_inicio || row.semana_origen_inicio || "Sin fecha";
 }
@@ -122,6 +143,11 @@ export default function AccumulatedBacklog({
           <b>{number(summary.movidas)}</b>
           <small>histórico total de la cola</small>
         </div>
+        <div className="september">
+          <span>Pendientes de septiembre</span>
+          <b>{number(summary.carga_inicial)}</b>
+          <small>arrastre inicial · septiembre 2026</small>
+        </div>
         <div className="finalized">
           <span>Finalizadas por ingeniero</span>
           <b>{number(summary.finalizadas_por_ingeniero)}</b>
@@ -156,7 +182,7 @@ export default function AccumulatedBacklog({
           </select>
           <select aria-label="Especialidad de backlog" value={filters.specialty} onChange={(e) => update("specialty", e.target.value)}>
             <option value="">Todas las especialidades</option>
-            {["MEC", "ELE", "MET", "SER"].map((s) => <option key={s} value={s}>{s}</option>)}
+            {["MEC", "ELE", "MET", "SER", "SOL"].map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
           <input aria-label="Buscar en backlog" placeholder="Buscar OT, equipo o plan..." value={filters.search} onChange={(e) => update("search", e.target.value)} />
           <input type="number" min="0" aria-label="Antigüedad mínima en días" placeholder="Edad mín. (días)" value={filters.age_min} onChange={(e) => update("age_min", e.target.value)} />
@@ -173,7 +199,7 @@ export default function AccumulatedBacklog({
           <table>
             <thead>
               <tr>
-                <th>Estado</th><th>Motivo de ingreso</th><th>OT</th><th>Area</th><th>Equipo</th><th>Plan</th><th>H-H</th><th>Origen</th><th>Antiguedad</th><th>Reprog.</th>
+                <th>Estado</th><th>Mes origen</th><th>Motivo de ingreso</th><th>OT</th><th>Area</th><th>Equipo</th><th>Plan</th><th>H-H</th><th>Origen</th><th>Antiguedad</th><th>Reprog.</th>
               </tr>
             </thead>
             <tbody>
@@ -187,6 +213,12 @@ export default function AccumulatedBacklog({
                       </Badge>
                       <small>{r.ultimo_resultado_cierre || "PENDIENTE"}</small>
                     </td>
+                    <td>
+                      <div className={String(r.motivo || "").toUpperCase().includes("SEPTIEMBRE 2026") ? "v2-backlog-month september" : "v2-backlog-month"}>
+                        <b>{originMonth(r)}</b>
+                        {String(r.motivo || "").toUpperCase().includes("SEPTIEMBRE 2026") && <small>ARRASTRE INICIAL</small>}
+                      </div>
+                    </td>
                     <td><div className="v2-backlog-reason"><Badge tone={reason.tone}>{reason.label}</Badge><small>{reason.detail}</small></div></td>
                     <td><b>{r.numero_ot || "SIN ASIGNAR"}</b></td>
                     <td><Badge>{r.area_codigo || "—"}</Badge></td>
@@ -199,7 +231,7 @@ export default function AccumulatedBacklog({
                   </tr>
                 );
               })}
-              {!rows.length && !loading && <tr><td colSpan="10" className="v2-empty">No hay OT de Backlog con estos filtros.</td></tr>}
+              {!rows.length && !loading && <tr><td colSpan="11" className="v2-empty">No hay OT de Backlog con estos filtros.</td></tr>}
             </tbody>
           </table>
         </div>

@@ -38,7 +38,7 @@ def _build_backlog_filters(
         clauses.append("b.orden_mantenimiento_id=:order_id")
         params["order_id"] = order_id
     if search and search.strip():
-        clauses.append("concat_ws(' ',o.numero_ot,a.codigo,a.descripcion,p.plan_trabajo) ILIKE :search")
+        clauses.append("concat_ws(' ',o.numero_ot,a.codigo,a.descripcion,p.plan_trabajo,o.titulo,o.plan_clave_software,b.motivo) ILIKE :search")
         params["search"] = f"%{search.strip()}%"
     age_expression = "GREATEST(0,CURRENT_DATE-COALESCE(b.primera_semana_origen_inicio,b.semana_origen_inicio))"
     if age_min is not None:
@@ -69,7 +69,8 @@ def get_accumulated_backlog(
                    b.primera_semana_origen_fin,b.movido_en,b.ultimo_resultado_cierre,b.ultimo_cierre_en,
                    b.reprogramaciones,b.finalizado_en,b.finalizado_por,
                    o.numero_ot,o.periodo AS periodo_origen,a.codigo AS activo_codigo,a.descripcion AS activo_descripcion,a.area_codigo,
-                   p.plan_trabajo,p.descripcion_grupo,
+                   COALESCE(p.plan_trabajo,o.titulo,o.plan_clave_software) AS plan_trabajo,
+                   p.descripcion_grupo,
                    round(COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min)/60.0*p.numero_personas_efectivo,2) AS hh,
                    GREATEST(0,CURRENT_DATE-COALESCE(b.primera_semana_origen_inicio,b.semana_origen_inicio)) AS antiguedad_dias
             FROM programacion.backlog_v2 b
