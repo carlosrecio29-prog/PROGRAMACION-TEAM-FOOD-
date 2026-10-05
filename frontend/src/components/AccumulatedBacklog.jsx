@@ -1,11 +1,6 @@
 import { useEffect, useState } from "react";
-import { bootstrapV2Backlog, getV2Backlog } from "../api";
+import { getV2Backlog } from "../api";
 import Badge from "../shared/Badge";
-
-const MONTHS = [
-  "Enero","Febrero","Marzo","Abril","Mayo","Junio",
-  "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre",
-];
 
 function number(value) {
   const parsed = Number(value);
@@ -16,9 +11,6 @@ function fmt(value) {
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,
   });
-}
-function previousPeriod(year, month) {
-  return month === 1 ? { year: year - 1, month: 12 } : { year, month: month - 1 };
 }
 function backlogReason(row) {
   const reason = String(row.motivo || "").toUpperCase();
@@ -58,8 +50,7 @@ function backlogReason(row) {
 }
 function originText(row) {
   if (String(row.motivo || "").toUpperCase().includes("ARRASTRE INICIAL") && row.periodo_origen) {
-    const [year, month] = String(row.periodo_origen).slice(0, 7).split("-").map(Number);
-    return `Cierre ${MONTHS[(month || 1) - 1]} ${year}`;
+    return `Cierre ${String(row.periodo_origen).slice(0, 7)}`;
   }
   return row.primera_semana_origen_inicio || row.semana_origen_inicio || "Sin fecha";
 }
@@ -68,10 +59,7 @@ export default function AccumulatedBacklog({
   areas = [],
   initialOrderId,
   onClearOrder,
-  year = 2026,
-  month = 10,
 }) {
-  const initialPeriod = previousPeriod(year, month);
   const [filters, setFilters] = useState({
     state: "",
     area: "",
@@ -85,20 +73,10 @@ export default function AccumulatedBacklog({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
-  const [bootstrapFile, setBootstrapFile] = useState(null);
-  const [bootstrapYear, setBootstrapYear] = useState(initialPeriod.year);
-  const [bootstrapMonth, setBootstrapMonth] = useState(initialPeriod.month);
-  const [bootstrapBusy, setBootstrapBusy] = useState(false);
-  const [bootstrapResult, setBootstrapResult] = useState(null);
 
   useEffect(() => {
     setFilters((current) => ({ ...current, order_id: initialOrderId || "" }));
   }, [initialOrderId]);
-  useEffect(() => {
-    const previous = previousPeriod(year, month);
-    setBootstrapYear(previous.year);
-    setBootstrapMonth(previous.month);
-  }, [year, month]);
 
   useEffect(() => {
     let active = true;
@@ -119,26 +97,6 @@ export default function AccumulatedBacklog({
     };
   }, [filters, revision]);
 
-  async function loadInitialBacklog() {
-    if (!bootstrapFile) {
-      setError("Selecciona la Lista de Calendario definitiva del mes que vas a arrastrar.");
-      return;
-    }
-    try {
-      setBootstrapBusy(true);
-      setError("");
-      setBootstrapResult(null);
-      const result = await bootstrapV2Backlog(bootstrapFile, bootstrapYear, bootstrapMonth);
-      setBootstrapResult(result);
-      setBootstrapFile(null);
-      setRevision((value) => value + 1);
-    } catch (cause) {
-      setError(cause.message || "No se pudo construir el backlog inicial.");
-    } finally {
-      setBootstrapBusy(false);
-    }
-  }
-
   const rows = data.rows || [];
   const summary = data.summary || {};
   function update(name, value) {
@@ -158,61 +116,11 @@ export default function AccumulatedBacklog({
         </div>
       </section>
 
-      <section className="v2-panel v2-backlog-bootstrap">
-        <div className="v2-section-head">
-          <div>
-            <span className="v2-kicker">ARRANQUE DEL PILOTO</span>
-            <h3>Cargar pendientes del cierre mensual anterior</h3>
-            <p>
-              Usa esta carga para iniciar el Backlog con las OT que quedaron abiertas en septiembre.
-              Después de esto, los cierres semanales alimentarán la misma cola automáticamente.
-            </p>
-          </div>
-          <Badge tone="backlog">{number(summary.carga_inicial)} del arrastre inicial</Badge>
-        </div>
-        <div className="v2-backlog-bootstrap-controls">
-          <label>
-            <span>Año</span>
-            <input type="number" min="2020" max="2100" value={bootstrapYear} onChange={(e) => setBootstrapYear(Number(e.target.value))} />
-          </label>
-          <label>
-            <span>Mes</span>
-            <select value={bootstrapMonth} onChange={(e) => setBootstrapMonth(Number(e.target.value))}>
-              {MONTHS.map((name, index) => <option key={name} value={index + 1}>{name}</option>)}
-            </select>
-          </label>
-          <label className="file">
-            <span>Lista de Calendario definitiva</span>
-            <input type="file" accept=".xlsx" onChange={(e) => setBootstrapFile(e.target.files?.[0] || null)} />
-          </label>
-          <button type="button" className="v2-primary" disabled={!bootstrapFile || bootstrapBusy} onClick={loadInitialBacklog}>
-            {bootstrapBusy ? "Analizando..." : "Cargar pendientes al Backlog"}
-          </button>
-        </div>
-        <div className="v2-backlog-bootstrap-note">
-          Esta operación no crea una programación semanal. Importa el período histórico y lleva al Backlog únicamente las OT que no estén finalizadas.
-        </div>
-        {bootstrapResult && (
-          <div className="v2-backlog-bootstrap-result">
-            <b>{bootstrapResult.backlog_inicial_activo} OT pendientes cargadas</b>
-            <span>{bootstrapResult.importacion?.pmp_finalizados_archivo || 0} finalizadas detectadas en el archivo · {bootstrapResult.importacion?.pmp_excluidos_operacion || 0} registros OPERACIÓN excluidos.</span>
-            {!!bootstrapResult.por_especialidad?.length && (
-              <small>{bootstrapResult.por_especialidad.map((row) => `${row.especialidad}: ${row.cantidad}`).join(" · ")}</small>
-            )}
-          </div>
-        )}
-      </section>
-
       <section className="v2-backlog-indicators" aria-label="Indicadores de backlog">
         <div>
           <span>OT movidas a Backlog</span>
           <b>{number(summary.movidas)}</b>
           <small>histórico total de la cola</small>
-        </div>
-        <div className="initial">
-          <span>Arrastre inicial</span>
-          <b>{number(summary.carga_inicial)}</b>
-          <small>pendientes heredadas del cierre mensual</small>
         </div>
         <div className="finalized">
           <span>Finalizadas por ingeniero</span>
