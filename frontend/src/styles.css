@@ -2598,3 +2598,99 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
   .tf-capacity-change-actions{width:100%;justify-content:space-between}
 }
 
+/* === CENTRO DE INDICADORES Y SEGUIMIENTO === */
+.v2-indicator-hub{
+  display:grid;
+  grid-template-columns:minmax(240px,.82fr) minmax(0,1.8fr);
+  gap:18px;
+  align-items:stretch;
+  padding:16px 18px;
+  border:1px solid #d6e3ec;
+  border-radius:15px;
+  background:linear-gradient(135deg,#ffffff 0%,#f6fafc 72%,#eef6fa 100%);
+  box-shadow:0 8px 24px rgba(24,48,77,.045);
+}
+.v2-indicator-hub-copy{
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  padding-right:18px;
+  border-right:1px solid #dbe6ee;
+}
+.v2-indicator-hub-copy h2{
+  margin:4px 0 5px;
+  color:#173750;
+  font-size:20px;
+  line-height:1.05;
+}
+.v2-indicator-hub-copy p{
+  margin:0;
+  max-width:440px;
+  color:#728596;
+  font-size:8.5px;
+  line-height:1.45;
+}
+.v2-indicator-hub-tabs{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:8px;
+}
+.v2-indicator-hub-tabs button{
+  min-width:0;
+  min-height:86px;
+  padding:10px 11px;
+  border:1px solid #dce6ed;
+  border-radius:11px;
+  background:#fff;
+  text-align:left;
+  cursor:pointer;
+  transition:border-color .15s ease,background .15s ease,box-shadow .15s ease,transform .15s ease;
+}
+.v2-indicator-hub-tabs button:hover{
+  border-color:#a9c8dc;
+  background:#f9fcfe;
+  transform:translateY(-1px);
+}
+.v2-indicator-hub-tabs button.is-active{
+  border-color:#7eb6d8;
+  background:#eef7fc;
+  box-shadow:inset 0 0 0 1px rgba(31,130,184,.08);
+}
+.v2-indicator-hub-tabs button span{
+  display:block;
+  color:#24445d;
+  font-size:9px;
+  font-weight:950;
+}
+.v2-indicator-hub-tabs button small{
+  display:block;
+  min-height:28px;
+  margin-top:4px;
+  color:#7a8c9b;
+  font-size:7px;
+  line-height:1.35;
+}
+.v2-indicator-hub-tabs button b{
+  display:block;
+  margin-top:6px;
+  color:#1a6e9e;
+  font-size:8px;
+  font-weight:900;
+}
+.v2-indicator-hub-tabs button.is-active b{color:#0d7a50}
+
+@media(max-width:980px){
+  .v2-indicator-hub{grid-template-columns:1fr}
+  .v2-indicator-hub-copy{
+    padding-right:0;
+    padding-bottom:12px;
+    border-right:0;
+    border-bottom:1px solid #dbe6ee;
+  }
+}
+@media(max-width:700px){
+  .v2-indicator-hub-tabs{grid-template-columns:1fr}
+  .v2-indicator-hub-tabs button{min-height:auto}
+  .v2-indicator-hub-tabs button small{min-height:0}
+}
+

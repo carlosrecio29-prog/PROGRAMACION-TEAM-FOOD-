@@ -105,7 +105,6 @@ function Summary({ data, onNavigate, year, month }) {
     { id: "technicians", title: "Programación de técnicos", text: "Turnos, especialidades y capacidad del mes", icon: "team" },
     { id: "programming", title: "Programación semanal", text: "Seleccionar y guardar actividades por especialidad", icon: "tools" },
     { id: "pmp", title: "PMP del mes", text: "Consultar la cartera preventiva del período", icon: "report" },
-    { id: "tracking", title: "Seguimiento semanal", text: "Actualizar avance sin cerrar la semana", icon: "bars" },
     { id: "closure", title: "Cierre semanal", text: "Conciliar OT contra el calendario", icon: "check" },
     { id: "monthly", title: "Cierre mensual", text: "Consolidar y formalizar el cierre del mes", icon: "bars" },
     { id: "backlog", title: "Backlog acumulado", text: "Dar seguimiento a OT pendientes", icon: "alert" },
@@ -149,7 +148,7 @@ function Summary({ data, onNavigate, year, month }) {
         <span className="v2-analysis-entry-icon"><ControlIcon type="bars" /></span>
         <span className="v2-analysis-entry-copy">
           <b>Indicadores y seguimiento</b>
-          <small>Seguimiento del período · Tendencia semanal · Exportación · Por especialidad · Calidad de datos</small>
+          <small>Avance del período · Seguimiento semanal · Tendencia · PMP por especialidad · Calidad de datos</small>
         </span>
         <span className="v2-analysis-entry-arrow">→</span>
       </button>
@@ -221,7 +220,8 @@ function Summary({ data, onNavigate, year, month }) {
 }
 
 
-function IndicatorsTracking({ data, year, month, onGoMonthly }) {
+function IndicatorsTracking({ data, year, month, onGoMonthly, onGoClosure }) {
+  const [section, setSection] = useState("period");
   const s = data?.summary || {};
   const specialties = data?.specialties || [];
   const totalHh = specialties.reduce((sum, row) => sum + Number(row.hh_calculables || 0), 0);
@@ -233,92 +233,154 @@ function IndicatorsTracking({ data, year, month, onGoMonthly }) {
     ? Math.round((Number(s.registros_listos || 0) / totalRecords) * 100)
     : 100;
 
+  const sections = [
+    {
+      id: "period",
+      title: "Avance del período",
+      text: "Programación, cierres, tendencia semanal y reportes.",
+      meta: `${number(s.registros_pmp)} PMP`,
+    },
+    {
+      id: "tracking",
+      title: "Seguimiento semanal",
+      text: "Avance diario de la programación sin realizar el cierre.",
+      meta: "OT en seguimiento",
+    },
+    {
+      id: "quality",
+      title: "PMP y calidad",
+      text: "Carga por especialidad y preparación de la información.",
+      meta: `${readyPct}% listo`,
+    },
+  ];
+
   return (
     <div className="v2-stack v2-indicators-view">
-      <ProgressDashboard year={year} month={month} onOpenMonthly={onGoMonthly} />
-
-      <section className="v2-panel v2-indicator-specialties">
-        <div className="v2-section-head">
-          <div>
-            <span className="v2-kicker">POR ESPECIALIDAD</span>
-            <h3>Carga preventiva del mes</h3>
-            <p>Participación de cada especialidad dentro de las H-H calculables del PMP.</p>
-          </div>
-          <div className="v2-indicator-total-hh">
-            <span>Total calculable</span>
-            <b>{fmt(totalHh, 1)} H-H</b>
-          </div>
+      <section className="v2-indicator-hub">
+        <div className="v2-indicator-hub-copy">
+          <span className="v2-kicker">CENTRO DE ANÁLISIS</span>
+          <h2>Indicadores y seguimiento</h2>
+          <p>
+            Consulta el estado del período, actualiza el avance semanal y revisa
+            la calidad del PMP desde un solo lugar.
+          </p>
         </div>
-        <div className="v2-spec-grid v2-spec-grid-analytics">
-          {specialties.map((x) => {
-            const hhValue = Number(x.hh_calculables || 0);
-            const share = totalHh ? Math.min(100, (hhValue / totalHh) * 100) : 0;
-            return (
-              <article key={x.especialidad} className="v2-spec-card v2-spec-card-analytics">
-                <div className="v2-spec-card-head">
-                  <span className="v2-spec-code">{x.especialidad}</span>
-                  <div>
-                    <b>{SPEC_NAMES[x.especialidad] || x.especialidad}</b>
-                    <small>{share.toLocaleString("es-CO", { maximumFractionDigits: 1 })}% de las H-H</small>
-                  </div>
-                </div>
-                <div className="v2-spec-card-main">
-                  <strong>{fmt(hhValue, 1)}</strong>
-                  <span>H-H calculables</span>
-                </div>
-                <div className="v2-spec-share-track">
-                  <i style={{ width: `${share}%` }} />
-                </div>
-                <div className="v2-spec-card-foot">
-                  <span><b>{number(x.ot_distintas)}</b> OT distintas</span>
-                  <span><b>{number(x.registros || x.pmp_count || 0)}</b> registros</span>
-                </div>
+        <div className="v2-indicator-hub-tabs" role="tablist" aria-label="Secciones de indicadores">
+          {sections.map((item) => (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={section === item.id}
+              className={section === item.id ? "is-active" : ""}
+              key={item.id}
+              onClick={() => setSection(item.id)}
+            >
+              <span>{item.title}</span>
+              <small>{item.text}</small>
+              <b>{item.meta}</b>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {section === "period" && (
+        <ProgressDashboard year={year} month={month} onOpenMonthly={onGoMonthly} />
+      )}
+
+      {section === "tracking" && (
+        <WeeklyTracking
+          year={year}
+          month={month}
+          onOpenClosure={onGoClosure}
+        />
+      )}
+
+      {section === "quality" && (
+        <>
+          <section className="v2-panel v2-indicator-specialties">
+            <div className="v2-section-head">
+              <div>
+                <span className="v2-kicker">POR ESPECIALIDAD</span>
+                <h3>Carga preventiva del mes</h3>
+                <p>Participación de cada especialidad dentro de las H-H calculables del PMP.</p>
+              </div>
+              <div className="v2-indicator-total-hh">
+                <span>Total calculable</span>
+                <b>{fmt(totalHh, 1)} H-H</b>
+              </div>
+            </div>
+            <div className="v2-spec-grid v2-spec-grid-analytics">
+              {specialties.map((x) => {
+                const hhValue = Number(x.hh_calculables || 0);
+                const share = totalHh ? Math.min(100, (hhValue / totalHh) * 100) : 0;
+                return (
+                  <article key={x.especialidad} className="v2-spec-card v2-spec-card-analytics">
+                    <div className="v2-spec-card-head">
+                      <span className="v2-spec-code">{x.especialidad}</span>
+                      <div>
+                        <b>{SPEC_NAMES[x.especialidad] || x.especialidad}</b>
+                        <small>{share.toLocaleString("es-CO", { maximumFractionDigits: 1 })}% de las H-H</small>
+                      </div>
+                    </div>
+                    <div className="v2-spec-card-main">
+                      <strong>{fmt(hhValue, 1)}</strong>
+                      <span>H-H calculables</span>
+                    </div>
+                    <div className="v2-spec-share-track">
+                      <i style={{ width: `${share}%` }} />
+                    </div>
+                    <div className="v2-spec-card-foot">
+                      <span><b>{number(x.ot_distintas)}</b> OT distintas</span>
+                      <span><b>{number(x.registros || x.pmp_count || 0)}</b> registros</span>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className="v2-panel v2-indicator-quality">
+            <div className="v2-section-head">
+              <div>
+                <span className="v2-kicker">CALIDAD DE DATOS</span>
+                <h3>Estado de preparación de la información</h3>
+                <p>Validación de los datos mínimos requeridos antes de programar.</p>
+              </div>
+              <div className="v2-quality-score">
+                <strong>{readyPct}%</strong>
+                <span>preparación</span>
+              </div>
+            </div>
+
+            <div className="v2-quality-progress">
+              <i style={{ width: `${Math.max(0, Math.min(100, readyPct))}%` }} />
+            </div>
+
+            <div className="v2-quality-grid v2-quality-grid-analytics">
+              <article className="good">
+                <span>Listos para programar</span>
+                <b>{number(s.registros_listos)}</b>
+                <small>registros del PMP completos</small>
               </article>
-            );
-          })}
-        </div>
-      </section>
-
-      <section className="v2-panel v2-indicator-quality">
-        <div className="v2-section-head">
-          <div>
-            <span className="v2-kicker">CALIDAD DE DATOS</span>
-            <h3>Estado de preparación de la información</h3>
-            <p>Validación de los datos mínimos requeridos antes de programar.</p>
-          </div>
-          <div className="v2-quality-score">
-            <strong>{readyPct}%</strong>
-            <span>preparación</span>
-          </div>
-        </div>
-
-        <div className="v2-quality-progress">
-          <i style={{ width: `${Math.max(0, Math.min(100, readyPct))}%` }} />
-        </div>
-
-        <div className="v2-quality-grid v2-quality-grid-analytics">
-          <article className="good">
-            <span>Listos para programar</span>
-            <b>{number(s.registros_listos)}</b>
-            <small>registros del PMP completos</small>
-          </article>
-          <article className={Number(s.registros_sin_personas || 0) ? "warn" : "good"}>
-            <span>Sin Nº personas</span>
-            <b>{number(s.registros_sin_personas)}</b>
-            <small>requieren completar recurso</small>
-          </article>
-          <article className={Number(s.registros_sin_tiempo_parada || 0) ? "warn" : "good"}>
-            <span>Sin tiempo de parada</span>
-            <b>{number(s.registros_sin_tiempo_parada)}</b>
-            <small>requieren definir condición</small>
-          </article>
-          <article className={Number(s.registros_sin_plan_maestro || 0) ? "danger" : "good"}>
-            <span>Sin plan maestro</span>
-            <b>{number(s.registros_sin_plan_maestro)}</b>
-            <small>requieren conciliación</small>
-          </article>
-        </div>
-      </section>
+              <article className={Number(s.registros_sin_personas || 0) ? "warn" : "good"}>
+                <span>Sin Nº personas</span>
+                <b>{number(s.registros_sin_personas)}</b>
+                <small>requieren completar recurso</small>
+              </article>
+              <article className={Number(s.registros_sin_tiempo_parada || 0) ? "warn" : "good"}>
+                <span>Sin tiempo de parada</span>
+                <b>{number(s.registros_sin_tiempo_parada)}</b>
+                <small>requieren definir condición</small>
+              </article>
+              <article className={Number(s.registros_sin_plan_maestro || 0) ? "danger" : "good"}>
+                <span>Sin plan maestro</span>
+                <b>{number(s.registros_sin_plan_maestro)}</b>
+                <small>requieren conciliación</small>
+              </article>
+            </div>
+          </section>
+        </>
+      )}
     </div>
   );
 }
@@ -1590,6 +1652,7 @@ function Pmp({ year, month, dashboard }) {
 export default function App() {
   const [view, setView] = useState(() => {
     const requested = window.location.hash.replace(/^#\/?/, "");
+    if (requested === "tracking") return "indicators";
     return navigationIds().includes(requested) ? requested : "summary";
   });
   const [year] = useState(2026);
@@ -1710,7 +1773,13 @@ export default function App() {
           <Summary data={dashboard} year={year} month={month} onNavigate={navigate} />
         )}{" "}
         {view === "indicators" && (
-          <IndicatorsTracking data={dashboard} year={year} month={month} onGoMonthly={() => navigate("monthly")} />
+          <IndicatorsTracking
+            data={dashboard}
+            year={year}
+            month={month}
+            onGoMonthly={() => navigate("monthly")}
+            onGoClosure={() => navigate("closure")}
+          />
         )}{" "}
         {view === "pending" && (
           <PendingPlans year={year} month={month} onChanged={refresh} />
@@ -1720,7 +1789,6 @@ export default function App() {
           <WeeklyProgramming year={year} month={month} dashboard={dashboard} />
         )}{" "}
         {view === "monthly" && <MonthlyClose year={year} month={month} />}
-        {view === "tracking" && <WeeklyTracking year={year} month={month} onOpenClosure={() => navigate("closure")} />}{" "}
         {view === "closure" && <WeeklyClosure year={year} month={month} onOpenBacklog={(orderId) => { setBacklogOrderId(orderId); navigate("backlog"); }} />}{" "}
         {view === "backlog" && <AccumulatedBacklog areas={dashboard?.areas || []} initialOrderId={backlogOrderId} onClearOrder={() => setBacklogOrderId("")} year={year} month={month} />}{" "}
         {view === "operationExclusions" && (

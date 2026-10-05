@@ -29,7 +29,6 @@ export const NAV_GROUPS = [
     { id: "operationExclusions", label: "Actividades excluidas", code: "OP" },
   ] },
   { label: "Cierre", items: [
-    { id: "tracking", label: "Seguimiento semanal", code: "SE" },
     { id: "closure", label: "Cierre semanal", code: "CI" },
     { id: "monthly", label: "Cierre mensual", code: "CM" },
   ] },
