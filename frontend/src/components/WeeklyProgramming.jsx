@@ -129,19 +129,62 @@ export default function WeeklyProgramming({year,month,dashboard}){
     const monthKey=String(week?.from||'').slice(0,7)
     const selectedMonthRows=selectedRows.filter(row=>String(row.periodo||'').slice(0,7)===monthKey)
     const selectedMonthHH=selectedMonthRows.reduce((sum,row)=>sum+number(row.hh),0)
+    const selectedAvailableBacklogRows=selectedRows.filter(row=>
+      row.es_backlog===true && String(row.periodo||'').slice(0,7)!==monthKey
+    )
+    const selectedAvailableBacklogHH=selectedAvailableBacklogRows.reduce((sum,row)=>sum+number(row.hh),0)
+    const removedSavedBacklogRows=allRows.filter(row=>
+      programmingId
+      && !selected.has(Number(row.orden_mantenimiento_id))
+      && row.origen_backlog===true
+      && row.es_backlog!==true
+      && String(row.periodo||'').slice(0,7)!==monthKey
+    )
+    const removedSavedBacklogHH=removedSavedBacklogRows.reduce((sum,row)=>sum+number(row.hh),0)
+
     const pmpCount=number(base.pmp_count)
     const pmpHH=number(base.pmp_hh)
     const coveredCount=Math.min(pmpCount,number(base.covered_count_base)+selectedMonthRows.length)
     const coveredHH=Math.min(pmpHH,number(base.covered_hh_base)+selectedMonthHH)
     const pendingCount=Math.max(0,pmpCount-coveredCount)
     const pendingHH=Math.max(0,pmpHH-coveredHH)
+
+    const backlogPendingCount=Math.max(
+      0,
+      number(base.backlog_available_count_base)
+        - selectedAvailableBacklogRows.length
+        + removedSavedBacklogRows.length
+    )
+    const backlogPendingHH=Math.max(
+      0,
+      number(base.backlog_available_hh_base)
+        - selectedAvailableBacklogHH
+        + removedSavedBacklogHH
+    )
+    const totalPendingCount=Math.max(
+      0,
+      number(base.total_pending_count_base)
+        - selectedMonthRows.length
+        - selectedAvailableBacklogRows.length
+        + removedSavedBacklogRows.length
+    )
+    const totalPendingHH=Math.max(
+      0,
+      number(base.total_pending_hh_base)
+        - selectedMonthHH
+        - selectedAvailableBacklogHH
+        + removedSavedBacklogHH
+    )
+
     const demandBeforeWeekHH=Math.max(0,pmpHH-number(base.covered_hh_base))
     const coveragePossible=demandBeforeWeekHH>0?Math.min(100,target/demandBeforeWeekHH*100):100
     return {
       pmpCount,pmpHH,coveredCount,coveredHH,pendingCount,pendingHH,
-      demandBeforeWeekHH,coveragePossible,missingHH:number(base.missing_hh_count)
+      backlogPendingCount,backlogPendingHH,totalPendingCount,totalPendingHH,
+      demandBeforeWeekHH,coveragePossible,missingHH:number(base.missing_hh_count),
+      totalMissingHH:number(base.total_missing_hh_count)
     }
-  },[data,selectedRows,target,week?.from])
+  },[data,selectedRows,allRows,selected,programmingId,target,week?.from])
 
   const groupedRows=useMemo(()=>{
     const backlog=[]
@@ -223,6 +266,7 @@ export default function WeeklyProgramming({year,month,dashboard}){
       <article><span>PMP del mes</span><b>{monthly.pmpCount}</b><small>{monthly.coveredCount} cubiertos</small></article>
       <article><span>H-H PMP del mes</span><b>{fmt(monthly.pmpHH,1)}</b><small>demanda mensual</small></article>
       <article className="pending"><span>H-H pendientes mes</span><b>{fmt(monthly.pendingHH,1)}</b><small>{monthly.pendingCount} PMP pendientes</small></article>
+      <article className="workload"><span>Carga total pendiente</span><b>{fmt(monthly.totalPendingHH,1)}</b><small>{monthly.totalPendingCount} OT únicas · incluye Backlog</small></article>
       <article className="target"><span>Meta preventiva semana</span><b>{fmt(target,1)}</b><small>capacidad máxima</small></article>
       <article className="selected"><span>H-H seleccionadas</span><b>{fmt(selectedHH,1)}</b><small>{selected.size} actividades</small></article>
       <article className={remaining<=.01?'complete':'remaining'}><span>Disponible semana</span><b>{fmt(remaining,1)}</b><small>H-H por programar</small></article>
