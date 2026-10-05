@@ -138,6 +138,81 @@ def _monthly_demand(conn, month_date: date, specialty: str, exclude_programming_
     total_hh = round(float(row["pmp_hh"] or 0), 2)
     covered_count = int(row["covered_count_base"] or 0)
     covered_hh = round(float(row["covered_hh_base"] or 0), 2)
+
+    workload = conn.execute(text("""
+        WITH pmp_candidate AS (
+          SELECT
+            o.id AS orden_mantenimiento_id,
+            CASE
+              WHEN p.numero_personas_efectivo IS NOT NULL
+               AND COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min) IS NOT NULL
+              THEN round(COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min)/60.0*p.numero_personas_efectivo,2)
+              ELSE NULL
+            END AS hh,
+            (
+              upper(COALESCE(o.estado,'')) LIKE 'FINALIZ%'
+              OR EXISTS (
+                SELECT 1
+                FROM programacion.programacion_item_v2 pi
+                JOIN programacion.programacion_semanal_v2 ps ON ps.id=pi.programacion_id
+                WHERE pi.orden_mantenimiento_id=o.id
+                  AND (
+                    CAST(:exclude_programming_id AS bigint) IS NULL
+                    OR pi.programacion_id<>CAST(:exclude_programming_id AS bigint)
+                  )
+                  AND (ps.estado<>'CERRADA' OR COALESCE(pi.finalizado,false)=true)
+              )
+            ) AS cubierta
+          FROM programacion.orden_mantenimiento o
+          JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
+          WHERE o.especialidad=:specialty
+            AND o.periodo=:period
+            AND NOT COALESCE(p.es_operacion,false)
+        ),
+        pmp_pending AS (
+          SELECT orden_mantenimiento_id,hh
+          FROM pmp_candidate
+          WHERE NOT cubierta
+        ),
+        backlog_pending AS (
+          SELECT DISTINCT
+            o.id AS orden_mantenimiento_id,
+            CASE
+              WHEN p.numero_personas_efectivo IS NOT NULL
+               AND COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min) IS NOT NULL
+              THEN round(COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min)/60.0*p.numero_personas_efectivo,2)
+              ELSE NULL
+            END AS hh
+          FROM programacion.backlog_v2 b
+          JOIN programacion.orden_mantenimiento o ON o.id=b.orden_mantenimiento_id
+          JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
+          WHERE b.estado_seguimiento='PENDIENTE_DISPONIBLE'
+            AND b.especialidad=:specialty
+            AND upper(COALESCE(o.estado,'')) NOT LIKE 'FINALIZ%'
+            AND NOT COALESCE(p.es_operacion,false)
+        ),
+        all_pending AS (
+          SELECT orden_mantenimiento_id,max(hh) AS hh
+          FROM (
+            SELECT * FROM pmp_pending
+            UNION ALL
+            SELECT * FROM backlog_pending
+          ) x
+          GROUP BY orden_mantenimiento_id
+        )
+        SELECT
+          (SELECT count(*) FROM backlog_pending)::int AS backlog_available_count_base,
+          round(COALESCE((SELECT sum(hh) FROM backlog_pending),0),2) AS backlog_available_hh_base,
+          count(*)::int AS total_pending_count_base,
+          round(COALESCE(sum(hh),0),2) AS total_pending_hh_base,
+          count(*) FILTER (WHERE hh IS NULL)::int AS total_missing_hh_count
+        FROM all_pending
+    """), {
+        "period": period,
+        "specialty": specialty,
+        "exclude_programming_id": exclude_programming_id,
+    }).mappings().one()
+
     return {
         "period": period.isoformat(),
         "pmp_count": total_count,
@@ -147,6 +222,11 @@ def _monthly_demand(conn, month_date: date, specialty: str, exclude_programming_
         "covered_hh_base": min(total_hh, covered_hh),
         "pending_count_base": max(0, total_count-covered_count),
         "pending_hh_base": round(max(0.0, total_hh-covered_hh), 2),
+        "backlog_available_count_base": int(workload["backlog_available_count_base"] or 0),
+        "backlog_available_hh_base": round(float(workload["backlog_available_hh_base"] or 0),2),
+        "total_pending_count_base": int(workload["total_pending_count_base"] or 0),
+        "total_pending_hh_base": round(float(workload["total_pending_hh_base"] or 0),2),
+        "total_missing_hh_count": int(workload["total_missing_hh_count"] or 0),
     }
 
 
