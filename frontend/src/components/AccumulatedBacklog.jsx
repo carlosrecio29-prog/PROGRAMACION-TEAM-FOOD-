@@ -158,6 +158,14 @@ export default function AccumulatedBacklog({
           <b>{number(summary.pendientes_activas)}</b>
           <small>requieren nueva programación o cierre</small>
         </div>
+        <div className="hours">
+          <span>H-H Backlog activo</span>
+          <b>{fmt(summary.hh_backlog_activo)}</b>
+          <small>
+            solo OT activas de Backlog
+            {number(summary.backlog_sin_hh) > 0 ? ` · ${number(summary.backlog_sin_hh)} sin H-H calculables` : ""}
+          </small>
+        </div>
       </section>
 
       <section className="v2-panel">
