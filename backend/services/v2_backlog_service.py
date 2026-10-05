@@ -84,12 +84,35 @@ def get_accumulated_backlog(
         summary = conn.execute(text("""
             SELECT
               count(*) AS movidas,
-              count(*) FILTER (WHERE estado_seguimiento='FINALIZADA') AS finalizadas_por_ingeniero,
-              count(*) FILTER (WHERE estado_seguimiento<>'FINALIZADA') AS pendientes_activas,
+              count(*) FILTER (WHERE b.estado_seguimiento='FINALIZADA') AS finalizadas_por_ingeniero,
               count(*) FILTER (
-                WHERE estado_seguimiento<>'FINALIZADA'
-                  AND upper(COALESCE(motivo,'')) LIKE 'ARRASTRE INICIAL%'
-              ) AS carga_inicial
-            FROM programacion.backlog_v2
+                WHERE b.estado_seguimiento<>'FINALIZADA'
+                  AND COALESCE(p.es_operacion,false)=false
+              ) AS pendientes_activas,
+              count(*) FILTER (
+                WHERE b.estado_seguimiento<>'FINALIZADA'
+                  AND upper(COALESCE(b.motivo,'')) LIKE 'ARRASTRE INICIAL%'
+                  AND COALESCE(p.es_operacion,false)=false
+              ) AS carga_inicial,
+              round(COALESCE(sum(
+                COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min)/60.0
+                * p.numero_personas_efectivo
+              ) FILTER (
+                WHERE b.estado_seguimiento<>'FINALIZADA'
+                  AND COALESCE(p.es_operacion,false)=false
+                  AND p.numero_personas_efectivo IS NOT NULL
+                  AND COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min) IS NOT NULL
+              ),0),2) AS hh_backlog_activo,
+              count(*) FILTER (
+                WHERE b.estado_seguimiento<>'FINALIZADA'
+                  AND COALESCE(p.es_operacion,false)=false
+                  AND (
+                    p.numero_personas_efectivo IS NULL
+                    OR COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min) IS NULL
+                  )
+              ) AS backlog_sin_hh
+            FROM programacion.backlog_v2 b
+            JOIN programacion.orden_mantenimiento o ON o.id=b.orden_mantenimiento_id
+            LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
         """)).mappings().one()
     return {"rows": rows, "summary": dict(summary)}
