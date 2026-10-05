@@ -117,10 +117,76 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
             ORDER BY c.area_codigo
         """)).mappings()]
 
+        workload=conn.execute(text("""
+            WITH pmp_candidate AS (
+              SELECT
+                o.id AS orden_mantenimiento_id,
+                CASE
+                  WHEN p.numero_personas_efectivo IS NOT NULL
+                   AND COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min) IS NOT NULL
+                  THEN round(COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min)/60.0*p.numero_personas_efectivo,2)
+                  ELSE NULL
+                END AS hh,
+                (
+                  upper(COALESCE(o.estado,'')) LIKE 'FINALIZ%'
+                  OR EXISTS (
+                    SELECT 1
+                    FROM programacion.programacion_item_v2 pi
+                    JOIN programacion.programacion_semanal_v2 ps ON ps.id=pi.programacion_id
+                    WHERE pi.orden_mantenimiento_id=o.id
+                      AND (ps.estado<>'CERRADA' OR COALESCE(pi.finalizado,false)=true)
+                  )
+                ) AS cubierta
+              FROM programacion.orden_mantenimiento o
+              LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
+              WHERE o.periodo=:period AND COALESCE(p.es_operacion,false)=false
+            ),
+            pmp_pending AS (
+              SELECT orden_mantenimiento_id,hh
+              FROM pmp_candidate
+              WHERE NOT cubierta
+            ),
+            backlog_pending AS (
+              SELECT DISTINCT
+                o.id AS orden_mantenimiento_id,
+                CASE
+                  WHEN p.numero_personas_efectivo IS NOT NULL
+                   AND COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min) IS NOT NULL
+                  THEN round(COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min)/60.0*p.numero_personas_efectivo,2)
+                  ELSE NULL
+                END AS hh
+              FROM programacion.backlog_v2 b
+              JOIN programacion.orden_mantenimiento o ON o.id=b.orden_mantenimiento_id
+              LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
+              WHERE b.estado_seguimiento='PENDIENTE_DISPONIBLE'
+                AND upper(COALESCE(o.estado,'')) NOT LIKE 'FINALIZ%'
+                AND COALESCE(p.es_operacion,false)=false
+            ),
+            all_pending AS (
+              SELECT orden_mantenimiento_id,max(hh) AS hh
+              FROM (
+                SELECT * FROM pmp_pending
+                UNION ALL
+                SELECT * FROM backlog_pending
+              ) x
+              GROUP BY orden_mantenimiento_id
+            )
+            SELECT
+              (SELECT count(*) FROM pmp_pending)::int AS pmp_pending_count,
+              round(COALESCE((SELECT sum(hh) FROM pmp_pending),0),2) AS pmp_pending_hh,
+              (SELECT count(*) FROM backlog_pending)::int AS backlog_available_count,
+              round(COALESCE((SELECT sum(hh) FROM backlog_pending),0),2) AS backlog_available_hh,
+              count(*)::int AS total_pending_count,
+              round(COALESCE(sum(hh),0),2) AS total_pending_hh,
+              count(*) FILTER (WHERE hh IS NULL)::int AS total_missing_hh_count
+            FROM all_pending
+        """),{"period":period}).mappings().one()
+
     return {
         "periodo":str(period),
         "summary":dict(summary),
         "pending":dict(pending),
+        "workload":dict(workload),
         "specialties":specialties,
         "areas":areas,
     }
