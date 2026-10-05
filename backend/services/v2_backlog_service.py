@@ -68,7 +68,7 @@ def get_accumulated_backlog(
                    b.semana_origen_inicio,b.semana_origen_fin,b.primera_semana_origen_inicio,
                    b.primera_semana_origen_fin,b.movido_en,b.ultimo_resultado_cierre,b.ultimo_cierre_en,
                    b.reprogramaciones,b.finalizado_en,b.finalizado_por,
-                   o.numero_ot,a.codigo AS activo_codigo,a.descripcion AS activo_descripcion,a.area_codigo,
+                   o.numero_ot,o.periodo AS periodo_origen,a.codigo AS activo_codigo,a.descripcion AS activo_descripcion,a.area_codigo,
                    p.plan_trabajo,p.descripcion_grupo,
                    round(COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min)/60.0*p.numero_personas_efectivo,2) AS hh,
                    GREATEST(0,CURRENT_DATE-COALESCE(b.primera_semana_origen_inicio,b.semana_origen_inicio)) AS antiguedad_dias
@@ -84,7 +84,11 @@ def get_accumulated_backlog(
             SELECT
               count(*) AS movidas,
               count(*) FILTER (WHERE estado_seguimiento='FINALIZADA') AS finalizadas_por_ingeniero,
-              count(*) FILTER (WHERE estado_seguimiento<>'FINALIZADA') AS pendientes_activas
+              count(*) FILTER (WHERE estado_seguimiento<>'FINALIZADA') AS pendientes_activas,
+              count(*) FILTER (
+                WHERE estado_seguimiento<>'FINALIZADA'
+                  AND upper(COALESCE(motivo,'')) LIKE 'ARRASTRE INICIAL%'
+              ) AS carga_inicial
             FROM programacion.backlog_v2
         """)).mappings().one()
     return {"rows": rows, "summary": dict(summary)}

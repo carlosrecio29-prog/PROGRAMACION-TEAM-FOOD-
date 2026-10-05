@@ -111,10 +111,12 @@ def preview_week_closure(*, programming_id: int, content: bytes) -> dict[str, An
             raise V2ClosureError("Programación semanal no encontrada")
         items = conn.execute(text("""
             SELECT pi.id AS item_id,pi.orden_mantenimiento_id,o.numero_ot,o.especialidad,
-                   a.codigo AS activo_codigo,o.plan_clave_software,pi.hh_programadas
+                   a.codigo AS activo_codigo,a.area_codigo,root.descripcion AS area_nombre,
+                   o.plan_clave_software,pi.hh_programadas
             FROM programacion.programacion_item_v2 pi
             JOIN programacion.orden_mantenimiento o ON o.id=pi.orden_mantenimiento_id
             JOIN programacion.activo a ON a.id=o.activo_id
+            LEFT JOIN programacion.activo root ON root.codigo='BA-'||a.area_codigo
             WHERE pi.programacion_id=:id ORDER BY pi.id
         """), {"id": programming_id}).mappings().all()
     summary = {"programmed": len(items), "finalized": 0, "pending": 0,
@@ -148,6 +150,7 @@ def preview_week_closure(*, programming_id: int, content: bytes) -> dict[str, An
             "programacion_item_id": int(item["item_id"]),
             "orden_mantenimiento_id": int(item["orden_mantenimiento_id"]),
             "numero_ot": item["numero_ot"], "activo": item["activo_codigo"],
+            "area_codigo": item["area_codigo"], "area_nombre": item["area_nombre"],
             "plan": item["plan_clave_software"], "hh": hh,
             "estado_excel": state or ("SIN ESTADO" if match else None),
             "finalizado": finalized, "coincidencia": reason,

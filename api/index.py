@@ -43,6 +43,10 @@ from backend.services.v2_closure_service import (
     V2ClosureError, get_week_closure, close_week_from_calendar, preview_week_closure,
 )
 from backend.services.v2_backlog_service import get_accumulated_backlog
+from backend.services.v2_backlog_bootstrap_service import bootstrap_initial_backlog
+from backend.services.v2_week_tracking_service import (
+    V2WeeklyTrackingError, get_week_tracking, record_week_tracking,
+)
 from backend.services.v2_operation_exclusion_service import get_operation_exclusions
 from backend.services.v2_progress_service import get_progress, export_progress_pdf
 from backend.services.v2_monthly_close_service import (
@@ -332,6 +336,53 @@ def v2_backlog(
         raise HTTPException(422,str(exc)) from exc
     except SQLAlchemyError as exc:
         raise HTTPException(503,"La base V2 no tiene aplicada la migración activa de backlog") from exc
+
+@app.post("/api/v2/backlog/bootstrap")
+async def v2_bootstrap_backlog(
+    file:UploadFile=File(...),
+    year:int=Query(...,ge=2020,le=2100),
+    month:int=Query(...,ge=1,le=12),
+    moved_by:str|None=Query(None),
+):
+    try:
+        return bootstrap_initial_backlog(
+            content=await read_upload(file),
+            filename=file.filename or "lista_calendario.xlsx",
+            year=year,
+            month=month,
+            moved_by=moved_by,
+        )
+    except ValueError as exc:
+        raise HTTPException(422,str(exc)) from exc
+    except SQLAlchemyError as exc:
+        raise HTTPException(503,"No se pudo construir el backlog inicial") from exc
+
+@app.get("/api/v2/programming/{programming_id}/tracking")
+def v2_week_tracking(programming_id:int):
+    try:
+        return get_week_tracking(programming_id)
+    except V2WeeklyTrackingError as exc:
+        raise HTTPException(404,str(exc)) from exc
+    except SQLAlchemyError as exc:
+        raise HTTPException(503,"No se pudo consultar el seguimiento semanal") from exc
+
+@app.post("/api/v2/programming/{programming_id}/tracking-file")
+async def v2_record_week_tracking(
+    programming_id:int,
+    file:UploadFile=File(...),
+    recorded_by:str|None=Query(None),
+):
+    try:
+        return record_week_tracking(
+            programming_id=programming_id,
+            content=await read_upload(file),
+            filename=file.filename or "lista_calendario.xlsx",
+            recorded_by=recorded_by,
+        )
+    except V2WeeklyTrackingError as exc:
+        raise HTTPException(422,str(exc)) from exc
+    except SQLAlchemyError as exc:
+        raise HTTPException(503,"No se pudo guardar el seguimiento semanal") from exc
 
 @app.get("/api/v2/programming/{programming_id}/closure")
 def v2_week_closure(programming_id:int):
