@@ -203,7 +203,7 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
 .v2-control-status small{display:block;color:var(--muted);font-size:8px;margin-top:3px;line-height:1.4}
 
 .v2-control-primary{
-  display:grid;grid-template-columns:repeat(3,1fr);background:#fff;border:1px solid var(--line);
+  display:grid;grid-template-columns:repeat(4,1fr);background:#fff;border:1px solid var(--line);
   border-radius:15px;box-shadow:0 8px 24px #18304d0b;overflow:hidden
 }
 .v2-control-primary article{
@@ -221,6 +221,14 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
 }
 .v2-control-primary strong{display:block;font-size:29px;line-height:1;margin:8px 0 5px;color:#12243b}
 .v2-control-primary small{display:block;font-size:8px;color:var(--muted)}
+.v2-control-primary article.workload{
+  background:linear-gradient(145deg,#fff9e7,#fffdf7);
+}
+.v2-control-primary article.workload .v2-control-icon{
+  background:#fff0bd;color:#a77900;
+}
+.v2-control-primary article.workload strong{color:#765300}
+
 
 .v2-control-body{display:grid;grid-template-columns:minmax(320px,.82fr) minmax(0,1.18fr);gap:14px}
 .v2-control-overview,.v2-control-shortcuts{
@@ -2442,12 +2450,18 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
 }
 .tf-program-actions button:disabled,.tf-save-strip-actions button:disabled{opacity:.45;cursor:not-allowed}
 
-.tf-key-kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:7px}
+.tf-key-kpis{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:7px}
 .tf-key-kpis article{
   min-width:0;padding:10px 11px;border:1px solid #dce8e1;border-top:3px solid #009b5a;
   border-radius:10px;background:#fff
 }
 .tf-key-kpis article.pending,.tf-key-kpis article.remaining{border-top-color:#f4c20d;background:#fffdf5}
+.tf-key-kpis article.workload{
+  border-top-color:#c58a00;
+  background:linear-gradient(145deg,#fff4cf,#fffdf5);
+}
+.tf-key-kpis article.workload b{color:#735200}
+
 .tf-key-kpis article.target{border-top-color:#d5aa00;background:#fffae7}
 .tf-key-kpis article.selected,.tf-key-kpis article.complete{border-top-color:#55c42f;background:#f5fbf7}
 .tf-key-kpis span{
