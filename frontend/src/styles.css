@@ -2720,6 +2720,13 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
 .v2-control-primary-3 article.workload{
   background:linear-gradient(145deg,#ffffff,#f7fbfd);
 }
+.v2-control-primary-3 article.workload .v2-control-icon{
+  background:#eaf4fb;
+  color:#168ec9;
+}
+.v2-control-primary-3 article.workload strong{
+  color:#17324c;
+}
 
 .v2-control-body-main{
   grid-template-columns:minmax(0,1.55fr) minmax(310px,.65fr);
