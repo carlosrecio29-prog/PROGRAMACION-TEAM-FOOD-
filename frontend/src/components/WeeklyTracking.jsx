@@ -15,6 +15,19 @@ const SPEC_NAMES = {
   SER: "Servicios",
 };
 const SPECS = ["MEC", "ELE", "MET", "SER"];
+const UNPLANNED_ORIGIN_LABELS = {
+  PMP_NO_PROGRAMADO: "PMP NO PROGRAMADO",
+  BACKLOG_NO_PROGRAMADO: "BACKLOG NO PROGRAMADO",
+  PROGRAMADA_OTRA_SEMANA: "PROGRAMADA OTRA SEMANA",
+  EMERGENTE_NO_PLANIFICADA: "EMERGENTE / NO PLANIFICADA",
+};
+
+function unplannedOriginTone(origin) {
+  if (origin === "BACKLOG_NO_PROGRAMADO") return "backlog";
+  if (origin === "PROGRAMADA_OTRA_SEMANA") return "warn";
+  if (origin === "EMERGENTE_NO_PLANIFICADA") return "stop";
+  return undefined;
+}
 
 function number(value) {
   const parsed = Number(value);
@@ -104,7 +117,7 @@ export default function WeeklyTracking({ year, month, onOpenClosure }) {
       setFile(null);
       const saved = result.saved || {};
       setMessage(
-        `Avance registrado sin cerrar la semana: ${number(saved.finalizadas)} finalizadas · ${fmt(saved.avance_ot_pct)}% por OT · ${fmt(saved.avance_hh_pct)}% por H-H.`,
+        `Avance registrado sin cerrar la semana: ${number(saved.finalizadas)} finalizadas programadas · ${number(saved.no_programadas_nuevas)} no programadas nuevas · ${fmt(saved.avance_ot_pct)}% por OT · ${fmt(saved.avance_hh_pct)}% por H-H.`,
       );
     } catch (cause) {
       setError(cause.message || "No se pudo registrar el avance semanal.");
@@ -123,6 +136,9 @@ export default function WeeklyTracking({ year, month, onOpenClosure }) {
   const otPct = number(latest?.avance_ot_pct);
   const hhPct = number(latest?.avance_hh_pct);
   const liveRows = tracking?.rows || [];
+  const unplanned = tracking?.unplanned || {};
+  const unplannedSummary = unplanned.summary || {};
+  const unplannedRows = unplanned.rows || [];
   const areas = useMemo(() => {
     const unique = new Map();
     liveRows.forEach((row) => {
@@ -223,8 +239,9 @@ export default function WeeklyTracking({ year, month, onOpenClosure }) {
                 <span className="v2-kicker">NUEVA FOTOGRAFÍA DE AVANCE</span>
                 <h3>Cargar Lista de Calendario actualizada</h3>
                 <p>
-                  Detectaremos únicamente el estado de las OT programadas. Este proceso
-                  no cambia estados definitivos, no mueve OT a Backlog y no realiza el cierre.
+                  Validaremos las OT programadas y, sin modificar la línea base, también
+                  identificaremos las OT finalizadas dentro de este corte que no estaban programadas.
+                  Este proceso no mueve OT a Backlog y no realiza el cierre.
                 </p>
               </div>
               <div className="weekly-tracking-upload-actions">
@@ -255,6 +272,92 @@ export default function WeeklyTracking({ year, month, onOpenClosure }) {
             <article className={unmatched ? "warn" : "ok"}><span>Sin coincidencia</span><b>{unmatched}</b><small>revisar antes del cierre</small></article>
             <article><span>Avance por H-H</span><b>{fmt(hhPct)}%</b><small>{fmt(latest?.hh_finalizadas)} / {fmt(latest?.hh_programadas)} H-H</small></article>
             <article><span>Última actualización</span><b className="tracking-date">{latest ? when(latest.registrado_en) : "—"}</b><small>{latest?.archivo_nombre || "Aún sin carga"}</small></article>
+          </section>
+
+          <section className="v2-panel weekly-tracking-unplanned">
+            <div className="v2-section-head">
+              <div>
+                <span className="v2-kicker">EJECUCIÓN NO PROGRAMADA</span>
+                <h3>OT finalizadas fuera de la programación semanal</h3>
+                <p>
+                  Se muestran únicamente OT finalizadas cuya FechaFinOrden cae dentro del corte
+                  {week ? ` ${week.from} al ${week.to}` : ""}. Estas OT se controlan aparte y
+                  no alteran el cumplimiento de la programación original.
+                </p>
+              </div>
+              <Badge tone={number(unplannedSummary.nuevas_ultima_carga) ? "warn" : undefined}>
+                {number(unplannedSummary.total)} OT acumuladas
+              </Badge>
+            </div>
+
+            <div className="weekly-tracking-unplanned-kpis">
+              <article>
+                <span>No programadas semana</span>
+                <b>{number(unplannedSummary.total)}</b>
+                <small>ejecución adicional acumulada</small>
+              </article>
+              <article className={number(unplannedSummary.nuevas_ultima_carga) ? "new" : ""}>
+                <span>Nuevas última carga</span>
+                <b>{number(unplannedSummary.nuevas_ultima_carga)}</b>
+                <small>detectadas por primera vez hoy</small>
+              </article>
+              <article>
+                <span>H-H estimadas</span>
+                <b>{fmt(unplannedSummary.hh_estimada)}</b>
+                <small>cuando el PMP permite calcularlas</small>
+              </article>
+              <article>
+                <span>% ejecución no programada</span>
+                <b>{fmt(unplannedSummary.participacion_pct)}%</b>
+                <small>sobre OT finalizadas detectadas</small>
+              </article>
+            </div>
+
+            <div className="v2-table-wrap weekly-tracking-unplanned-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Fecha fin</th>
+                    <th>OT</th>
+                    <th>Área</th>
+                    <th>Equipo</th>
+                    <th>Plan de trabajo</th>
+                    <th>Origen</th>
+                    <th>H-H</th>
+                    <th>Primera detección</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {unplannedRows.map((row) => (
+                    <tr key={row.id} className={row.nueva_ultima_carga ? "unplanned-new" : ""}>
+                      <td><b>{when(row.fecha_fin_orden)}</b></td>
+                      <td>
+                        <b>{row.numero_ot || "—"}</b>
+                        {row.nueva_ultima_carga && <small><Badge tone="warn">NUEVA</Badge></small>}
+                      </td>
+                      <td><Badge>{row.area_codigo || "—"}</Badge><small>{row.area_nombre || ""}</small></td>
+                      <td><b>{row.activo_codigo || "—"}</b><small>{row.activo_descripcion || ""}</small></td>
+                      <td><span className="v2-plan">{row.plan_trabajo || "—"}</span></td>
+                      <td>
+                        <Badge tone={unplannedOriginTone(row.origen)}>
+                          {UNPLANNED_ORIGIN_LABELS[row.origen] || row.origen || "SIN CLASIFICAR"}
+                        </Badge>
+                        <small>{row.detalle_origen || ""}</small>
+                      </td>
+                      <td><b>{fmt(row.hh_estimada)}</b></td>
+                      <td><span>{when(row.primera_deteccion_en)}</span></td>
+                    </tr>
+                  ))}
+                  {!unplannedRows.length && (
+                    <tr>
+                      <td colSpan="8" className="v2-empty">
+                        No se han detectado OT finalizadas fuera de la programación para esta semana.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </section>
 
           <section className="v2-panel weekly-tracking-board">
