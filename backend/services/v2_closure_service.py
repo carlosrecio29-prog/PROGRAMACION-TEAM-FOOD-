@@ -46,6 +46,20 @@ def _parse_calendar(content: bytes) -> list[dict[str, str]]:
             "activo": activo,
             "plan": plan,
             "estado": estado,
+            # Campos opcionales usados por el seguimiento diario de ejecución real.
+            # No intervienen en la conciliación/cierre semanal existente.
+            "fecha_fin_orden": _scalar(cell_by_header(
+                row, mapping, "FechaFinOrden", "Fecha Fin Orden", "Fecha Fin de Orden"
+            )),
+            "especialidad": _scalar(cell_by_header(row, mapping, "Especialidad")),
+            "titulo": _scalar(cell_by_header(row, mapping, "Título", "Titulo")),
+            "descripcion_activo": _scalar(cell_by_header(
+                row, mapping, "DescripcionActivo", "Descripción Activo", "Descripcion Activo"
+            )),
+            "tiempo_planeado": _scalar(cell_by_header(
+                row, mapping, "TiempoPlaneado", "Tiempo Planeado"
+            )),
+            "orden_tipo": _scalar(cell_by_header(row, mapping, "OrdenTipo", "Orden Tipo")),
         })
     if not rows:
         raise V2ClosureError("El archivo no contiene registros de calendario/PMP reconocibles")
