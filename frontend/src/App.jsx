@@ -96,11 +96,16 @@ function ControlIcon({ type }) {
 
 function Summary({ data, onNavigate, year, month }) {
   const s = data?.summary || {};
-  const p = data?.pending || {};
   const workload = data?.workload || {};
+  const progress = data?.tracking_progress || {};
   const ready = number(s.registros_listos);
   const total = number(s.registros_pmp);
-  const readyPct = total > 0 ? Math.round((ready / total) * 100) : 0;
+  const progressPct = Math.max(0, Math.min(100, number(progress.progress_pct)));
+  const finalizedOrders = number(progress.finalized_orders);
+  const totalOrders = number(progress.total_orders);
+  const pendingOrders = Math.max(0, number(progress.pending_orders));
+  const pmpOrders = number(progress.pmp_orders);
+  const backlogOrders = number(progress.backlog_orders);
 
   const quickActions = [
     {
@@ -124,24 +129,8 @@ function Summary({ data, onNavigate, year, month }) {
     {
       id: "tracking",
       title: "Seguimiento de programación",
-      text: "Actualizar el avance semanal antes del cierre",
+      text: "Actualizar avance y detectar órdenes finalizadas",
       icon: "report",
-    },
-    {
-      id: "programClose",
-      title: "Cierre de programa",
-      text: "Formalizar resultados de la semana o del período",
-      icon: "check",
-      options: [
-        { id: "closure", label: "Cierre semanal" },
-        { id: "monthly", label: "Cierre mensual" },
-      ],
-    },
-    {
-      id: "indicators",
-      title: "Indicadores de seguimiento",
-      text: "Avance, tendencia y análisis del período",
-      icon: "bars",
     },
   ];
 
@@ -187,87 +176,91 @@ function Summary({ data, onNavigate, year, month }) {
 
           <div className="v2-control-action-list v2-control-action-list-main">
             {quickActions.map((action, index) => (
-              action.options ? (
-                <article className="v2-control-action-card v2-control-action-close" key={action.id}>
-                  <div className="v2-control-action-main">
-                    <span className="v2-control-action-step">{String(index + 1).padStart(2, "0")}</span>
-                    <span className="v2-control-action-icon"><ControlIcon type={action.icon} /></span>
-                    <span className="v2-control-action-copy">
-                      <b>{action.title}</b>
-                      <small>{action.text}</small>
-                    </span>
-                  </div>
-                  <div className="v2-control-close-options">
-                    {action.options.map((option) => (
-                      <button
-                        type="button"
-                        key={option.id}
-                        onClick={() => onNavigate(option.id)}
-                      >
-                        <span>{option.label}</span>
-                        <b>→</b>
-                      </button>
-                    ))}
-                  </div>
-                </article>
-              ) : (
-                <button
-                  type="button"
-                  key={action.id}
-                  className="v2-control-action-button"
-                  onClick={() => onNavigate(action.id)}
-                >
-                  <span className="v2-control-action-step">{String(index + 1).padStart(2, "0")}</span>
-                  <span className="v2-control-action-icon"><ControlIcon type={action.icon} /></span>
-                  <span className="v2-control-action-copy">
-                    <b>{action.title}</b>
-                    <small>{action.text}</small>
-                  </span>
-                  <span className="v2-control-arrow">→</span>
-                </button>
-              )
+              <button
+                type="button"
+                key={action.id}
+                className="v2-control-action-button"
+                onClick={() => onNavigate(action.id)}
+              >
+                <span className="v2-control-action-step">{String(index + 1).padStart(2, "0")}</span>
+                <span className="v2-control-action-icon"><ControlIcon type={action.icon} /></span>
+                <span className="v2-control-action-copy">
+                  <b>{action.title}</b>
+                  <small>{action.text}</small>
+                </span>
+                <span className="v2-control-arrow">→</span>
+              </button>
             ))}
+
+            <article className="v2-control-action-card v2-control-action-close v2-control-action-close-wide">
+              <div className="v2-control-action-main">
+                <span className="v2-control-action-step">05</span>
+                <span className="v2-control-action-icon"><ControlIcon type="check" /></span>
+                <span className="v2-control-action-copy">
+                  <b>Cierre de programa</b>
+                  <small>Formalizar el resultado semanal o consolidar el período completo</small>
+                </span>
+              </div>
+              <div className="v2-control-close-options">
+                <button type="button" onClick={() => onNavigate("closure")}>
+                  <span>Cierre semanal</span>
+                  <b>→</b>
+                </button>
+                <button type="button" onClick={() => onNavigate("monthly")}>
+                  <span>Cierre mensual</span>
+                  <b>→</b>
+                </button>
+              </div>
+            </article>
           </div>
         </div>
 
-        <div className="v2-control-overview">
-          <div className="v2-control-panel-head">
+        <button
+          type="button"
+          className="v2-dashboard-progress-card"
+          onClick={() => onNavigate("indicators")}
+          aria-label="Abrir Indicadores y seguimiento"
+        >
+          <div className="v2-dashboard-progress-head">
             <div>
-              <span className="v2-kicker">ESTADO OPERATIVO</span>
-              <h3>Preparación del período</h3>
+              <span className="v2-kicker">AVANCE GENERAL</span>
+              <h3>Indicadores y seguimiento</h3>
             </div>
-            <b>{readyPct}% listo</b>
+            <span className="v2-dashboard-progress-arrow">→</span>
           </div>
-          <div className="v2-control-progress">
-            <i style={{ width: `${Math.min(100, readyPct)}%` }} />
+
+          <div className="v2-dashboard-progress-main">
+            <div
+              className="v2-dashboard-progress-ring"
+              style={{ "--progress-angle": `${progressPct * 3.6}deg` }}
+            >
+              <div>
+                <strong>{fmt(progressPct, 1)}%</strong>
+                <span>completado</span>
+              </div>
+            </div>
+
+            <div className="v2-dashboard-progress-copy">
+              <strong>{finalizedOrders} de {totalOrders}</strong>
+              <span>órdenes finalizadas</span>
+              <small>
+                El avance aumenta con las OT detectadas como finalizadas en cada seguimiento
+                y conserva los cierres ya realizados.
+              </small>
+            </div>
           </div>
-          <div className="v2-control-mini-grid">
-            <button type="button" onClick={() => onNavigate("pmp")}>
-              <ControlIcon type="check" />
-              <span>Registros PMP listos</span>
-              <strong>{number(s.registros_listos)}</strong>
-            </button>
-            <button type="button" onClick={() => onNavigate("pending")}>
-              <ControlIcon type="alert" />
-              <span>Planes pendientes</span>
-              <strong>{number(p.planes_pendientes)}</strong>
-            </button>
-            <button type="button" onClick={() => onNavigate("pending")}>
-              <ControlIcon type="team" />
-              <span>Sin Nº personas</span>
-              <strong>{number(p.planes_sin_personas)}</strong>
-            </button>
-            <button type="button" onClick={() => onNavigate("technicians")}>
-              <ControlIcon type="team" />
-              <span>Técnicos sin especialidad</span>
-              <strong>{number(s.tecnicos_sin_especialidad)}</strong>
-            </button>
+
+          <div className="v2-dashboard-progress-stats">
+            <span><b>{finalizedOrders}</b><small>Finalizadas</small></span>
+            <span><b>{pendingOrders}</b><small>Pendientes</small></span>
+            <span><b>{totalOrders}</b><small>Total programa</small></span>
           </div>
-          <div className="v2-control-operation-note">
-            <b>{number(s.planes_operacion)}</b> planes OPERACIÓN excluidos ·
-            <b> {number(s.registros_operacion_excluidos)}</b> registros fuera del PMP de mantenimiento.
+
+          <div className="v2-dashboard-progress-source">
+            <span><b>{pmpOrders}</b> PMP del mes</span>
+            <span><b>{backlogOrders}</b> Backlog</span>
           </div>
-        </div>
+        </button>
       </section>
     </div>
   );
