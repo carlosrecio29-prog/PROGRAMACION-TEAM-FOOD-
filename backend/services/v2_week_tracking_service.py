@@ -10,6 +10,7 @@ from typing import Any
 from sqlalchemy import text
 
 from backend.database import get_engine
+from backend.parsers.common import is_operation_plan
 from backend.services.v2_closure_service import (
     V2ClosureError, _is_finalized, _parse_calendar, preview_week_closure,
 )
@@ -74,6 +75,11 @@ def _detect_unplanned_rows(
 
     candidates: dict[str, dict[str, Any]] = {}
     for row in calendar_rows:
+        # La regla OPERACIÓN también aplica al seguimiento de ejecución real.
+        # Se excluye por el texto del calendario antes de clasificar la OT.
+        raw_plan = str(row.get("plan") or "")
+        if is_operation_plan(raw_plan) or is_operation_plan(raw_plan.lstrip(" -–—:._/|")):
+            continue
         ot = _ot_key(row.get("numero_ot"))
         if not ot or ot == "SIN ASIGNAR" or ot in programmed_ots:
             continue
@@ -99,6 +105,7 @@ def _detect_unplanned_rows(
                a.codigo AS activo_codigo,a.descripcion AS activo_descripcion,
                a.area_codigo,root.descripcion AS area_nombre,
                p.plan_trabajo,p.descripcion_grupo,p.numero_personas_efectivo,
+               COALESCE(p.es_operacion,false) AS es_operacion,
                round(
                  COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min)/60.0
                  * COALESCE(p.numero_personas_efectivo,0),2
@@ -127,6 +134,9 @@ def _detect_unplanned_rows(
         ]
         order = (matching_specialty or matches or [None])[0]
         if order and _ot_key(order.get("especialidad")) not in {"", specialty}:
+            continue
+        # Si la OT histórica sí está enlazada al maestro, el maestro manda.
+        if order and bool(order.get("es_operacion")):
             continue
         resolved.append((ot, calendar, order))
         if order:
