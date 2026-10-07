@@ -98,8 +98,9 @@ function Summary({ data, onNavigate, year, month }) {
   const s = data?.summary || {};
   const workload = data?.workload || {};
   const progress = data?.tracking_progress || {};
-  const ready = number(s.registros_listos);
-  const total = number(s.registros_pmp);
+  const pmpPending = number(workload.pmp_pending_count);
+  const backlogAvailable = number(workload.backlog_available_count);
+  const totalToProgram = number(workload.total_pending_count);
   const progressPct = Math.max(0, Math.min(100, number(progress.progress_pct)));
   const finalizedOrders = number(progress.finalized_orders);
   const totalOrders = number(progress.total_orders);
@@ -141,8 +142,8 @@ function Summary({ data, onNavigate, year, month }) {
           <div className="v2-control-icon"><ControlIcon type="report" /></div>
           <div>
             <span>PMP PARA PROGRAMAR</span>
-            <strong>{ready}</strong>
-            <small>{total} PMP cargados en el período</small>
+            <strong>{totalToProgram}</strong>
+            <small>{pmpPending} PMP + {backlogAvailable} Backlog disponibles</small>
           </div>
         </article>
 
