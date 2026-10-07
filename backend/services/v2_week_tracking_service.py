@@ -343,10 +343,29 @@ def get_week_tracking(programming_id: int) -> dict[str, Any]:
                      n.primera_deteccion_en DESC,n.numero_ot
         """), {"id": programming_id, "latest_id": latest_id}).mappings()]
 
+        unplanned_new_by_tracking = {
+            int(row["tracking_id"]): {
+                "cantidad": int(row["cantidad"] or 0),
+                "hh": float(row["hh"] or 0),
+            }
+            for row in conn.execute(text("""
+                SELECT primera_seguimiento_id AS tracking_id,
+                       count(*)::int AS cantidad,
+                       COALESCE(sum(hh_estimada),0) AS hh
+                FROM programacion.seguimiento_no_programado_v2
+                WHERE programacion_id=:id
+                  AND primera_seguimiento_id IS NOT NULL
+                GROUP BY primera_seguimiento_id
+            """), {"id": programming_id}).mappings()
+        }
+
     for row in history:
         for key in ("hh_programadas", "hh_finalizadas", "hh_pendientes",
                     "avance_ot_pct", "avance_hh_pct"):
             row[key] = float(row[key] or 0)
+        daily_unplanned = unplanned_new_by_tracking.get(int(row["id"]), {})
+        row["no_programadas_nuevas"] = int(daily_unplanned.get("cantidad") or 0)
+        row["hh_no_programadas_nuevas"] = round(float(daily_unplanned.get("hh") or 0), 2)
 
     by_origin: dict[str, int] = defaultdict(int)
     for row in unplanned_rows:
