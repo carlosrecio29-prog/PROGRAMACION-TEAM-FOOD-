@@ -108,3 +108,67 @@
   .weekly-tracking-filters{grid-template-columns:1fr}
 }
 
+
+
+/* ---------- Ejecución finalizada no programada ---------- */
+.weekly-tracking-unplanned{
+  padding:16px 18px;
+  border-color:#ead8a6;
+  background:linear-gradient(135deg,#fffdf7,#fff);
+}
+.weekly-tracking-unplanned .v2-section-head{align-items:center}
+.weekly-tracking-unplanned h3{color:#4a3b16}
+.weekly-tracking-unplanned-kpis{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:8px;
+  margin:12px 0;
+}
+.weekly-tracking-unplanned-kpis article{
+  min-width:0;
+  padding:10px 11px;
+  border:1px solid #eadfbe;
+  border-top:3px solid #b98a14;
+  border-radius:10px;
+  background:#fff;
+}
+.weekly-tracking-unplanned-kpis article.new{
+  border-top-color:#d59d12;
+  background:#fff8e6;
+}
+.weekly-tracking-unplanned-kpis span{
+  display:block;
+  color:#786b49;
+  font-size:6.8px;
+  font-weight:950;
+  text-transform:uppercase;
+  letter-spacing:.25px;
+}
+.weekly-tracking-unplanned-kpis b{
+  display:block;
+  margin:5px 0 2px;
+  color:#4a3b16;
+  font-size:19px;
+  line-height:1;
+}
+.weekly-tracking-unplanned-kpis small{
+  display:block;
+  color:#8a8067;
+  font-size:6.8px;
+  line-height:1.25;
+}
+.weekly-tracking-unplanned-table{max-height:360px}
+.weekly-tracking-unplanned-table tr.unplanned-new td:first-child{
+  box-shadow:inset 4px 0 0 #d5a31e;
+}
+.weekly-tracking-unplanned-table td small{
+  display:block;
+  margin-top:3px;
+  line-height:1.25;
+}
+@media(max-width:900px){
+  .weekly-tracking-unplanned-kpis{grid-template-columns:repeat(2,1fr)}
+}
+@media(max-width:520px){
+  .weekly-tracking-unplanned-kpis{grid-template-columns:1fr}
+}
