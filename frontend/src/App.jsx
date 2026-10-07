@@ -110,6 +110,9 @@ function Summary({ data, onNavigate, year, month }) {
   const pmpOrders = number(progress.pmp_orders);
   const backlogOrders = number(progress.backlog_orders);
   const totalWorkloadHh = number(progress.total_workload_hh);
+  const finalizedWorkloadHh = Math.min(totalWorkloadHh, number(progress.finalized_workload_hh));
+  const pendingWorkloadHh = Math.max(0, totalWorkloadHh - finalizedWorkloadHh);
+  const progressHhPct = Math.max(0, Math.min(100, number(progress.progress_hh_pct)));
 
   const quickActions = [
     {
@@ -241,30 +244,50 @@ function Summary({ data, onNavigate, year, month }) {
             <span className="v2-dashboard-progress-arrow">→</span>
           </div>
 
-          <div className="v2-dashboard-progress-main">
-            <div
-              className="v2-dashboard-progress-ring"
-              style={{ "--progress-angle": `${progressPct * 3.6}deg` }}
-            >
-              <div>
-                <strong>{fmt(progressPct, 1)}%</strong>
-                <span>completado</span>
+          <div className="v2-dashboard-progress-dual">
+            <div className="v2-dashboard-progress-unit">
+              <div
+                className="v2-dashboard-progress-ring"
+                style={{ "--progress-angle": `${progressPct * 3.6}deg` }}
+              >
+                <div>
+                  <strong>{fmt(progressPct, 1)}%</strong>
+                  <span>avance OT</span>
+                </div>
+              </div>
+              <div className="v2-dashboard-progress-unit-copy">
+                <strong>{finalizedOrders} de {totalOrders}</strong>
+                <small>órdenes finalizadas</small>
               </div>
             </div>
 
-            <div className="v2-dashboard-progress-copy">
-              <strong>{finalizedOrders} de {totalOrders}</strong>
-              <span>órdenes finalizadas</span>
-              <small>
-                Incluye {scheduledFinalizedOrders} finalizadas desde programación y {unplannedFinalizedOrders} finalizadas fuera de programación.
-              </small>
+            <div className="v2-dashboard-progress-unit">
+              <div
+                className="v2-dashboard-progress-ring v2-dashboard-progress-ring-hh"
+                style={{ "--progress-angle": `${progressHhPct * 3.6}deg` }}
+              >
+                <div>
+                  <strong>{fmt(progressHhPct, 1)}%</strong>
+                  <span>avance H-H</span>
+                </div>
+              </div>
+              <div className="v2-dashboard-progress-unit-copy">
+                <strong>{fmt(finalizedWorkloadHh, 1)} de {fmt(totalWorkloadHh, 1)}</strong>
+                <small>H-H finalizadas del mes</small>
+              </div>
             </div>
           </div>
 
           <div className="v2-dashboard-progress-stats">
-            <span><b>{finalizedOrders}</b><small>Finalizadas totales</small></span>
-            <span><b>{pendingOrders}</b><small>Pendientes</small></span>
-            <span><b>{totalOrders}</b><small>Total controlado</small></span>
+            <span><b>{finalizedOrders}</b><small>OT finalizadas</small></span>
+            <span><b>{pendingOrders}</b><small>OT pendientes</small></span>
+            <span><b>{totalOrders}</b><small>Total OT</small></span>
+          </div>
+
+          <div className="v2-dashboard-progress-stats v2-dashboard-progress-stats-hh">
+            <span><b>{fmt(finalizedWorkloadHh, 1)}</b><small>H-H finalizadas</small></span>
+            <span><b>{fmt(pendingWorkloadHh, 1)}</b><small>H-H pendientes</small></span>
+            <span><b>{fmt(totalWorkloadHh, 1)}</b><small>Total H-H mes</small></span>
           </div>
 
           <div className="v2-dashboard-progress-source">
@@ -283,11 +306,6 @@ function IndicatorsTracking({ data, year, month, onGoMonthly, onGoClosure, onTra
   const s = data?.summary || {};
   const specialties = data?.specialties || [];
   const totalHh = specialties.reduce((sum, row) => sum + Number(row.hh_calculables || 0), 0);
-  const monthlyProgress = data?.tracking_progress || {};
-  const monthlyHhTotal = number(monthlyProgress.total_workload_hh);
-  const monthlyHhFinalized = Math.min(monthlyHhTotal, number(monthlyProgress.finalized_workload_hh));
-  const monthlyHhPending = Math.max(0, monthlyHhTotal - monthlyHhFinalized);
-  const monthlyHhPct = Math.max(0, Math.min(100, number(monthlyProgress.progress_hh_pct)));
   const totalRecords = Number(s.registros_listos || 0)
     + Number(s.registros_sin_personas || 0)
     + Number(s.registros_sin_tiempo_parada || 0)
@@ -343,28 +361,6 @@ function IndicatorsTracking({ data, year, month, onGoMonthly, onGoClosure, onTra
               <b>{item.meta}</b>
             </button>
           ))}
-        </div>
-      </section>
-
-      <section className="v2-indicator-hh-overview" aria-label="Avance mensual por horas hombre">
-        <div className="v2-indicator-hh-ring" style={{ "--hh-progress-angle": `${monthlyHhPct * 3.6}deg` }}>
-          <div>
-            <strong>{fmt(monthlyHhPct, 1)}%</strong>
-            <span>avance H-H</span>
-          </div>
-        </div>
-        <div className="v2-indicator-hh-copy">
-          <span className="v2-kicker">AVANCE MENSUAL POR H-H</span>
-          <h3>{fmt(monthlyHhFinalized, 1)} de {fmt(monthlyHhTotal, 1)} H-H finalizadas</h3>
-          <p>
-            Mide las H-H estimadas de las actividades finalizadas frente a toda la carga
-            del mes: PMP + Backlog, sin duplicar actividades.
-          </p>
-          <div className="v2-indicator-hh-stats">
-            <span><b>{fmt(monthlyHhFinalized, 1)}</b><small>H-H finalizadas</small></span>
-            <span><b>{fmt(monthlyHhPending, 1)}</b><small>H-H pendientes</small></span>
-            <span><b>{fmt(monthlyHhTotal, 1)}</b><small>H-H totales mes</small></span>
-          </div>
         </div>
       </section>
 
