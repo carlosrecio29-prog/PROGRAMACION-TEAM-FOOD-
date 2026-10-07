@@ -67,6 +67,7 @@ export default function WeeklyTracking({ year, month, onOpenClosure }) {
   const [areaFilter, setAreaFilter] = useState("");
   const [search, setSearch] = useState("");
   const [downloading, setDownloading] = useState(false);
+  const [showUnplanned, setShowUnplanned] = useState(false);
 
   const week = weeks[Math.min(weekIndex, weeks.length - 1)] || weeks[0];
 
@@ -99,6 +100,7 @@ export default function WeeklyTracking({ year, month, onOpenClosure }) {
     setMessage("");
     setAreaFilter("");
     setSearch("");
+    setShowUnplanned(false);
     load();
   }, [week?.from, week?.to, specialty]);
 
@@ -274,7 +276,103 @@ export default function WeeklyTracking({ year, month, onOpenClosure }) {
             <article><span>Última actualización</span><b className="tracking-date">{latest ? when(latest.registrado_en) : "—"}</b><small>{latest?.archivo_nombre || "Aún sin carga"}</small></article>
           </section>
 
-          <section className="v2-panel weekly-tracking-unplanned">
+          <section className="v2-panel weekly-tracking-board">
+            <div className="v2-section-head weekly-tracking-board-head">
+              <div>
+                <span className="v2-kicker">PROGRAMACIÓN EN SEGUIMIENTO</span>
+                <h3>Programación de la semana</h3>
+                <p>Las OT finalizadas permanecen visibles y se tachan automáticamente. Las pendientes continúan activas para seguimiento.</p>
+              </div>
+              <div className="weekly-tracking-board-actions">
+                <Badge tone="ok">{liveRows.filter((row) => row.finalizado === true).length} tachadas</Badge>
+                <button
+                  type="button"
+                  className={showUnplanned ? "unplanned-toggle active" : "unplanned-toggle"}
+                  aria-expanded={showUnplanned}
+                  onClick={() => setShowUnplanned((value) => !value)}
+                >
+                  {showUnplanned ? "Ocultar OT fuera de programación" : "Ver OT fuera de programación"} · {number(unplannedSummary.total)}
+                </button>
+                <button type="button" onClick={downloadTracking} disabled={downloading}>
+                  {downloading ? "Generando..." : "Descargar Excel"}
+                </button>
+              </div>
+            </div>
+
+            <div className="weekly-tracking-filters">
+              <label>
+                <span>Área</span>
+                <select value={areaFilter} onChange={(event) => setAreaFilter(event.target.value)}>
+                  <option value="">Todas las áreas</option>
+                  {areas.map(([code, name]) => (
+                    <option key={code} value={code}>{code}{name ? ` · ${name}` : ""}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="search">
+                <span>Buscar</span>
+                <input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="OT, equipo o plan..."
+                />
+              </label>
+              <div className="weekly-tracking-visible">
+                <span>Visibles</span>
+                <b>{visibleRows.length} / {liveRows.length}</b>
+              </div>
+            </div>
+
+            <div className="v2-table-wrap weekly-tracking-board-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Estado</th>
+                    <th>OT</th>
+                    <th>Área</th>
+                    <th>Equipo</th>
+                    <th>Plan de trabajo</th>
+                    <th>Condición</th>
+                    <th>Origen</th>
+                    <th>H-H</th>
+                    <th>Estado calendario</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleRows.map((row) => {
+                    const done = row.finalizado === true;
+                    const pendingRow = row.finalizado === false;
+                    return (
+                      <tr
+                        key={row.programacion_item_id}
+                        className={done ? "tracking-row-finished" : pendingRow ? "tracking-row-pending" : "tracking-row-unchecked"}
+                      >
+                        <td>
+                          {done
+                            ? <Badge tone="ok">FINALIZADA ✓</Badge>
+                            : pendingRow
+                              ? <Badge tone="warn">PENDIENTE</Badge>
+                              : <Badge>SIN VALIDAR</Badge>}
+                        </td>
+                        <td><b>{row.numero_ot || "SIN ASIGNAR"}</b></td>
+                        <td><Badge>{row.area_codigo || "—"}</Badge><small>{row.area_nombre || ""}</small></td>
+                        <td><b>{row.activo_codigo || "—"}</b><small>{row.activo_descripcion || ""}</small></td>
+                        <td><span className="v2-plan">{row.plan_trabajo || "—"}</span><small>{row.descripcion_grupo || ""}</small></td>
+                        <td>{row.requiere_parada ? <Badge tone="stop">Equipo detenido</Badge> : <Badge tone="ok">Equipo operando</Badge>}</td>
+                        <td>{row.origen === "BACKLOG" || row.origen_backlog ? <Badge tone="backlog">BACKLOG</Badge> : <Badge>PMP DEL MES</Badge>}</td>
+                        <td><b>{fmt(row.hh_programadas)}</b></td>
+                        <td><span>{row.estado_calendario || (latest ? "Sin coincidencia" : "Aún sin carga")}</span></td>
+                      </tr>
+                    );
+                  })}
+                  {!visibleRows.length && (
+                    <tr><td colSpan="9" className="v2-empty">No hay actividades con estos filtros.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {showUnplanned && (
+              <div className="weekly-tracking-unplanned weekly-tracking-unplanned-inline">
             <div className="v2-section-head">
               <div>
                 <span className="v2-kicker">EJECUCIÓN NO PROGRAMADA</span>
@@ -358,95 +456,8 @@ export default function WeeklyTracking({ year, month, onOpenClosure }) {
                 </tbody>
               </table>
             </div>
-          </section>
-
-          <section className="v2-panel weekly-tracking-board">
-            <div className="v2-section-head weekly-tracking-board-head">
-              <div>
-                <span className="v2-kicker">PROGRAMACIÓN EN SEGUIMIENTO</span>
-                <h3>Programación de la semana</h3>
-                <p>Las OT finalizadas permanecen visibles y se tachan automáticamente. Las pendientes continúan activas para seguimiento.</p>
               </div>
-              <div className="weekly-tracking-board-actions">
-                <Badge tone="ok">{liveRows.filter((row) => row.finalizado === true).length} tachadas</Badge>
-                <button type="button" onClick={downloadTracking} disabled={downloading}>
-                  {downloading ? "Generando..." : "Descargar Excel"}
-                </button>
-              </div>
-            </div>
-
-            <div className="weekly-tracking-filters">
-              <label>
-                <span>Área</span>
-                <select value={areaFilter} onChange={(event) => setAreaFilter(event.target.value)}>
-                  <option value="">Todas las áreas</option>
-                  {areas.map(([code, name]) => (
-                    <option key={code} value={code}>{code}{name ? ` · ${name}` : ""}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="search">
-                <span>Buscar</span>
-                <input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="OT, equipo o plan..."
-                />
-              </label>
-              <div className="weekly-tracking-visible">
-                <span>Visibles</span>
-                <b>{visibleRows.length} / {liveRows.length}</b>
-              </div>
-            </div>
-
-            <div className="v2-table-wrap weekly-tracking-board-table">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Estado</th>
-                    <th>OT</th>
-                    <th>Área</th>
-                    <th>Equipo</th>
-                    <th>Plan de trabajo</th>
-                    <th>Condición</th>
-                    <th>Origen</th>
-                    <th>H-H</th>
-                    <th>Estado calendario</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibleRows.map((row) => {
-                    const done = row.finalizado === true;
-                    const pendingRow = row.finalizado === false;
-                    return (
-                      <tr
-                        key={row.programacion_item_id}
-                        className={done ? "tracking-row-finished" : pendingRow ? "tracking-row-pending" : "tracking-row-unchecked"}
-                      >
-                        <td>
-                          {done
-                            ? <Badge tone="ok">FINALIZADA ✓</Badge>
-                            : pendingRow
-                              ? <Badge tone="warn">PENDIENTE</Badge>
-                              : <Badge>SIN VALIDAR</Badge>}
-                        </td>
-                        <td><b>{row.numero_ot || "SIN ASIGNAR"}</b></td>
-                        <td><Badge>{row.area_codigo || "—"}</Badge><small>{row.area_nombre || ""}</small></td>
-                        <td><b>{row.activo_codigo || "—"}</b><small>{row.activo_descripcion || ""}</small></td>
-                        <td><span className="v2-plan">{row.plan_trabajo || "—"}</span><small>{row.descripcion_grupo || ""}</small></td>
-                        <td>{row.requiere_parada ? <Badge tone="stop">Equipo detenido</Badge> : <Badge tone="ok">Equipo operando</Badge>}</td>
-                        <td>{row.origen === "BACKLOG" || row.origen_backlog ? <Badge tone="backlog">BACKLOG</Badge> : <Badge>PMP DEL MES</Badge>}</td>
-                        <td><b>{fmt(row.hh_programadas)}</b></td>
-                        <td><span>{row.estado_calendario || (latest ? "Sin coincidencia" : "Aún sin carga")}</span></td>
-                      </tr>
-                    );
-                  })}
-                  {!visibleRows.length && (
-                    <tr><td colSpan="9" className="v2-empty">No hay actividades con estos filtros.</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+            )}
           </section>
 
           <section className="v2-panel">
