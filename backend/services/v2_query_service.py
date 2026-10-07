@@ -25,6 +25,8 @@ def _dashboard_progress_payload(row:dict[str,Any])->dict[str,Any]:
     return {
         "total_orders":total,
         "finalized_orders":finalized,
+        "scheduled_finalized_orders":max(0,int(row.get("scheduled_finalized_orders") or 0)),
+        "unplanned_finalized_orders":max(0,int(row.get("unplanned_finalized_orders") or 0)),
         "pending_orders":pending,
         "progress_pct":round(100.0*finalized/total,1) if total else 0.0,
         "pmp_orders":max(0,int(row.get("pmp_orders") or 0)),
@@ -154,6 +156,16 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
                   upper(COALESCE(o.estado,'')) LIKE 'FINALIZ%'
                   OR EXISTS (
                     SELECT 1
+                    FROM programacion.seguimiento_no_programado_v2 snp
+                    WHERE snp.orden_mantenimiento_id=o.id
+                       OR (
+                         snp.numero_ot IS NOT NULL
+                         AND o.numero_ot IS NOT NULL
+                         AND upper(btrim(snp.numero_ot))=upper(btrim(o.numero_ot))
+                       )
+                  )
+                  OR EXISTS (
+                    SELECT 1
                     FROM programacion.programacion_item_v2 pi
                     JOIN programacion.programacion_semanal_v2 ps ON ps.id=pi.programacion_id
                     WHERE pi.orden_mantenimiento_id=o.id
@@ -183,6 +195,16 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
               LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
               WHERE b.estado_seguimiento='PENDIENTE_DISPONIBLE'
                 AND upper(COALESCE(o.estado,'')) NOT LIKE 'FINALIZ%'
+                AND NOT EXISTS (
+                  SELECT 1
+                  FROM programacion.seguimiento_no_programado_v2 snp
+                  WHERE snp.orden_mantenimiento_id=o.id
+                     OR (
+                       snp.numero_ot IS NOT NULL
+                       AND o.numero_ot IS NOT NULL
+                       AND upper(btrim(snp.numero_ot))=upper(btrim(o.numero_ot))
+                     )
+                )
                 AND COALESCE(p.es_operacion,false)=false
             ),
             all_pending AS (
@@ -232,6 +254,17 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
                 AND COALESCE(pi.origen_backlog,false)=true
                 AND COALESCE(p.es_operacion,false)=false
             ),
+            unplanned_month AS (
+              SELECT DISTINCT n.orden_mantenimiento_id AS order_id
+              FROM programacion.seguimiento_no_programado_v2 n
+              JOIN programacion.programacion_semanal_v2 ps ON ps.id=n.programacion_id
+              LEFT JOIN programacion.orden_mantenimiento o ON o.id=n.orden_mantenimiento_id
+              LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
+              WHERE ps.semana_inicio>=:period
+                AND ps.semana_inicio<:next_period
+                AND n.orden_mantenimiento_id IS NOT NULL
+                AND COALESCE(p.es_operacion,false)=false
+            ),
             universe AS (
               SELECT DISTINCT order_id
               FROM (
@@ -240,6 +273,8 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
                 SELECT order_id FROM backlog_available
                 UNION ALL
                 SELECT order_id FROM backlog_used_month
+                UNION ALL
+                SELECT order_id FROM unplanned_month
               ) all_orders
             ),
             tracked_finalized AS (
@@ -260,10 +295,15 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
                 AND ps.estado='CERRADA'
                 AND pi.finalizado=true
             ),
-            finished AS (
+            scheduled_finished AS (
               SELECT order_id FROM tracked_finalized
               UNION
               SELECT order_id FROM closed_finalized
+            ),
+            finished AS (
+              SELECT order_id FROM scheduled_finished
+              UNION
+              SELECT order_id FROM unplanned_month
             ),
             latest_tracking AS (
               SELECT max(s.registrado_en) AS latest_tracking_at
@@ -279,12 +319,26 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
                 FROM finished f
                 JOIN universe u USING(order_id)
               )::int AS finalized_orders,
-              (SELECT count(*) FROM month_pmp)::int AS pmp_orders,
               (
                 SELECT count(*)
-                FROM universe u
+                FROM scheduled_finished f
+                JOIN universe u USING(order_id)
+              )::int AS scheduled_finalized_orders,
+              (
+                SELECT count(*)
+                FROM unplanned_month n
+                JOIN universe u USING(order_id)
+              )::int AS unplanned_finalized_orders,
+              (SELECT count(*) FROM month_pmp)::int AS pmp_orders,
+              (
+                SELECT count(DISTINCT x.order_id)
+                FROM (
+                  SELECT order_id FROM backlog_available
+                  UNION ALL
+                  SELECT order_id FROM backlog_used_month
+                ) x
                 WHERE NOT EXISTS (
-                  SELECT 1 FROM month_pmp p WHERE p.order_id=u.order_id
+                  SELECT 1 FROM month_pmp p WHERE p.order_id=x.order_id
                 )
               )::int AS backlog_orders,
               round(COALESCE((
