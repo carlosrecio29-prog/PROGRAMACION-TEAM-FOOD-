@@ -107,6 +107,7 @@ function Summary({ data, onNavigate, year, month }) {
   const pendingOrders = Math.max(0, number(progress.pending_orders));
   const pmpOrders = number(progress.pmp_orders);
   const backlogOrders = number(progress.backlog_orders);
+  const totalWorkloadHh = number(progress.total_workload_hh);
 
   const quickActions = [
     {
@@ -137,6 +138,11 @@ function Summary({ data, onNavigate, year, month }) {
 
   return (
     <div className="v2-stack v2-control-dashboard">
+      <div className="v2-control-counter-heading">
+        <span>CONTADORES DINÁMICOS</span>
+        <small>Los dos primeros disminuyen a medida que avanzas la programación. La capacidad de técnicos corresponde al total mensual.</small>
+      </div>
+
       <section className="v2-control-primary v2-control-primary-3">
         <article>
           <div className="v2-control-icon"><ControlIcon type="report" /></div>
@@ -144,6 +150,7 @@ function Summary({ data, onNavigate, year, month }) {
             <span>PMP PARA PROGRAMAR</span>
             <strong>{totalToProgram}</strong>
             <small>{pmpPending} PMP + {backlogAvailable} Backlog disponibles</small>
+            <small className="v2-control-total-ref">Total de referencia: {totalOrders} actividades</small>
           </div>
         </article>
 
@@ -153,6 +160,7 @@ function Summary({ data, onNavigate, year, month }) {
             <span>H-H PMP + BACKLOG</span>
             <strong>{fmt(workload.total_pending_hh, 1)}</strong>
             <small>PMP pendiente + Backlog disponible</small>
+            <small className="v2-control-total-ref">Total de referencia: {fmt(totalWorkloadHh, 1)} H-H</small>
           </div>
         </article>
 
@@ -162,6 +170,7 @@ function Summary({ data, onNavigate, year, month }) {
             <span>H-H TÉCNICOS PROGRAMACIÓN</span>
             <strong>{fmt(s.hh_tecnicos_mes, 1)}</strong>
             <small>disponibilidad mensual antes de aplicar 80 / 20</small>
+            <small className="v2-control-total-ref">Total del mes: {fmt(s.hh_tecnicos_mes, 1)} H-H brutas</small>
           </div>
         </article>
       </section>

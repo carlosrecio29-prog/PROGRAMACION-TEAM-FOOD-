@@ -7,6 +7,7 @@ def test_dashboard_progress_payload_calculates_program_advance():
         "finalized_orders": 69,
         "pmp_orders": 723,
         "backlog_orders": 261,
+        "total_workload_hh": 1542.35,
         "latest_tracking_at": "2026-10-06T19:43:11+00:00",
     })
 
@@ -16,6 +17,7 @@ def test_dashboard_progress_payload_calculates_program_advance():
     assert data["progress_pct"] == 7.0
     assert data["pmp_orders"] == 723
     assert data["backlog_orders"] == 261
+    assert data["total_workload_hh"] == 1542.35
 
 
 def test_dashboard_progress_payload_never_exceeds_total():

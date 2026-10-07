@@ -3049,3 +3049,65 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
     margin:0 auto;
   }
 }
+
+
+/* Panel de control: referencias totales y cierre centrado */
+.v2-control-counter-heading{
+  display:flex;
+  align-items:baseline;
+  gap:10px;
+  padding:0 2px;
+  margin-bottom:-4px;
+}
+.v2-control-counter-heading>span{
+  color:#1b6f9c;
+  font-size:8px;
+  font-weight:950;
+  letter-spacing:.75px;
+}
+.v2-control-counter-heading>small{
+  color:#73869a;
+  font-size:7.5px;
+  line-height:1.4;
+}
+.v2-control-primary-3 article{
+  min-height:150px;
+}
+.v2-control-primary-3 article>div:last-child{
+  display:flex;
+  flex-direction:column;
+  min-width:0;
+}
+.v2-control-total-ref{
+  margin-top:8px!important;
+  padding-top:7px;
+  border-top:1px solid #e6edf2;
+  color:#3d5f78!important;
+  font-size:7.8px!important;
+  font-weight:850;
+}
+.v2-control-action-close-wide{
+  text-align:center;
+}
+.v2-control-action-close-wide .v2-control-action-main{
+  width:min(100%,470px);
+  margin:0 auto;
+}
+.v2-control-action-close-wide .v2-control-action-copy{
+  text-align:center;
+}
+.v2-control-action-close-wide .v2-control-close-options{
+  width:min(100%,470px);
+  margin:10px auto 0;
+  padding-left:0;
+}
+
+@media(max-width:720px){
+  .v2-control-counter-heading{
+    display:block;
+  }
+  .v2-control-counter-heading>small{
+    display:block;
+    margin-top:4px;
+  }
+}
