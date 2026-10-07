@@ -10,7 +10,7 @@ export const VIEW_META = {
   advanceStops: ["Preparación de paradas", "Revisa el calendario provisional del mes siguiente y exporta las actividades con equipo detenido."],
   pmp: ["PMP del mes", "Cartera preventiva exportada desde el software de mantenimiento."],
   operationExclusions: ["Actividades excluidas", "Consulta los planes y registros retirados del PMP por corresponder a OPERACIÓN."],
-  tracking: ["Seguimiento semanal", "Actualiza el avance con Lista de Calendario sin cerrar la programación."],
+  tracking: ["Seguimiento de programación", "Actualiza el avance semanal con Lista de Calendario antes del cierre."],
   closure: ["Cierre semanal", "Reconcilia la programación contra el estado verificado del software."],
   monthly: ["Cierre mensual", "Valida semanas, consolida resultados, gestiona pendientes y formaliza el cierre del período."],
   backlog: ["Backlog acumulado", "OT pendientes conservadas hasta confirmar su finalización."],
@@ -40,5 +40,5 @@ export const NAV_GROUPS = [
 ];
 
 export function navigationIds(groups = NAV_GROUPS) {
-  return [...groups.flatMap((group) => group.items.map((item) => item.id)), "indicators"];
+  return [...groups.flatMap((group) => group.items.map((item) => item.id)), "indicators", "tracking"];
 }

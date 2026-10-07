@@ -101,88 +101,135 @@ function Summary({ data, onNavigate, year, month }) {
   const ready = number(s.registros_listos);
   const total = number(s.registros_pmp);
   const readyPct = total > 0 ? Math.round((ready / total) * 100) : 0;
+
   const quickActions = [
-    { id: "advanceStops", title: "Preparar paradas", text: "Revisar actividades con equipo detenido", icon: "calendar" },
-    { id: "technicians", title: "Programación de técnicos", text: "Turnos, especialidades y capacidad del mes", icon: "team" },
-    { id: "programming", title: "Programación semanal", text: "Seleccionar y guardar actividades por especialidad", icon: "tools" },
-    { id: "pmp", title: "PMP del mes", text: "Consultar la cartera preventiva del período", icon: "report" },
-    { id: "closure", title: "Cierre semanal", text: "Conciliar OT contra el calendario", icon: "check" },
-    { id: "monthly", title: "Cierre mensual", text: "Consolidar y formalizar el cierre del mes", icon: "bars" },
-    { id: "backlog", title: "Backlog acumulado", text: "Dar seguimiento a OT pendientes", icon: "alert" },
-    { id: "imports", title: "Cargar Excel", text: "Actualizar archivos del período", icon: "calendar" },
+    {
+      id: "advanceStops",
+      title: "Preparar paradas",
+      text: "Identificar y preparar actividades con equipo detenido",
+      icon: "calendar",
+    },
+    {
+      id: "technicians",
+      title: "Programación de técnicos",
+      text: "Turnos, especialidades y H-H disponibles",
+      icon: "team",
+    },
+    {
+      id: "programming",
+      title: "Programación semanal",
+      text: "Seleccionar PMP y Backlog según capacidad",
+      icon: "tools",
+    },
+    {
+      id: "tracking",
+      title: "Seguimiento de programación",
+      text: "Actualizar el avance semanal antes del cierre",
+      icon: "report",
+    },
+    {
+      id: "programClose",
+      title: "Cierre de programa",
+      text: "Formalizar resultados de la semana o del período",
+      icon: "check",
+      options: [
+        { id: "closure", label: "Cierre semanal" },
+        { id: "monthly", label: "Cierre mensual" },
+      ],
+    },
+    {
+      id: "indicators",
+      title: "Indicadores de seguimiento",
+      text: "Avance, tendencia y análisis del período",
+      icon: "bars",
+    },
   ];
+
   return (
     <div className="v2-stack v2-control-dashboard">
-
-      <section className="v2-control-primary">
+      <section className="v2-control-primary v2-control-primary-3">
         <article>
-          <div className="v2-control-icon"><ControlIcon type="calendar" /></div>
+          <div className="v2-control-icon"><ControlIcon type="report" /></div>
           <div>
-            <span>PMP DEL MES</span>
-            <strong>{number(s.registros_pmp)}</strong>
-            <small>{number(s.ot_distintas)} OT distintas</small>
+            <span>PMP PARA PROGRAMAR</span>
+            <strong>{ready}</strong>
+            <small>{total} PMP cargados en el período</small>
           </div>
         </article>
-        <article>
+
+        <article className="workload">
           <div className="v2-control-icon"><ControlIcon type="clock" /></div>
           <div>
-            <span>H-H CALCULABLES</span>
-            <strong>{fmt(s.hh_calculables, 1)}</strong>
-            <small>carga preventiva calculable</small>
-          </div>
-        </article>
-        <article className="workload">
-          <div className="v2-control-icon"><ControlIcon type="alert" /></div>
-          <div>
-            <span>CARGA TOTAL PENDIENTE</span>
+            <span>H-H PMP + BACKLOG</span>
             <strong>{fmt(workload.total_pending_hh, 1)}</strong>
-            <small>{number(workload.total_pending_count)} OT únicas · PMP pendiente + Backlog disponible</small>
+            <small>PMP pendiente + Backlog disponible</small>
           </div>
         </article>
+
         <article>
           <div className="v2-control-icon"><ControlIcon type="team" /></div>
           <div>
-            <span>H-H TÉCNICOS DEL MES</span>
+            <span>H-H TÉCNICOS PROGRAMACIÓN</span>
             <strong>{fmt(s.hh_tecnicos_mes, 1)}</strong>
-            <small>disponibilidad antes del 80 / 20</small>
+            <small>disponibilidad mensual antes de aplicar 80 / 20</small>
           </div>
         </article>
       </section>
 
-      <button
-        type="button"
-        className="v2-analysis-entry v2-analysis-entry-top"
-        onClick={() => onNavigate("indicators")}
-      >
-        <span className="v2-analysis-entry-icon"><ControlIcon type="bars" /></span>
-        <span className="v2-analysis-entry-copy">
-          <b>Indicadores y seguimiento</b>
-          <small>Avance del período · Seguimiento semanal · Tendencia · PMP por especialidad · Calidad de datos</small>
-        </span>
-        <span className="v2-analysis-entry-arrow">→</span>
-      </button>
-
-      <section className="v2-control-body">
-        <div className="v2-control-shortcuts">
+      <section className="v2-control-body v2-control-body-main">
+        <div className="v2-control-shortcuts v2-control-shortcuts-main">
           <div className="v2-control-panel-head">
             <div>
-              <span className="v2-kicker">ACCESOS RÁPIDOS</span>
+              <span className="v2-kicker">FLUJO DE TRABAJO</span>
               <h3>Procesos principales</h3>
             </div>
           </div>
-          <div className="v2-control-action-list">
-            {quickActions.map((action) => (
-              <button type="button" key={action.id} onClick={() => onNavigate(action.id)}>
-                <span className="v2-control-action-icon"><ControlIcon type={action.icon} /></span>
-                <span className="v2-control-action-copy">
-                  <b>{action.title}</b>
-                  <small>{action.text}</small>
-                </span>
-                <span className="v2-control-arrow">→</span>
-              </button>
+
+          <div className="v2-control-action-list v2-control-action-list-main">
+            {quickActions.map((action, index) => (
+              action.options ? (
+                <article className="v2-control-action-card v2-control-action-close" key={action.id}>
+                  <div className="v2-control-action-main">
+                    <span className="v2-control-action-step">{String(index + 1).padStart(2, "0")}</span>
+                    <span className="v2-control-action-icon"><ControlIcon type={action.icon} /></span>
+                    <span className="v2-control-action-copy">
+                      <b>{action.title}</b>
+                      <small>{action.text}</small>
+                    </span>
+                  </div>
+                  <div className="v2-control-close-options">
+                    {action.options.map((option) => (
+                      <button
+                        type="button"
+                        key={option.id}
+                        onClick={() => onNavigate(option.id)}
+                      >
+                        <span>{option.label}</span>
+                        <b>→</b>
+                      </button>
+                    ))}
+                  </div>
+                </article>
+              ) : (
+                <button
+                  type="button"
+                  key={action.id}
+                  className="v2-control-action-button"
+                  onClick={() => onNavigate(action.id)}
+                >
+                  <span className="v2-control-action-step">{String(index + 1).padStart(2, "0")}</span>
+                  <span className="v2-control-action-icon"><ControlIcon type={action.icon} /></span>
+                  <span className="v2-control-action-copy">
+                    <b>{action.title}</b>
+                    <small>{action.text}</small>
+                  </span>
+                  <span className="v2-control-arrow">→</span>
+                </button>
+              )
             ))}
           </div>
         </div>
+
         <div className="v2-control-overview">
           <div className="v2-control-panel-head">
             <div>
@@ -221,13 +268,10 @@ function Summary({ data, onNavigate, year, month }) {
             <b> {number(s.registros_operacion_excluidos)}</b> registros fuera del PMP de mantenimiento.
           </div>
         </div>
-
       </section>
-
     </div>
   );
 }
-
 
 function IndicatorsTracking({ data, year, month, onGoMonthly, onGoClosure }) {
   const [section, setSection] = useState("period");
@@ -1661,7 +1705,6 @@ function Pmp({ year, month, dashboard }) {
 export default function App() {
   const [view, setView] = useState(() => {
     const requested = window.location.hash.replace(/^#\/?/, "");
-    if (requested === "tracking") return "indicators";
     return navigationIds().includes(requested) ? requested : "summary";
   });
   const [year] = useState(2026);
@@ -1796,6 +1839,13 @@ export default function App() {
         {view === "advanceStops" && <AdvanceStops year={year} month={month} />}
         {view === "programming" && (
           <WeeklyProgramming year={year} month={month} dashboard={dashboard} />
+        )}{" "}
+        {view === "tracking" && (
+          <WeeklyTracking
+            year={year}
+            month={month}
+            onOpenClosure={() => navigate("closure")}
+          />
         )}{" "}
         {view === "monthly" && <MonthlyClose year={year} month={month} />}
         {view === "closure" && <WeeklyClosure year={year} month={month} onOpenBacklog={(orderId) => { setBacklogOrderId(orderId); navigate("backlog"); }} />}{" "}

@@ -2708,3 +2708,134 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
   .v2-indicator-hub-tabs button small{min-height:0}
 }
 
+
+
+/* Panel de control: jerarquía ejecutiva 2026-10-07 */
+.v2-control-primary-3{
+  grid-template-columns:repeat(3,minmax(0,1fr));
+}
+.v2-control-primary-3 article{
+  min-height:134px;
+}
+.v2-control-primary-3 article.workload{
+  background:linear-gradient(145deg,#fff9e7,#fffdf7);
+}
+
+.v2-control-body-main{
+  grid-template-columns:minmax(0,1.55fr) minmax(310px,.65fr);
+  align-items:start;
+}
+.v2-control-shortcuts-main{
+  padding:20px;
+}
+.v2-control-action-list-main{
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px;
+  margin-top:14px;
+}
+.v2-control-action-list-main > .v2-control-action-button,
+.v2-control-action-list-main > .v2-control-action-card{
+  min-height:94px;
+  border:1px solid #e1e8ee;
+  background:#fff;
+  border-radius:13px;
+  transition:border-color .18s ease,background .18s ease,transform .18s ease,box-shadow .18s ease;
+}
+.v2-control-action-list-main > .v2-control-action-button{
+  grid-template-columns:27px 43px minmax(0,1fr) 18px;
+  gap:10px;
+  padding:12px;
+}
+.v2-control-action-list-main > .v2-control-action-button:hover,
+.v2-control-action-list-main > .v2-control-action-card:hover{
+  background:#f8fbfd;
+  border-color:#c6d9e8;
+  box-shadow:0 7px 18px #18304d0a;
+  transform:translateY(-1px);
+}
+.v2-control-action-step{
+  width:25px;
+  height:25px;
+  border-radius:8px;
+  display:grid;
+  place-items:center;
+  background:#f1f5f8;
+  color:#607589;
+  font-size:8px;
+  font-weight:950;
+  letter-spacing:.4px;
+}
+.v2-control-action-list-main .v2-control-action-icon{
+  width:40px;
+  height:40px;
+}
+.v2-control-action-list-main .v2-control-action-copy b{
+  font-size:10.5px;
+}
+.v2-control-action-list-main .v2-control-action-copy small{
+  font-size:7.7px;
+  line-height:1.45;
+}
+.v2-control-action-card{
+  padding:11px 12px;
+}
+.v2-control-action-main{
+  display:grid;
+  grid-template-columns:27px 43px minmax(0,1fr);
+  gap:10px;
+  align-items:center;
+}
+.v2-control-close-options{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:7px;
+  margin-top:9px;
+  padding-left:80px;
+}
+.v2-control-action-list-main .v2-control-close-options button{
+  min-height:0;
+  border:1px solid #dbe6ee;
+  background:#f7fafc;
+  border-radius:8px;
+  padding:7px 8px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  color:#26445f;
+  font-size:8px;
+  font-weight:850;
+  text-align:left;
+}
+.v2-control-action-list-main .v2-control-close-options button:hover{
+  background:#edf6fd;
+  border-color:#a9cade;
+}
+.v2-control-action-list-main .v2-control-close-options button b{
+  color:#1692d0;
+  font-size:13px;
+}
+.v2-control-overview{
+  position:sticky;
+  top:14px;
+}
+
+@media(max-width:1100px){
+  .v2-control-primary-3{
+    grid-template-columns:1fr;
+  }
+  .v2-control-body-main{
+    grid-template-columns:1fr;
+  }
+  .v2-control-overview{
+    position:static;
+  }
+}
+@media(max-width:720px){
+  .v2-control-action-list-main{
+    grid-template-columns:1fr;
+  }
+  .v2-control-close-options{
+    padding-left:0;
+  }
+}
