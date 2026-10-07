@@ -140,7 +140,7 @@ function Summary({ data, onNavigate, year, month }) {
     <div className="v2-stack v2-control-dashboard">
       <div className="v2-control-counter-heading">
         <span>CONTADORES DINÁMICOS</span>
-        <small>Los dos primeros disminuyen a medida que avanzas la programación. La capacidad de técnicos corresponde al total mensual.</small>
+        <small>Los dos primeros disminuyen a medida que avanzas la programación. Técnicos muestra la capacidad mensual disponible para preventivo.</small>
       </div>
 
       <section className="v2-control-primary v2-control-primary-3">
@@ -168,9 +168,9 @@ function Summary({ data, onNavigate, year, month }) {
           <div className="v2-control-icon"><ControlIcon type="team" /></div>
           <div>
             <span>H-H TÉCNICOS PROGRAMACIÓN</span>
-            <strong>{fmt(s.hh_tecnicos_mes, 1)}</strong>
-            <small>disponibilidad mensual antes de aplicar 80 / 20</small>
-            <small className="v2-control-total-ref">Total del mes: {fmt(s.hh_tecnicos_mes, 1)} H-H brutas</small>
+            <strong>{fmt(s.hh_tecnicos_preventivo_mes, 1)}</strong>
+            <small>H-H disponibles para preventivo (80% efectivo × 80% preventivo)</small>
+            <small className="v2-control-total-ref">H-H brutas del mes: {fmt(s.hh_tecnicos_mes, 1)}</small>
           </div>
         </article>
       </section>

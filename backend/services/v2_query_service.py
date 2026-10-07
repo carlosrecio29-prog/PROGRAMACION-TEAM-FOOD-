@@ -82,7 +82,13 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
               (SELECT count(*) FROM programacion.tecnico WHERE especialidad_efectiva IS NULL) AS tecnicos_sin_especialidad,
               (SELECT round(COALESCE(sum(horas_disponibles),0),2)
                  FROM programacion.programacion_tecnico
-                WHERE date_trunc('month',fecha)::date=:period) AS hh_tecnicos_mes
+                WHERE date_trunc('month',fecha)::date=:period) AS hh_tecnicos_mes,
+              (SELECT round(COALESCE(sum(horas_disponibles),0) * 0.80,2)
+                 FROM programacion.programacion_tecnico
+                WHERE date_trunc('month',fecha)::date=:period) AS hh_tecnicos_efectivas_mes,
+              (SELECT round(COALESCE(sum(horas_disponibles),0) * 0.80 * 0.80,2)
+                 FROM programacion.programacion_tecnico
+                WHERE date_trunc('month',fecha)::date=:period) AS hh_tecnicos_preventivo_mes
             FROM month_orders
         """),{"period":period}).mappings().one()
 
