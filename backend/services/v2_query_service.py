@@ -18,8 +18,24 @@ def _period(year:int,month:int)->date:
     return date(year,month,1)
 
 
+def _dashboard_progress_payload(row:dict[str,Any])->dict[str,Any]:
+    total=max(0,int(row.get("total_orders") or 0))
+    finalized=max(0,min(total,int(row.get("finalized_orders") or 0)))
+    pending=max(0,total-finalized)
+    return {
+        "total_orders":total,
+        "finalized_orders":finalized,
+        "pending_orders":pending,
+        "progress_pct":round(100.0*finalized/total,1) if total else 0.0,
+        "pmp_orders":max(0,int(row.get("pmp_orders") or 0)),
+        "backlog_orders":max(0,int(row.get("backlog_orders") or 0)),
+        "latest_tracking_at":row.get("latest_tracking_at"),
+    }
+
+
 def get_dashboard(year:int,month:int)->dict[str,Any]:
     period=_period(year,month)
+    next_period=date(year+1,1,1) if month==12 else date(year,month+1,1)
     with get_engine().connect() as conn:
         summary=conn.execute(text("""
             WITH month_orders AS (
@@ -182,11 +198,98 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
             FROM all_pending
         """),{"period":period}).mappings().one()
 
+        progress_row=dict(conn.execute(text("""
+            WITH month_pmp AS (
+              SELECT DISTINCT o.id AS order_id
+              FROM programacion.orden_mantenimiento o
+              LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
+              WHERE o.periodo=:period
+                AND COALESCE(p.es_operacion,false)=false
+            ),
+            backlog_available AS (
+              SELECT DISTINCT b.orden_mantenimiento_id AS order_id
+              FROM programacion.backlog_v2 b
+              JOIN programacion.orden_mantenimiento o ON o.id=b.orden_mantenimiento_id
+              LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
+              WHERE b.estado_seguimiento='PENDIENTE_DISPONIBLE'
+                AND COALESCE(p.es_operacion,false)=false
+            ),
+            backlog_used_month AS (
+              SELECT DISTINCT pi.orden_mantenimiento_id AS order_id
+              FROM programacion.programacion_item_v2 pi
+              JOIN programacion.programacion_semanal_v2 ps ON ps.id=pi.programacion_id
+              JOIN programacion.orden_mantenimiento o ON o.id=pi.orden_mantenimiento_id
+              LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
+              WHERE ps.semana_inicio>=:period
+                AND ps.semana_inicio<:next_period
+                AND COALESCE(pi.origen_backlog,false)=true
+                AND COALESCE(p.es_operacion,false)=false
+            ),
+            universe AS (
+              SELECT DISTINCT order_id
+              FROM (
+                SELECT order_id FROM month_pmp
+                UNION ALL
+                SELECT order_id FROM backlog_available
+                UNION ALL
+                SELECT order_id FROM backlog_used_month
+              ) all_orders
+            ),
+            tracked_finalized AS (
+              SELECT DISTINCT si.orden_mantenimiento_id AS order_id
+              FROM programacion.seguimiento_semanal_item_v2 si
+              JOIN programacion.seguimiento_semanal_v2 s ON s.id=si.seguimiento_id
+              JOIN programacion.programacion_semanal_v2 ps ON ps.id=s.programacion_id
+              WHERE ps.semana_inicio>=:period
+                AND ps.semana_inicio<:next_period
+                AND si.finalizado=true
+            ),
+            closed_finalized AS (
+              SELECT DISTINCT pi.orden_mantenimiento_id AS order_id
+              FROM programacion.programacion_item_v2 pi
+              JOIN programacion.programacion_semanal_v2 ps ON ps.id=pi.programacion_id
+              WHERE ps.semana_inicio>=:period
+                AND ps.semana_inicio<:next_period
+                AND ps.estado='CERRADA'
+                AND pi.finalizado=true
+            ),
+            finished AS (
+              SELECT order_id FROM tracked_finalized
+              UNION
+              SELECT order_id FROM closed_finalized
+            ),
+            latest_tracking AS (
+              SELECT max(s.registrado_en) AS latest_tracking_at
+              FROM programacion.seguimiento_semanal_v2 s
+              JOIN programacion.programacion_semanal_v2 ps ON ps.id=s.programacion_id
+              WHERE ps.semana_inicio>=:period
+                AND ps.semana_inicio<:next_period
+            )
+            SELECT
+              (SELECT count(*) FROM universe)::int AS total_orders,
+              (
+                SELECT count(*)
+                FROM finished f
+                JOIN universe u USING(order_id)
+              )::int AS finalized_orders,
+              (SELECT count(*) FROM month_pmp)::int AS pmp_orders,
+              (
+                SELECT count(*)
+                FROM universe u
+                WHERE NOT EXISTS (
+                  SELECT 1 FROM month_pmp p WHERE p.order_id=u.order_id
+                )
+              )::int AS backlog_orders,
+              (SELECT latest_tracking_at FROM latest_tracking) AS latest_tracking_at
+        """),{"period":period,"next_period":next_period}).mappings().one())
+        tracking_progress=_dashboard_progress_payload(progress_row)
+
     return {
         "periodo":str(period),
         "summary":dict(summary),
         "pending":dict(pending),
         "workload":dict(workload),
+        "tracking_progress":tracking_progress,
         "specialties":specialties,
         "areas":areas,
     }
