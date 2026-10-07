@@ -143,10 +143,9 @@ def _reconcile_backlog_from_calendar(
         } for item, match, _ in finalized_rows]
 
         conn.execute(text("""
-            UPDATE programacion.orden_mantenimiento AS o
-            SET estado=v.state,actualizado_en=now()
-            FROM (VALUES (:order_id,:state)) AS v(order_id,state)
-            WHERE o.id=v.order_id
+            UPDATE programacion.orden_mantenimiento
+            SET estado=:state,actualizado_en=now()
+            WHERE id=:order_id
         """), payload)
 
         ids = [int(item["orden_mantenimiento_id"]) for item, _, _ in finalized_rows]
