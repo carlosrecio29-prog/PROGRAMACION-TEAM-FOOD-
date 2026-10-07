@@ -1795,6 +1795,9 @@ export default function App() {
   function navigate(nextView) {
     setView(nextView);
     window.history.replaceState(null, "", `#/${nextView}`);
+    if (nextView === "summary") {
+      refresh().catch(() => null);
+    }
   }
   return (
     <AppShell
