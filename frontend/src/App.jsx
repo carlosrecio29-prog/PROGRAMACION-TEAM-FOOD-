@@ -103,6 +103,8 @@ function Summary({ data, onNavigate, year, month }) {
   const totalToProgram = number(workload.total_pending_count);
   const progressPct = Math.max(0, Math.min(100, number(progress.progress_pct)));
   const finalizedOrders = number(progress.finalized_orders);
+  const scheduledFinalizedOrders = number(progress.scheduled_finalized_orders);
+  const unplannedFinalizedOrders = number(progress.unplanned_finalized_orders);
   const totalOrders = number(progress.total_orders);
   const pendingOrders = Math.max(0, number(progress.pending_orders));
   const pmpOrders = number(progress.pmp_orders);
@@ -254,21 +256,21 @@ function Summary({ data, onNavigate, year, month }) {
               <strong>{finalizedOrders} de {totalOrders}</strong>
               <span>órdenes finalizadas</span>
               <small>
-                El avance aumenta con las OT detectadas como finalizadas en cada seguimiento
-                y conserva los cierres ya realizados.
+                Incluye {scheduledFinalizedOrders} finalizadas desde programación y {unplannedFinalizedOrders} finalizadas fuera de programación.
               </small>
             </div>
           </div>
 
           <div className="v2-dashboard-progress-stats">
-            <span><b>{finalizedOrders}</b><small>Finalizadas</small></span>
+            <span><b>{finalizedOrders}</b><small>Finalizadas totales</small></span>
             <span><b>{pendingOrders}</b><small>Pendientes</small></span>
-            <span><b>{totalOrders}</b><small>Total programa</small></span>
+            <span><b>{totalOrders}</b><small>Total controlado</small></span>
           </div>
 
           <div className="v2-dashboard-progress-source">
             <span><b>{pmpOrders}</b> PMP del mes</span>
             <span><b>{backlogOrders}</b> Backlog</span>
+            <span><b>{unplannedFinalizedOrders}</b> finalizadas fuera de programación</span>
           </div>
         </button>
       </section>
@@ -276,7 +278,7 @@ function Summary({ data, onNavigate, year, month }) {
   );
 }
 
-function IndicatorsTracking({ data, year, month, onGoMonthly, onGoClosure }) {
+function IndicatorsTracking({ data, year, month, onGoMonthly, onGoClosure, onTrackingChanged }) {
   const [section, setSection] = useState("period");
   const s = data?.summary || {};
   const specialties = data?.specialties || [];
@@ -348,6 +350,7 @@ function IndicatorsTracking({ data, year, month, onGoMonthly, onGoClosure }) {
           year={year}
           month={month}
           onOpenClosure={onGoClosure}
+          onChanged={onTrackingChanged}
         />
       )}
 
@@ -1837,6 +1840,7 @@ export default function App() {
             month={month}
             onGoMonthly={() => navigate("monthly")}
             onGoClosure={() => navigate("closure")}
+            onTrackingChanged={refresh}
           />
         )}{" "}
         {view === "pending" && (
@@ -1851,6 +1855,7 @@ export default function App() {
             year={year}
             month={month}
             onOpenClosure={() => navigate("closure")}
+            onChanged={refresh}
           />
         )}{" "}
         {view === "monthly" && <MonthlyClose year={year} month={month} />}
