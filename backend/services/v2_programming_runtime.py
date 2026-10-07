@@ -51,6 +51,19 @@ def get_week_programming(*, date_from: date, date_to: date, specialty: str) -> d
                 AND NOT p.es_operacion
                 AND (o.periodo=date_trunc('month',CAST(:date_from AS date))::date OR b.id IS NOT NULL OR ci.id IS NOT NULL)
                 AND (upper(COALESCE(o.estado,'')) NOT LIKE 'FINALIZ%' OR ci.id IS NOT NULL)
+                AND (
+                  ci.id IS NOT NULL
+                  OR NOT EXISTS (
+                    SELECT 1
+                    FROM programacion.seguimiento_no_programado_v2 snp
+                    WHERE snp.orden_mantenimiento_id=o.id
+                       OR (
+                         snp.numero_ot IS NOT NULL
+                         AND o.numero_ot IS NOT NULL
+                         AND upper(btrim(snp.numero_ot))=upper(btrim(o.numero_ot))
+                       )
+                  )
+                )
                 AND p.numero_personas_efectivo IS NOT NULL
                 AND p.tiempo_parada_efectivo_min IS NOT NULL
                 AND p.requiere_parada IS NOT NULL
@@ -133,6 +146,29 @@ def save_week_programming(*, date_from: date, date_to: date, specialty: str, ord
             WHERE orden_mantenimiento_id=ANY(CAST(:ids AS bigint[]))
               AND estado_seguimiento<>'FINALIZADA'
         """), {"ids": unique_ids}).scalars().all()}
+
+        executed_outside = conn.execute(text("""
+            SELECT DISTINCT o.numero_ot
+            FROM programacion.orden_mantenimiento o
+            WHERE o.id=ANY(CAST(:ids AS bigint[]))
+              AND EXISTS (
+                SELECT 1
+                FROM programacion.seguimiento_no_programado_v2 snp
+                WHERE snp.orden_mantenimiento_id=o.id
+                   OR (
+                     snp.numero_ot IS NOT NULL
+                     AND o.numero_ot IS NOT NULL
+                     AND upper(btrim(snp.numero_ot))=upper(btrim(o.numero_ot))
+                   )
+              )
+            LIMIT 10
+        """), {"ids": unique_ids}).scalars().all()
+        if executed_outside:
+            first_ot = executed_outside[0] or "SIN ASIGNAR"
+            raise V2ProgrammingError(
+                f"La OT {first_ot} ya fue detectada como FINALIZADA fuera de programación "
+                "y no puede volver a programarse."
+            )
 
         rows = [dict(r) for r in conn.execute(text("""
             SELECT o.id AS orden_mantenimiento_id,o.numero_ot,p.requiere_parada,
