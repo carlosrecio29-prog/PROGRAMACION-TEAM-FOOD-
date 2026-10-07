@@ -53,7 +53,7 @@ function when(value) {
   }
 }
 
-export default function WeeklyTracking({ year, month, onOpenClosure }) {
+export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }) {
   const weeks = useMemo(() => monthWeeks(year, month), [year, month]);
   const [weekIndex, setWeekIndex] = useState(() => initialWeekIndex(weeks));
   const [specialty, setSpecialty] = useState("MEC");
@@ -117,6 +117,7 @@ export default function WeeklyTracking({ year, month, onOpenClosure }) {
       const result = await uploadV2WeekTracking(programmingId, file);
       setTracking(result);
       setFile(null);
+      await onChanged?.();
       const saved = result.saved || {};
       setMessage(
         `Avance registrado sin cerrar la semana: ${number(saved.finalizadas)} finalizadas programadas · ${number(saved.no_programadas_nuevas)} no programadas nuevas · ${fmt(saved.avance_ot_pct)}% por OT · ${fmt(saved.avance_hh_pct)}% por H-H.`,
