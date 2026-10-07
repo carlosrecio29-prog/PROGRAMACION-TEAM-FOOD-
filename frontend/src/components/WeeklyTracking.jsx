@@ -299,7 +299,7 @@ export default function WeeklyTracking({ year, month, onOpenClosure }) {
               <article className={number(unplannedSummary.nuevas_ultima_carga) ? "new" : ""}>
                 <span>Nuevas última carga</span>
                 <b>{number(unplannedSummary.nuevas_ultima_carga)}</b>
-                <small>detectadas por primera vez hoy</small>
+                <small>detectadas por primera vez en esta carga</small>
               </article>
               <article>
                 <span>H-H estimadas</span>
@@ -465,6 +465,7 @@ export default function WeeklyTracking({ year, month, onOpenClosure }) {
                     <th>Área</th>
                     <th>Programadas</th>
                     <th>Finalizadas</th>
+                    <th>No programadas nuevas</th>
                     <th>Pendientes</th>
                     <th>Sin coincidencia</th>
                     <th>Avance OT</th>
@@ -521,6 +522,10 @@ export default function WeeklyTracking({ year, month, onOpenClosure }) {
                       <td><b>{when(row.registrado_en)}</b></td>
                       <td><span className="v2-plan">{row.archivo_nombre}</span></td>
                       <td><b>{number(row.finalizados)}</b></td>
+                      <td>
+                        <b>{number(row.no_programadas_nuevas)}</b>
+                        <small>{fmt(row.hh_no_programadas_nuevas)} H-H</small>
+                      </td>
                       <td>{number(row.pendientes)}</td>
                       <td>{number(row.sin_coincidencia)}</td>
                       <td><b>{fmt(row.avance_ot_pct)}%</b></td>
@@ -528,7 +533,7 @@ export default function WeeklyTracking({ year, month, onOpenClosure }) {
                     </tr>
                   ))}
                   {!tracking?.history?.length && (
-                    <tr><td colSpan="7" className="v2-empty">Todavía no hay fotografías de avance guardadas.</td></tr>
+                    <tr><td colSpan="8" className="v2-empty">Todavía no hay fotografías de avance guardadas.</td></tr>
                   )}
                 </tbody>
               </table>
