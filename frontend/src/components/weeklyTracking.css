@@ -67,6 +67,19 @@
 }
 .weekly-tracking-board-actions button:hover:not(:disabled){background:#f0faf4}
 .weekly-tracking-board-actions button:disabled{opacity:.5;cursor:not-allowed}
+.weekly-tracking-board-actions .unplanned-toggle{
+  border-color:#dfc77f;
+  color:#7a5a08;
+  background:#fffdf6;
+}
+.weekly-tracking-board-actions .unplanned-toggle:hover:not(:disabled){
+  background:#fff8df;
+}
+.weekly-tracking-board-actions .unplanned-toggle.active{
+  border-color:#b98a14;
+  background:#fff3c8;
+  color:#594100;
+}
 .weekly-tracking-filters{
   display:grid;grid-template-columns:minmax(180px,.55fr) minmax(260px,1.4fr) 120px;
   gap:8px;align-items:end;margin-bottom:10px
@@ -104,7 +117,7 @@
 }
 @media(max-width:760px){
   .weekly-tracking-board-head{align-items:flex-start;flex-direction:column}
-  .weekly-tracking-board-actions{width:100%;justify-content:space-between}
+  .weekly-tracking-board-actions{width:100%;justify-content:flex-start;flex-wrap:wrap}
   .weekly-tracking-filters{grid-template-columns:1fr}
 }
 
@@ -115,6 +128,11 @@
   padding:16px 18px;
   border-color:#ead8a6;
   background:linear-gradient(135deg,#fffdf7,#fff);
+}
+.weekly-tracking-unplanned-inline{
+  margin-top:14px;
+  border:1px solid #ead8a6;
+  border-radius:12px;
 }
 .weekly-tracking-unplanned .v2-section-head{align-items:center}
 .weekly-tracking-unplanned h3{color:#4a3b16}
