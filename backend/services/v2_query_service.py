@@ -32,6 +32,10 @@ def _dashboard_progress_payload(row:dict[str,Any])->dict[str,Any]:
         "pmp_orders":max(0,int(row.get("pmp_orders") or 0)),
         "backlog_orders":max(0,int(row.get("backlog_orders") or 0)),
         "total_workload_hh":round(float(row.get("total_workload_hh") or 0),2),
+        "finalized_workload_hh":round(float(row.get("finalized_workload_hh") or 0),2),
+        "progress_hh_pct":round(
+            100.0*float(row.get("finalized_workload_hh") or 0)/float(row.get("total_workload_hh") or 0),1
+        ) if float(row.get("total_workload_hh") or 0) else 0.0,
         "latest_tracking_at":row.get("latest_tracking_at"),
     }
 
@@ -355,6 +359,21 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
                 JOIN programacion.orden_mantenimiento o ON o.id=u.order_id
                 LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
               ),0),2) AS total_workload_hh,
+              round(COALESCE((
+                SELECT sum(
+                  CASE
+                    WHEN p.numero_personas_efectivo IS NOT NULL
+                     AND COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min) IS NOT NULL
+                    THEN COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min)
+                         / 60.0 * p.numero_personas_efectivo
+                    ELSE 0
+                  END
+                )
+                FROM finished f
+                JOIN universe u USING(order_id)
+                JOIN programacion.orden_mantenimiento o ON o.id=u.order_id
+                LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
+              ),0),2) AS finalized_workload_hh,
               (SELECT latest_tracking_at FROM latest_tracking) AS latest_tracking_at
         """),{"period":period,"next_period":next_period}).mappings().one())
         tracking_progress=_dashboard_progress_payload(progress_row)

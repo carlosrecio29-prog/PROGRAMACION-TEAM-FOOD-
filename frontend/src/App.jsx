@@ -283,6 +283,11 @@ function IndicatorsTracking({ data, year, month, onGoMonthly, onGoClosure, onTra
   const s = data?.summary || {};
   const specialties = data?.specialties || [];
   const totalHh = specialties.reduce((sum, row) => sum + Number(row.hh_calculables || 0), 0);
+  const monthlyProgress = data?.tracking_progress || {};
+  const monthlyHhTotal = number(monthlyProgress.total_workload_hh);
+  const monthlyHhFinalized = Math.min(monthlyHhTotal, number(monthlyProgress.finalized_workload_hh));
+  const monthlyHhPending = Math.max(0, monthlyHhTotal - monthlyHhFinalized);
+  const monthlyHhPct = Math.max(0, Math.min(100, number(monthlyProgress.progress_hh_pct)));
   const totalRecords = Number(s.registros_listos || 0)
     + Number(s.registros_sin_personas || 0)
     + Number(s.registros_sin_tiempo_parada || 0)
@@ -338,6 +343,28 @@ function IndicatorsTracking({ data, year, month, onGoMonthly, onGoClosure, onTra
               <b>{item.meta}</b>
             </button>
           ))}
+        </div>
+      </section>
+
+      <section className="v2-indicator-hh-overview" aria-label="Avance mensual por horas hombre">
+        <div className="v2-indicator-hh-ring" style={{ "--hh-progress-angle": `${monthlyHhPct * 3.6}deg` }}>
+          <div>
+            <strong>{fmt(monthlyHhPct, 1)}%</strong>
+            <span>avance H-H</span>
+          </div>
+        </div>
+        <div className="v2-indicator-hh-copy">
+          <span className="v2-kicker">AVANCE MENSUAL POR H-H</span>
+          <h3>{fmt(monthlyHhFinalized, 1)} de {fmt(monthlyHhTotal, 1)} H-H finalizadas</h3>
+          <p>
+            Mide las H-H estimadas de las actividades finalizadas frente a toda la carga
+            del mes: PMP + Backlog, sin duplicar actividades.
+          </p>
+          <div className="v2-indicator-hh-stats">
+            <span><b>{fmt(monthlyHhFinalized, 1)}</b><small>H-H finalizadas</small></span>
+            <span><b>{fmt(monthlyHhPending, 1)}</b><small>H-H pendientes</small></span>
+            <span><b>{fmt(monthlyHhTotal, 1)}</b><small>H-H totales mes</small></span>
+          </div>
         </div>
       </section>
 
