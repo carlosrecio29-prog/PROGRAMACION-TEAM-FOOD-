@@ -10,9 +10,9 @@ from typing import Any
 from sqlalchemy import text
 
 from backend.database import get_engine
-from backend.parsers.common import is_operation_plan
+from backend.parsers.common import is_operation_plan, normalize_text
 from backend.services.v2_closure_service import (
-    V2ClosureError, _is_finalized, _parse_calendar, preview_week_closure,
+    V2ClosureError, _index_calendar, _is_finalized, _parse_calendar, preview_week_closure,
 )
 
 
@@ -53,6 +53,129 @@ def _finish_datetime(value: Any) -> datetime | None:
         except ValueError:
             continue
     return None
+
+
+def _match_backlog_calendar_item(
+    item: dict[str, Any],
+    by_ot: dict[str, list[dict[str, Any]]],
+) -> tuple[dict[str, Any] | None, str]:
+    """Busca una OT del backlog en todo el archivo; la fecha no participa."""
+    ot = normalize_text(item.get("numero_ot"))
+    if not ot or ot == "SIN ASIGNAR":
+        return None, "SIN_NUMERO_OT"
+
+    matches = by_ot.get(ot, [])
+    if not matches:
+        return None, "NO_ENCONTRADA"
+
+    # La OT es la llave principal para backlog. Si solo aparece una vez,
+    # su estado es suficiente, sin importar el rango de fechas descargado.
+    if len(matches) == 1:
+        return matches[0], "OT"
+
+    # Si una OT agrupa varias actividades, usar equipo + plan para evitar
+    # cerrar por error una actividad distinta.
+    asset = normalize_text(item.get("activo_codigo"))
+    plan = normalize_text(item.get("plan_clave_software"))
+    exact = [
+        row for row in matches
+        if normalize_text(row.get("activo")) == asset
+        and normalize_text(row.get("plan")) == plan
+    ]
+    if len(exact) == 1:
+        return exact[0], "OT_EQUIPO_PLAN"
+
+    # Cuando todas las filas de una OT múltiple están finalizadas, es seguro
+    # considerar esa OT finalizada aunque el texto histórico del plan haya cambiado.
+    if matches and all(_is_finalized(str(row.get("estado") or "")) for row in matches):
+        return matches[0], "OT_MULTIPLE_TODAS_FINALIZADAS"
+
+    return None, "OT_AMBIGUA"
+
+
+def _reconcile_backlog_from_calendar(
+    conn,
+    *,
+    specialty: str,
+    calendar_rows: list[dict[str, Any]],
+    recorded_by: str | None,
+) -> dict[str, Any]:
+    """Concilia backlog activo por OT/estado usando todo el Excel, sin filtro de fecha."""
+    _, by_ot = _index_calendar(calendar_rows)
+    specialty = _ot_key(specialty)
+
+    backlog_rows = [dict(row) for row in conn.execute(text("""
+        SELECT b.id AS backlog_id,b.orden_mantenimiento_id,b.especialidad,
+               o.numero_ot,o.plan_clave_software,
+               a.codigo AS activo_codigo,
+               COALESCE(p.es_operacion,false) AS es_operacion
+        FROM programacion.backlog_v2 b
+        JOIN programacion.orden_mantenimiento o ON o.id=b.orden_mantenimiento_id
+        JOIN programacion.activo a ON a.id=o.activo_id
+        LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
+        WHERE b.estado_seguimiento<>'FINALIZADA'
+          AND upper(COALESCE(b.especialidad,''))=:specialty
+          AND COALESCE(p.es_operacion,false)=false
+        ORDER BY b.id
+    """), {"specialty": specialty}).mappings()]
+
+    found = 0
+    finalized_rows: list[tuple[dict[str, Any], dict[str, Any], str]] = []
+    ambiguous = 0
+    open_found = 0
+
+    for item in backlog_rows:
+        match, reason = _match_backlog_calendar_item(item, by_ot)
+        if not match:
+            if reason == "OT_AMBIGUA":
+                ambiguous += 1
+            continue
+        found += 1
+        if _is_finalized(str(match.get("estado") or "")):
+            finalized_rows.append((item, match, reason))
+        else:
+            open_found += 1
+
+    if finalized_rows:
+        payload = [{
+            "order_id": int(item["orden_mantenimiento_id"]),
+            "state": normalize_text(match.get("estado")) or "FINALIZADO",
+        } for item, match, _ in finalized_rows]
+
+        conn.execute(text("""
+            UPDATE programacion.orden_mantenimiento AS o
+            SET estado=v.state,actualizado_en=now()
+            FROM (VALUES (:order_id,:state)) AS v(order_id,state)
+            WHERE o.id=v.order_id
+        """), payload)
+
+        ids = [int(item["orden_mantenimiento_id"]) for item, _, _ in finalized_rows]
+        conn.execute(text("""
+            UPDATE programacion.backlog_v2
+            SET estado_seguimiento='FINALIZADA',
+                ultimo_resultado_cierre='FINALIZADA',
+                finalizado_en=COALESCE(finalizado_en,now()),
+                finalizado_por=COALESCE(:recorded_by,'SEGUIMIENTO LISTA DE CALENDARIO'),
+                ultima_programacion_id=NULL,
+                actualizado_en=now()
+            WHERE orden_mantenimiento_id=ANY(CAST(:ids AS bigint[]))
+              AND estado_seguimiento<>'FINALIZADA'
+        """), {
+            "ids": ids,
+            "recorded_by": recorded_by,
+        })
+
+    return {
+        "revisadas": len(backlog_rows),
+        "encontradas": found,
+        "finalizadas": len(finalized_rows),
+        "abiertas": open_found,
+        "ambiguas": ambiguous,
+        "finalizadas_ots": [
+            str(match.get("numero_ot") or item.get("numero_ot") or "").strip()
+            for item, match, _ in finalized_rows
+        ],
+    }
 
 
 def _detect_unplanned_rows(
@@ -464,6 +587,14 @@ def record_week_tracking(
     hh_pct = _pct(hh_finalized, hh_programmed)
     unplanned_detected = 0
     unplanned_new = 0
+    backlog_reconciliation = {
+        "revisadas": 0,
+        "encontradas": 0,
+        "finalizadas": 0,
+        "abiertas": 0,
+        "ambiguas": 0,
+        "finalizadas_ots": [],
+    }
 
     with get_engine().begin() as conn:
         tracking_id = conn.execute(text("""
@@ -518,6 +649,13 @@ def record_week_tracking(
                   :state,:finalized,:match
                 )
             """), payload)
+
+        backlog_reconciliation = _reconcile_backlog_from_calendar(
+            conn,
+            specialty=str(preview["programming"].get("especialidad") or ""),
+            calendar_rows=calendar_rows,
+            recorded_by=recorded_by,
+        )
 
         unplanned_rows = _detect_unplanned_rows(
             conn,
@@ -601,6 +739,12 @@ def record_week_tracking(
         "avance_hh_pct": hh_pct,
         "no_programadas_detectadas": unplanned_detected,
         "no_programadas_nuevas": unplanned_new,
+        "backlog_revisadas": int(backlog_reconciliation["revisadas"]),
+        "backlog_encontradas": int(backlog_reconciliation["encontradas"]),
+        "backlog_finalizadas": int(backlog_reconciliation["finalizadas"]),
+        "backlog_abiertas": int(backlog_reconciliation["abiertas"]),
+        "backlog_ambiguas": int(backlog_reconciliation["ambiguas"]),
+        "backlog_finalizadas_ots": list(backlog_reconciliation["finalizadas_ots"]),
     }
     return result
 
