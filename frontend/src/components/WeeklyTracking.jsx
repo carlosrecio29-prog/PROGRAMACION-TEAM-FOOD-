@@ -512,7 +512,10 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
               <div>
                 <span className="v2-kicker">HISTORIAL DE CARGAS</span>
                 <h3>Evolución de la semana</h3>
-                <p>Cada registro conserva el resultado observado en ese momento.</p>
+                <p>
+                  Cada fila corresponde a una carga. El avance se calcula solo sobre la programación semanal;
+                  las OT no programadas se muestran aparte para no mezclar los indicadores.
+                </p>
               </div>
               <button type="button" className="weekly-tracking-close-link" onClick={onOpenClosure}>
                 Ir a Cierre semanal →
@@ -522,29 +525,49 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
               <table>
                 <thead>
                   <tr>
-                    <th>Fecha</th>
-                    <th>Archivo</th>
-                    <th>Finalizadas</th>
-                    <th>Pendientes</th>
+                    <th>Fecha de carga</th>
+                    <th>Archivo cargado</th>
+                    <th>Programadas finalizadas</th>
+                    <th>No programadas nuevas</th>
+                    <th>Programadas pendientes</th>
                     <th>Sin coincidencia</th>
-                    <th>Avance OT</th>
-                    <th>Avance H-H</th>
+                    <th>Avance OT programadas</th>
+                    <th>Avance H-H programadas</th>
                   </tr>
                 </thead>
                 <tbody>
                   {(tracking?.history || []).map((row) => (
                     <tr key={row.id}>
-                      <td><b>{when(row.registrado_en)}</b></td>
-                      <td><span className="v2-plan">{row.archivo_nombre}</span></td>
-                      <td><b>{number(row.finalizados)}</b></td>
                       <td>
-                        <b>{number(row.no_programadas_nuevas)}</b>
-                        <small>{fmt(row.hh_no_programadas_nuevas)} H-H</small>
+                        <b>{when(row.registrado_en)}</b>
                       </td>
-                      <td>{number(row.pendientes)}</td>
-                      <td>{number(row.sin_coincidencia)}</td>
-                      <td><b>{fmt(row.avance_ot_pct)}%</b></td>
-                      <td><b>{fmt(row.avance_hh_pct)}%</b></td>
+                      <td>
+                        <span className="v2-plan">{row.archivo_nombre}</span>
+                      </td>
+                      <td>
+                        <b>{number(row.finalizados)} OT</b>
+                        <small>{fmt(row.hh_finalizadas)} H-H finalizadas</small>
+                      </td>
+                      <td>
+                        <b>{number(row.no_programadas_nuevas)} OT</b>
+                        <small>{fmt(row.hh_no_programadas_nuevas)} H-H adicionales</small>
+                      </td>
+                      <td>
+                        <b>{number(row.pendientes)} OT</b>
+                        <small>{fmt(row.hh_pendientes)} H-H pendientes</small>
+                      </td>
+                      <td>
+                        <b>{number(row.sin_coincidencia)} OT</b>
+                        <small>Sin validación automática</small>
+                      </td>
+                      <td>
+                        <b>{fmt(row.avance_ot_pct)}%</b>
+                        <small>Solo programación semanal</small>
+                      </td>
+                      <td>
+                        <b>{fmt(row.avance_hh_pct)}%</b>
+                        <small>{fmt(row.hh_finalizadas)} / {fmt(row.hh_programadas)} H-H</small>
+                      </td>
                     </tr>
                   ))}
                   {!tracking?.history?.length && (
