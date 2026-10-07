@@ -101,7 +101,14 @@ def _reconcile_backlog_from_calendar(
     recorded_by: str | None,
 ) -> dict[str, Any]:
     """Concilia backlog activo por OT/estado usando todo el Excel, sin filtro de fecha."""
-    _, by_ot = _index_calendar(calendar_rows)
+    eligible_calendar_rows = []
+    for row in calendar_rows:
+        raw_plan = str(row.get("plan") or "")
+        if is_operation_plan(raw_plan) or is_operation_plan(raw_plan.lstrip(" -–—:._/|")):
+            continue
+        eligible_calendar_rows.append(row)
+
+    _, by_ot = _index_calendar(eligible_calendar_rows)
     specialty = _ot_key(specialty)
 
     backlog_rows = [dict(row) for row in conn.execute(text("""
