@@ -2922,7 +2922,7 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
   border-radius:50%;
   display:grid;
   place-items:center;
-  background:conic-gradient(#1692d0 var(--progress-angle),#e7eef3 0deg);
+  background:conic-gradient(#1692d0 0deg var(--progress-angle),#e7eef3 var(--progress-angle) 360deg);
   position:relative;
   box-shadow:inset 0 0 0 1px #d7e5ef;
 }
