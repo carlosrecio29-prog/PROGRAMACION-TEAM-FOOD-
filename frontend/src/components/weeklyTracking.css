@@ -41,10 +41,23 @@
 .weekly-tracking-close-link{
   min-height:34px;padding:0 10px;border:1px solid #b9d1e2;border-radius:8px;background:#fff;color:#0b5e9b;font-size:8px;font-weight:900;cursor:pointer
 }
+.weekly-tracking-area-progress{padding:16px 18px}
+.weekly-tracking-area-filter{
+  display:grid;gap:4px;min-width:280px;max-width:420px
+}
+.weekly-tracking-area-filter>span{
+  color:var(--muted);font-size:7px;font-weight:950;text-transform:uppercase;letter-spacing:.4px
+}
+.weekly-tracking-area-filter select{width:100%;min-height:36px}
+.weekly-tracking-area-title{
+  display:flex;align-items:center;gap:8px;margin:10px 0 8px;color:#5f7168;font-size:8px;font-weight:800
+}
+.weekly-tracking-area-kpis{grid-template-columns:repeat(6,minmax(0,1fr))}
 .access-viewer .weekly-tracking-upload-actions{pointer-events:none;opacity:.5}
 
 @media(max-width:1200px){
   .weekly-tracking-kpis{grid-template-columns:repeat(3,1fr)}
+  .weekly-tracking-area-kpis{grid-template-columns:repeat(3,1fr)}
 }
 @media(max-width:760px){
   .weekly-tracking-selectors{grid-template-columns:1fr}
@@ -52,9 +65,12 @@
   .weekly-tracking-upload-actions{align-items:stretch;flex-direction:column}
   .weekly-tracking-upload-actions input{max-width:none;width:100%}
   .weekly-tracking-kpis{grid-template-columns:repeat(2,1fr)}
+  .weekly-tracking-area-filter{min-width:0;max-width:none;width:100%}
+  .weekly-tracking-area-kpis{grid-template-columns:repeat(2,1fr)}
 }
 @media(max-width:520px){
   .weekly-tracking-kpis{grid-template-columns:1fr}
+  .weekly-tracking-area-kpis{grid-template-columns:1fr}
 }
 
 /* ---------- Programación viva del seguimiento ---------- */
