@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import base64
 from collections import defaultdict
-from datetime import date
+from datetime import date, datetime
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -10,7 +10,9 @@ from typing import Any
 from sqlalchemy import text
 
 from backend.database import get_engine
-from backend.services.v2_closure_service import V2ClosureError, preview_week_closure
+from backend.services.v2_closure_service import (
+    V2ClosureError, _is_finalized, _parse_calendar, preview_week_closure,
+)
 
 
 class V2WeeklyTrackingError(ValueError):
@@ -27,6 +29,196 @@ def _week_number(week_start: date) -> int | None:
     if week_start.day < first_thursday_day:
         return None
     return 1 + ((week_start.day - first_thursday_day) // 7)
+
+
+
+def _ot_key(value: Any) -> str:
+    return str(value or "").strip().upper()
+
+
+def _finish_datetime(value: Any) -> datetime | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    cleaned = raw.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(cleaned)
+        return parsed.replace(tzinfo=None)
+    except ValueError:
+        pass
+    for fmt in ("%d/%m/%Y %H:%M:%S", "%d/%m/%Y", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(raw, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def _detect_unplanned_rows(
+    conn,
+    *,
+    programming: dict[str, Any],
+    programmed_rows: list[dict[str, Any]],
+    calendar_rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Detecta ejecución finalizada dentro del corte que no pertenece a la línea base."""
+    programming_id = int(programming["id"])
+    week_start = programming["semana_inicio"]
+    week_end = programming["semana_fin"]
+    specialty = _ot_key(programming.get("especialidad"))
+    programmed_ots = {
+        _ot_key(row.get("numero_ot"))
+        for row in programmed_rows
+        if _ot_key(row.get("numero_ot")) not in {"", "SIN ASIGNAR"}
+    }
+
+    candidates: dict[str, dict[str, Any]] = {}
+    for row in calendar_rows:
+        ot = _ot_key(row.get("numero_ot"))
+        if not ot or ot == "SIN ASIGNAR" or ot in programmed_ots:
+            continue
+        if not _is_finalized(str(row.get("estado") or "")):
+            continue
+        finished_at = _finish_datetime(row.get("fecha_fin_orden"))
+        if not finished_at or not (week_start <= finished_at.date() <= week_end):
+            continue
+        row_specialty = _ot_key(row.get("especialidad"))
+        if row_specialty and row_specialty != specialty:
+            continue
+        # Si la OT aparece repetida en el Excel, conservar la finalización más reciente.
+        previous = candidates.get(ot)
+        if previous is None or finished_at > previous["_finished_at"]:
+            candidates[ot] = {**row, "_finished_at": finished_at}
+
+    if not candidates:
+        return []
+
+    order_rows = [dict(row) for row in conn.execute(text("""
+        SELECT o.id AS orden_mantenimiento_id,o.numero_ot,o.periodo,o.especialidad,
+               o.tiempo_planeado_min,
+               a.codigo AS activo_codigo,a.descripcion AS activo_descripcion,
+               a.area_codigo,root.descripcion AS area_nombre,
+               p.plan_trabajo,p.descripcion_grupo,p.numero_personas_efectivo,
+               round(
+                 COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min)/60.0
+                 * COALESCE(p.numero_personas_efectivo,0),2
+               ) AS hh_estimada
+        FROM programacion.orden_mantenimiento o
+        JOIN programacion.activo a ON a.id=o.activo_id
+        LEFT JOIN programacion.activo root ON root.codigo='BA-'||a.area_codigo
+        LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
+        WHERE o.numero_ot IS NOT NULL
+          AND upper(btrim(o.numero_ot))=ANY(CAST(:ots AS text[]))
+        ORDER BY o.periodo DESC,o.id DESC
+    """), {"ots": list(candidates)}).mappings()]
+
+    orders_by_ot: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for order in order_rows:
+        orders_by_ot[_ot_key(order.get("numero_ot"))].append(order)
+
+    resolved: list[tuple[str, dict[str, Any], dict[str, Any] | None]] = []
+    order_ids: list[int] = []
+    for ot, calendar in candidates.items():
+        matches = orders_by_ot.get(ot, [])
+        matching_specialty = [
+            item for item in matches
+            if not _ot_key(item.get("especialidad"))
+            or _ot_key(item.get("especialidad")) == specialty
+        ]
+        order = (matching_specialty or matches or [None])[0]
+        if order and _ot_key(order.get("especialidad")) not in {"", specialty}:
+            continue
+        resolved.append((ot, calendar, order))
+        if order:
+            order_ids.append(int(order["orden_mantenimiento_id"]))
+
+    other_programming: dict[int, dict[str, Any]] = {}
+    backlog: set[int] = set()
+    if order_ids:
+        for row in conn.execute(text("""
+            SELECT pi.orden_mantenimiento_id,ps.id AS programacion_origen_id,
+                   ps.semana_inicio,ps.semana_fin,ps.estado
+            FROM programacion.programacion_item_v2 pi
+            JOIN programacion.programacion_semanal_v2 ps ON ps.id=pi.programacion_id
+            WHERE pi.orden_mantenimiento_id=ANY(CAST(:ids AS bigint[]))
+              AND ps.id<>:programming_id
+            ORDER BY ps.semana_inicio DESC,ps.id DESC
+        """), {"ids": order_ids, "programming_id": programming_id}).mappings():
+            other_programming.setdefault(int(row["orden_mantenimiento_id"]), dict(row))
+
+        backlog = {
+            int(row[0])
+            for row in conn.execute(text("""
+                SELECT orden_mantenimiento_id
+                FROM programacion.backlog_v2
+                WHERE orden_mantenimiento_id=ANY(CAST(:ids AS bigint[]))
+            """), {"ids": order_ids}).all()
+        }
+
+    result: list[dict[str, Any]] = []
+    current_period = week_start.replace(day=1)
+    for ot, calendar, order in resolved:
+        order_id = int(order["orden_mantenimiento_id"]) if order else None
+        previous_program = other_programming.get(order_id) if order_id else None
+        if previous_program:
+            origin = "PROGRAMADA_OTRA_SEMANA"
+            if previous_program["semana_inicio"] > week_end:
+                detail = (
+                    "EJECUTADA ANTICIPADAMENTE · programada del "
+                    f"{previous_program['semana_inicio']:%d/%m/%Y} al "
+                    f"{previous_program['semana_fin']:%d/%m/%Y}"
+                )
+            elif previous_program["semana_fin"] < week_start:
+                detail = (
+                    "EJECUTADA FUERA DE SEMANA · programada del "
+                    f"{previous_program['semana_inicio']:%d/%m/%Y} al "
+                    f"{previous_program['semana_fin']:%d/%m/%Y}"
+                )
+            else:
+                detail = "PROGRAMADA EN OTRA SEMANA"
+        elif order_id and order_id in backlog:
+            origin = "BACKLOG_NO_PROGRAMADO"
+            detail = "BACKLOG EJECUTADO SIN ESTAR EN LA PROGRAMACIÓN DE ESTA SEMANA"
+        elif order and order.get("periodo") == current_period:
+            origin = "PMP_NO_PROGRAMADO"
+            detail = "PMP DEL MES EJECUTADO SIN ESTAR EN LA PROGRAMACIÓN SEMANAL"
+        else:
+            origin = "EMERGENTE_NO_PLANIFICADA"
+            detail = "OT FINALIZADA SIN PROGRAMACIÓN/PMP/BACKLOG IDENTIFICADO"
+
+        raw_time = str(calendar.get("tiempo_planeado") or "").strip().replace(",", ".")
+        try:
+            raw_minutes = float(raw_time) if raw_time else None
+        except ValueError:
+            raw_minutes = None
+
+        result.append({
+            "programacion_id": programming_id,
+            "orden_mantenimiento_id": order_id,
+            "numero_ot": str(calendar.get("numero_ot") or ot).strip(),
+            "activo_codigo": (order or {}).get("activo_codigo") or calendar.get("activo"),
+            "activo_descripcion": (order or {}).get("activo_descripcion") or calendar.get("descripcion_activo"),
+            "area_codigo": (order or {}).get("area_codigo"),
+            "area_nombre": (order or {}).get("area_nombre"),
+            "plan_trabajo": (order or {}).get("plan_trabajo") or calendar.get("plan"),
+            "especialidad": (order or {}).get("especialidad") or calendar.get("especialidad") or specialty,
+            "estado_calendario": calendar.get("estado"),
+            "fecha_fin_orden": calendar["_finished_at"],
+            "tiempo_planeado_min": (order or {}).get("tiempo_planeado_min") or raw_minutes,
+            "hh_estimada": float((order or {}).get("hh_estimada") or 0),
+            "origen": origin,
+            "detalle_origen": detail,
+            "programacion_origen_id": (
+                int(previous_program["programacion_origen_id"]) if previous_program else None
+            ),
+            "semana_origen_inicio": previous_program["semana_inicio"] if previous_program else None,
+            "semana_origen_fin": previous_program["semana_fin"] if previous_program else None,
+        })
+    return sorted(
+        result,
+        key=lambda row: (row["fecha_fin_orden"], _ot_key(row["numero_ot"])),
+        reverse=True,
+    )
 
 
 def _area_summary(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
