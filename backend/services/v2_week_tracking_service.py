@@ -302,8 +302,8 @@ def get_week_tracking(programming_id: int) -> dict[str, Any]:
             LIMIT 30
         """), {"id": programming_id}).mappings()]
 
-        if history:
-            latest_id = int(history[0]["id"])
+        latest_id = int(history[0]["id"]) if history else None
+        if latest_id:
             latest_rows = [dict(row) for row in conn.execute(text("""
                 SELECT s.programacion_item_id,s.orden_mantenimiento_id,s.numero_ot,
                        s.area_codigo,s.area_nombre,s.hh_programadas,
@@ -324,10 +324,43 @@ def get_week_tracking(programming_id: int) -> dict[str, Any]:
         else:
             latest_rows = _programmed_rows(conn, programming_id)
 
+        unplanned_rows = [dict(row) for row in conn.execute(text("""
+            SELECT n.id,n.orden_mantenimiento_id,n.numero_ot,n.activo_codigo,
+                   n.activo_descripcion,n.area_codigo,n.area_nombre,n.plan_trabajo,
+                   n.especialidad,n.estado_calendario,n.fecha_fin_orden,
+                   n.tiempo_planeado_min,n.hh_estimada,n.origen,n.detalle_origen,
+                   n.programacion_origen_id,n.semana_origen_inicio,n.semana_origen_fin,
+                   n.primera_seguimiento_id,n.ultima_seguimiento_id,
+                   n.primera_deteccion_en,n.ultima_deteccion_en,n.veces_detectada,
+                   CASE
+                     WHEN CAST(:latest_id AS bigint) IS NOT NULL
+                      AND n.primera_seguimiento_id=CAST(:latest_id AS bigint)
+                     THEN true ELSE false
+                   END AS nueva_ultima_carga
+            FROM programacion.seguimiento_no_programado_v2 n
+            WHERE n.programacion_id=:id
+            ORDER BY nueva_ultima_carga DESC,n.fecha_fin_orden DESC NULLS LAST,
+                     n.primera_deteccion_en DESC,n.numero_ot
+        """), {"id": programming_id, "latest_id": latest_id}).mappings()]
+
     for row in history:
         for key in ("hh_programadas", "hh_finalizadas", "hh_pendientes",
                     "avance_ot_pct", "avance_hh_pct"):
             row[key] = float(row[key] or 0)
+
+    by_origin: dict[str, int] = defaultdict(int)
+    for row in unplanned_rows:
+        row["hh_estimada"] = float(row.get("hh_estimada") or 0)
+        row["tiempo_planeado_min"] = (
+            float(row["tiempo_planeado_min"]) if row.get("tiempo_planeado_min") is not None else None
+        )
+        by_origin[str(row.get("origen") or "SIN_CLASIFICAR")] += 1
+
+    unplanned_total = len(unplanned_rows)
+    unplanned_new = sum(1 for row in unplanned_rows if row.get("nueva_ultima_carga"))
+    unplanned_hh = round(sum(float(row.get("hh_estimada") or 0) for row in unplanned_rows), 2)
+    programmed_finalized = int(history[0]["finalizados"] or 0) if history else 0
+    execution_total = programmed_finalized + unplanned_total
 
     return {
         "programming": dict(programming),
@@ -335,8 +368,21 @@ def get_week_tracking(programming_id: int) -> dict[str, Any]:
         "history": history,
         "by_area": _area_summary(latest_rows),
         "rows": latest_rows,
+        "unplanned": {
+            "summary": {
+                "total": unplanned_total,
+                "nuevas_ultima_carga": unplanned_new,
+                "hh_estimada": unplanned_hh,
+                "ejecucion_total": execution_total,
+                "participacion_pct": _pct(unplanned_total, execution_total),
+            },
+            "by_origin": [
+                {"origen": origin, "cantidad": count}
+                for origin, count in sorted(by_origin.items())
+            ],
+            "rows": unplanned_rows,
+        },
     }
-
 
 def record_week_tracking(
     *,
