@@ -81,6 +81,7 @@ def _monthly_demand(conn, month_date: date, specialty: str, exclude_programming_
         WITH candidate AS (
           SELECT
             o.id AS orden_mantenimiento_id,
+            o.numero_ot,
             CASE
               WHEN p.numero_personas_efectivo IS NOT NULL
                AND COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min) IS NOT NULL
@@ -103,6 +104,16 @@ def _monthly_demand(conn, month_date: date, specialty: str, exclude_programming_
             c.*,
             CASE
               WHEN c.finalizada_software THEN true
+              WHEN EXISTS (
+                SELECT 1
+                FROM programacion.seguimiento_no_programado_v2 snp
+                WHERE snp.orden_mantenimiento_id=c.orden_mantenimiento_id
+                   OR (
+                     snp.numero_ot IS NOT NULL
+                     AND c.numero_ot IS NOT NULL
+                     AND upper(btrim(snp.numero_ot))=upper(btrim(c.numero_ot))
+                   )
+              ) THEN true
               WHEN EXISTS (
                 SELECT 1
                 FROM programacion.programacion_item_v2 pi
@@ -143,6 +154,7 @@ def _monthly_demand(conn, month_date: date, specialty: str, exclude_programming_
         WITH pmp_candidate AS (
           SELECT
             o.id AS orden_mantenimiento_id,
+            o.numero_ot,
             CASE
               WHEN p.numero_personas_efectivo IS NOT NULL
                AND COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min) IS NOT NULL
@@ -151,6 +163,16 @@ def _monthly_demand(conn, month_date: date, specialty: str, exclude_programming_
             END AS hh,
             (
               upper(COALESCE(o.estado,'')) LIKE 'FINALIZ%'
+              OR EXISTS (
+                SELECT 1
+                FROM programacion.seguimiento_no_programado_v2 snp
+                WHERE snp.orden_mantenimiento_id=o.id
+                   OR (
+                     snp.numero_ot IS NOT NULL
+                     AND o.numero_ot IS NOT NULL
+                     AND upper(btrim(snp.numero_ot))=upper(btrim(o.numero_ot))
+                   )
+              )
               OR EXISTS (
                 SELECT 1
                 FROM programacion.programacion_item_v2 pi
@@ -189,6 +211,16 @@ def _monthly_demand(conn, month_date: date, specialty: str, exclude_programming_
           WHERE b.estado_seguimiento='PENDIENTE_DISPONIBLE'
             AND b.especialidad=:specialty
             AND upper(COALESCE(o.estado,'')) NOT LIKE 'FINALIZ%'
+            AND NOT EXISTS (
+              SELECT 1
+              FROM programacion.seguimiento_no_programado_v2 snp
+              WHERE snp.orden_mantenimiento_id=o.id
+                 OR (
+                   snp.numero_ot IS NOT NULL
+                   AND o.numero_ot IS NOT NULL
+                   AND upper(btrim(snp.numero_ot))=upper(btrim(o.numero_ot))
+                 )
+            )
             AND NOT COALESCE(p.es_operacion,false)
         ),
         all_pending AS (
