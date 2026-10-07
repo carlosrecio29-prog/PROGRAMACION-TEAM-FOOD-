@@ -3165,3 +3165,100 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
     width:108px;
   }
 }
+
+
+/* Panel de control: flujo compacto junto a indicadores */
+.v2-control-body-main{
+  grid-template-columns:minmax(0,1.28fr) minmax(360px,.92fr);
+  gap:12px;
+}
+.v2-control-shortcuts-main{
+  padding:15px;
+}
+.v2-control-shortcuts-main .v2-control-panel-head h3{
+  margin-top:3px;
+  font-size:15px;
+}
+.v2-control-shortcuts-main .v2-kicker{
+  font-size:7.5px;
+}
+.v2-control-action-list-main{
+  gap:8px;
+  margin-top:10px;
+}
+.v2-control-action-list-main > .v2-control-action-button{
+  min-height:82px;
+  padding:9px 10px;
+  grid-template-columns:24px 36px minmax(0,1fr) 16px;
+  gap:8px;
+}
+.v2-control-action-list-main .v2-control-action-icon{
+  width:34px;
+  height:34px;
+}
+.v2-control-action-list-main .v2-control-action-step{
+  width:23px;
+  height:23px;
+}
+.v2-control-action-list-main .v2-control-action-copy b{
+  font-size:9.8px;
+}
+.v2-control-action-list-main .v2-control-action-copy small{
+  font-size:7.1px;
+  line-height:1.35;
+}
+.v2-control-action-close-wide{
+  min-height:100px!important;
+  padding:9px 10px;
+}
+.v2-control-action-close-wide .v2-control-action-main{
+  grid-template-columns:24px 36px minmax(0,1fr);
+  gap:8px;
+}
+.v2-control-action-close-wide .v2-control-close-options{
+  margin-top:7px;
+}
+.v2-dashboard-progress-card{
+  padding:15px;
+  gap:12px;
+}
+.v2-dashboard-progress-head h3{
+  font-size:14px;
+}
+.v2-dashboard-progress-dual{
+  gap:8px;
+}
+.v2-dashboard-progress-dual .v2-dashboard-progress-ring{
+  width:108px;
+}
+.v2-dashboard-progress-dual .v2-dashboard-progress-ring strong{
+  font-size:20px;
+}
+.v2-dashboard-progress-stats span{
+  padding:8px 5px;
+}
+.v2-dashboard-progress-stats b{
+  font-size:13px;
+}
+.v2-dashboard-progress-source{
+  gap:5px;
+}
+.v2-dashboard-progress-source span{
+  padding:5px 7px;
+  font-size:7.2px;
+}
+
+/* Mantener ambos bloques lado a lado en escritorio compacto */
+@media (min-width:851px) and (max-width:1100px){
+  .v2-control-body-main{
+    grid-template-columns:minmax(0,1.2fr) minmax(340px,.8fr);
+  }
+  .v2-dashboard-progress-card{
+    min-height:100%;
+  }
+}
+@media(max-width:850px){
+  .v2-control-body-main{
+    grid-template-columns:1fr;
+  }
+}
