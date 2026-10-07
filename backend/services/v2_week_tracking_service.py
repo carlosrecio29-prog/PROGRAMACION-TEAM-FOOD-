@@ -393,6 +393,7 @@ def record_week_tracking(
 ) -> dict[str, Any]:
     try:
         preview = preview_week_closure(programming_id=programming_id, content=content)
+        calendar_rows = _parse_calendar(content)
     except V2ClosureError as exc:
         raise V2WeeklyTrackingError(str(exc)) from exc
 
@@ -432,6 +433,8 @@ def record_week_tracking(
     hh_pending = round(sum(float(row.get("hh") or 0) for row in rows if row.get("finalizado") is False), 2)
     ot_pct = _pct(finalized, programmed)
     hh_pct = _pct(hh_finalized, hh_programmed)
+    unplanned_detected = 0
+    unplanned_new = 0
 
     with get_engine().begin() as conn:
         tracking_id = conn.execute(text("""
@@ -487,6 +490,77 @@ def record_week_tracking(
                 )
             """), payload)
 
+        unplanned_rows = _detect_unplanned_rows(
+            conn,
+            programming=dict(preview["programming"]),
+            programmed_rows=rows,
+            calendar_rows=calendar_rows,
+        )
+        unplanned_detected = len(unplanned_rows)
+
+        if unplanned_rows:
+            existing_ots = {
+                _ot_key(row[0])
+                for row in conn.execute(text("""
+                    SELECT numero_ot
+                    FROM programacion.seguimiento_no_programado_v2
+                    WHERE programacion_id=:id
+                """), {"id": programming_id}).all()
+            }
+            unplanned_new = sum(
+                1 for row in unplanned_rows if _ot_key(row["numero_ot"]) not in existing_ots
+            )
+            unplanned_payload = [{
+                **row,
+                "numero_ot": _ot_key(row["numero_ot"]),
+                "tracking_id": int(tracking_id),
+            } for row in unplanned_rows]
+            conn.execute(text("""
+                INSERT INTO programacion.seguimiento_no_programado_v2(
+                  programacion_id,orden_mantenimiento_id,numero_ot,
+                  activo_codigo,activo_descripcion,area_codigo,area_nombre,
+                  plan_trabajo,especialidad,estado_calendario,fecha_fin_orden,
+                  tiempo_planeado_min,hh_estimada,origen,detalle_origen,
+                  programacion_origen_id,semana_origen_inicio,semana_origen_fin,
+                  primera_seguimiento_id,ultima_seguimiento_id
+                ) VALUES(
+                  :programacion_id,:orden_mantenimiento_id,:numero_ot,
+                  :activo_codigo,:activo_descripcion,:area_codigo,:area_nombre,
+                  :plan_trabajo,:especialidad,:estado_calendario,:fecha_fin_orden,
+                  :tiempo_planeado_min,:hh_estimada,:origen,:detalle_origen,
+                  :programacion_origen_id,:semana_origen_inicio,:semana_origen_fin,
+                  :tracking_id,:tracking_id
+                )
+                ON CONFLICT(programacion_id,numero_ot) DO UPDATE SET
+                  orden_mantenimiento_id=COALESCE(EXCLUDED.orden_mantenimiento_id,
+                    programacion.seguimiento_no_programado_v2.orden_mantenimiento_id),
+                  activo_codigo=COALESCE(EXCLUDED.activo_codigo,
+                    programacion.seguimiento_no_programado_v2.activo_codigo),
+                  activo_descripcion=COALESCE(EXCLUDED.activo_descripcion,
+                    programacion.seguimiento_no_programado_v2.activo_descripcion),
+                  area_codigo=COALESCE(EXCLUDED.area_codigo,
+                    programacion.seguimiento_no_programado_v2.area_codigo),
+                  area_nombre=COALESCE(EXCLUDED.area_nombre,
+                    programacion.seguimiento_no_programado_v2.area_nombre),
+                  plan_trabajo=COALESCE(EXCLUDED.plan_trabajo,
+                    programacion.seguimiento_no_programado_v2.plan_trabajo),
+                  especialidad=COALESCE(EXCLUDED.especialidad,
+                    programacion.seguimiento_no_programado_v2.especialidad),
+                  estado_calendario=EXCLUDED.estado_calendario,
+                  fecha_fin_orden=EXCLUDED.fecha_fin_orden,
+                  tiempo_planeado_min=COALESCE(EXCLUDED.tiempo_planeado_min,
+                    programacion.seguimiento_no_programado_v2.tiempo_planeado_min),
+                  hh_estimada=EXCLUDED.hh_estimada,
+                  origen=EXCLUDED.origen,
+                  detalle_origen=EXCLUDED.detalle_origen,
+                  programacion_origen_id=EXCLUDED.programacion_origen_id,
+                  semana_origen_inicio=EXCLUDED.semana_origen_inicio,
+                  semana_origen_fin=EXCLUDED.semana_origen_fin,
+                  ultima_seguimiento_id=EXCLUDED.ultima_seguimiento_id,
+                  ultima_deteccion_en=now(),
+                  veces_detectada=programacion.seguimiento_no_programado_v2.veces_detectada+1
+            """), unplanned_payload)
+
     result = get_week_tracking(programming_id)
     result["saved"] = {
         "tracking_id": int(tracking_id),
@@ -496,9 +570,10 @@ def record_week_tracking(
         "sin_coincidencia": unmatched,
         "avance_ot_pct": ot_pct,
         "avance_hh_pct": hh_pct,
+        "no_programadas_detectadas": unplanned_detected,
+        "no_programadas_nuevas": unplanned_new,
     }
     return result
-
 
 def export_week_tracking_excel(
     programming_id: int,
