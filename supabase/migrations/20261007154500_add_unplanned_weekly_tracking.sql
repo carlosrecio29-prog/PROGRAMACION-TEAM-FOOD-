@@ -32,6 +32,12 @@ create index if not exists ix_seguimiento_no_programado_orden
   on programacion.seguimiento_no_programado_v2(orden_mantenimiento_id);
 create index if not exists ix_seguimiento_no_programado_ultima_carga
   on programacion.seguimiento_no_programado_v2(programacion_id, ultima_seguimiento_id);
+create index if not exists ix_seguimiento_no_programado_programacion_origen
+  on programacion.seguimiento_no_programado_v2(programacion_origen_id);
+create index if not exists ix_seguimiento_no_programado_primera_carga
+  on programacion.seguimiento_no_programado_v2(primera_seguimiento_id);
+create index if not exists ix_seguimiento_no_programado_ultima_seguimiento
+  on programacion.seguimiento_no_programado_v2(ultima_seguimiento_id);
 
 alter table programacion.seguimiento_no_programado_v2 enable row level security;
 revoke all on table programacion.seguimiento_no_programado_v2 from public;
