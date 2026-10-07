@@ -65,6 +65,7 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [areaFilter, setAreaFilter] = useState("");
+  const [areaProgressFilter, setAreaProgressFilter] = useState("");
   const [search, setSearch] = useState("");
   const [downloading, setDownloading] = useState(false);
   const [showUnplanned, setShowUnplanned] = useState(false);
@@ -99,6 +100,7 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
     setFile(null);
     setMessage("");
     setAreaFilter("");
+    setAreaProgressFilter("");
     setSearch("");
     setShowUnplanned(false);
     load();
@@ -142,6 +144,12 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
   const unplanned = tracking?.unplanned || {};
   const unplannedSummary = unplanned.summary || {};
   const unplannedRows = unplanned.rows || [];
+  const areaProgressRows = tracking?.by_area || [];
+  const selectedAreaProgress = (
+    areaProgressRows.find((row) => String(row.area_codigo || "") === areaProgressFilter)
+    || areaProgressRows[0]
+    || null
+  );
   const areas = useMemo(() => {
     const unique = new Map();
     liveRows.forEach((row) => {
@@ -464,47 +472,72 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
             )}
           </section>
 
-          <section className="v2-panel">
+          <section className="v2-panel weekly-tracking-area-progress">
             <div className="v2-section-head">
               <div>
                 <span className="v2-kicker">AVANCE POR ÁREA</span>
                 <h3>Estado de la programación en la última carga</h3>
-                <p>El porcentaje se calcula sobre las OT y H-H programadas de cada área.</p>
+                <p>Selecciona un área para consultar únicamente sus indicadores de programación.</p>
               </div>
-              <Badge>{tracking?.by_area?.length || 0} áreas</Badge>
-            </div>
-            <div className="v2-table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Área</th>
-                    <th>Programadas</th>
-                    <th>Finalizadas</th>
-                    <th>No programadas nuevas</th>
-                    <th>Pendientes</th>
-                    <th>Sin coincidencia</th>
-                    <th>Avance OT</th>
-                    <th>Avance H-H</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(tracking?.by_area || []).map((row) => (
-                    <tr key={row.area_codigo}>
-                      <td><Badge>{row.area_codigo}</Badge><small>{row.area_nombre || ""}</small></td>
-                      <td><b>{number(row.programadas)}</b></td>
-                      <td><b>{number(row.finalizadas)}</b></td>
-                      <td><b>{number(row.pendientes)}</b></td>
-                      <td><b>{number(row.sin_coincidencia)}</b></td>
-                      <td><b>{fmt(row.avance_ot_pct)}%</b></td>
-                      <td><b>{fmt(row.avance_hh_pct)}%</b><small>{fmt(row.hh_finalizadas)} / {fmt(row.hh_programadas)} H-H</small></td>
-                    </tr>
+              <label className="weekly-tracking-area-filter">
+                <span>Área</span>
+                <select
+                  value={selectedAreaProgress ? String(selectedAreaProgress.area_codigo || "") : ""}
+                  onChange={(event) => setAreaProgressFilter(event.target.value)}
+                  disabled={!areaProgressRows.length}
+                >
+                  {!areaProgressRows.length && <option value="">Sin áreas disponibles</option>}
+                  {areaProgressRows.map((row) => (
+                    <option key={row.area_codigo} value={row.area_codigo}>
+                      {row.area_codigo}{row.area_nombre ? ` · ${row.area_nombre}` : ""}
+                    </option>
                   ))}
-                  {!tracking?.by_area?.length && (
-                    <tr><td colSpan="7" className="v2-empty">No hay actividades disponibles para esta programación.</td></tr>
-                  )}
-                </tbody>
-              </table>
+                </select>
+              </label>
             </div>
+
+            {selectedAreaProgress ? (
+              <>
+                <div className="weekly-tracking-area-title">
+                  <Badge>{selectedAreaProgress.area_codigo}</Badge>
+                  <span>{selectedAreaProgress.area_nombre || "Área seleccionada"}</span>
+                </div>
+                <div className="weekly-tracking-kpis weekly-tracking-area-kpis">
+                  <article>
+                    <span>Programadas</span>
+                    <b>{number(selectedAreaProgress.programadas)}</b>
+                    <small>{fmt(selectedAreaProgress.hh_programadas)} H-H programadas</small>
+                  </article>
+                  <article className="ok">
+                    <span>Finalizadas</span>
+                    <b>{number(selectedAreaProgress.finalizadas)}</b>
+                    <small>{fmt(selectedAreaProgress.hh_finalizadas)} H-H finalizadas</small>
+                  </article>
+                  <article className="pending">
+                    <span>Pendientes</span>
+                    <b>{number(selectedAreaProgress.pendientes)}</b>
+                    <small>{fmt(selectedAreaProgress.hh_pendientes)} H-H pendientes</small>
+                  </article>
+                  <article className={number(selectedAreaProgress.sin_coincidencia) ? "warn" : ""}>
+                    <span>Sin coincidencia</span>
+                    <b>{number(selectedAreaProgress.sin_coincidencia)}</b>
+                    <small>OT sin validación automática</small>
+                  </article>
+                  <article className="ok">
+                    <span>Avance OT</span>
+                    <b>{fmt(selectedAreaProgress.avance_ot_pct)}%</b>
+                    <small>Sobre OT programadas del área</small>
+                  </article>
+                  <article className="ok">
+                    <span>Avance H-H</span>
+                    <b>{fmt(selectedAreaProgress.avance_hh_pct)}%</b>
+                    <small>{fmt(selectedAreaProgress.hh_finalizadas)} / {fmt(selectedAreaProgress.hh_programadas)} H-H</small>
+                  </article>
+                </div>
+              </>
+            ) : (
+              <div className="v2-empty">No hay actividades disponibles para esta programación.</div>
+            )}
           </section>
 
           <section className="v2-panel">
