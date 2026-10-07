@@ -120,7 +120,7 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
       await onChanged?.();
       const saved = result.saved || {};
       setMessage(
-        `Avance registrado sin cerrar la semana: ${number(saved.finalizadas)} finalizadas programadas · ${number(saved.no_programadas_nuevas)} no programadas nuevas · ${fmt(saved.avance_ot_pct)}% por OT · ${fmt(saved.avance_hh_pct)}% por H-H.`,
+        `Avance registrado sin cerrar la semana: ${number(saved.finalizadas)} finalizadas programadas · ${number(saved.no_programadas_nuevas)} no programadas nuevas · ${number(saved.backlog_finalizadas)} OT del backlog finalizadas · ${fmt(saved.avance_ot_pct)}% por OT · ${fmt(saved.avance_hh_pct)}% por H-H.`,
       );
     } catch (cause) {
       setError(cause.message || "No se pudo registrar el avance semanal.");
@@ -185,7 +185,8 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
             <h3>Avance de la programación sin realizar el cierre</h3>
             <p>
               Puedes cargar la Lista de Calendario varias veces. Cada carga queda guardada
-              como una fotografía del avance y no modifica Backlog ni cierra la programación.
+              como una fotografía del avance, concilia las OT finalizadas del Backlog de la especialidad
+              seleccionada y no cierra la programación.
             </p>
           </div>
           <Badge tone={closed ? "ok" : latest ? "warn" : undefined}>
@@ -244,6 +245,8 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
                 <p>
                   Validaremos las OT programadas y, sin modificar la línea base, también
                   identificaremos las OT finalizadas dentro de este corte que no estaban programadas.
+                  Además, buscaremos en todo el archivo las OT del Backlog de esta especialidad y
+                  marcaremos como FINALIZADAS las que el calendario reporte finalizadas, sin filtrar por fecha.
                   Este proceso no mueve OT a Backlog y no realiza el cierre.
                 </p>
               </div>
