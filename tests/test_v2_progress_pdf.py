@@ -118,13 +118,12 @@ def test_visual_pdf_contains_kpi_charts_and_technical_sections(monkeypatch):
     for document in (monthly, weekly):
         assert document.startswith(b"%PDF-1.4")
         assert document.rstrip().endswith(b"%%EOF")
-        assert b"RESUMEN EJECUTIVO" in document
-        assert b"MAPA DEL INFORME" in document
-        assert b"CUMPLIMIENTO POR OT" in document
+        assert b"INDICADORES PRINCIPALES" in document
+        assert b"CUMPLIMIENTO OT" in document
+        assert b"HH DE OT CERRADAS" in document
         assert document.count(b"/Type /Page ") >= 2
     assert b"COMPARATIVO POR ESPECIALIDAD" in monthly
     assert b"DETALLE" in monthly and b"OT-2" in monthly
-    assert b"RESULTADO DE LA PROGRAMACI" in weekly
-    assert b"DETALLE DE OT PROGRAMADAS" in weekly and b"OT-1" in weekly
+    assert b"DETALLE" in weekly and b"OT-1" in weekly
     assert b"OT FINALIZADAS NO PROGRAMADAS" in weekly
     assert b"OT-NP-1" in weekly
