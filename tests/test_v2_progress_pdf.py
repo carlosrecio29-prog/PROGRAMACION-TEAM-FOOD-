@@ -151,3 +151,10 @@ def test_weekly_pdf_removed_explanatory_labels_and_bar():
     weekly_block = source[source.index("    else:"):source.index('    kind="mensual"')]
     assert 'pdf.section("OT programadas y finalizadas")' not in weekly_block
     assert 'pdf.section("Criterios del informe")' not in weekly_block
+
+
+def test_weekly_detail_does_not_force_new_page_after_summary():
+    source = (ROOT / "backend/services/v2_pdf_fallback.py").read_text()
+    detail_block = source[source.index("def _detail_table"):source.index("def _unplanned_execution_table")]
+    assert "if monthly:\n        pdf.new_page()" in detail_block
+    assert "else:\n        pdf.y -= 6" in detail_block

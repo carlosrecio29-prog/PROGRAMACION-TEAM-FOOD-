@@ -419,7 +419,10 @@ def _specialty_rows(pdf, data):
 def _detail_table(pdf, rows, monthly=False):
     if not rows:
         return
-    pdf.new_page()
+    if monthly:
+        pdf.new_page()
+    else:
+        pdf.y -= 6
     pdf.section("Detalle de OT no finalizadas" if monthly else "Detalle técnico de órdenes",
                 "Estado del último cierre (sin duplicados)" if monthly
                 else "Resultado y condición de cada actividad programada.")
