@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy import text
 
 from backend.database import get_engine
-from backend.parsers.common import cell_by_header, header_mapping, normalize_text, workbook_from_bytes
+from backend.parsers.common import canonical_plan_name, cell_by_header, header_mapping, normalize_text, workbook_from_bytes
 
 
 class V2ClosureError(ValueError):
@@ -77,7 +77,7 @@ def _index_calendar(calendar_rows: list[dict[str, str]]):
         seen.add(normalized_row)
         ot = normalize_text(row["numero_ot"])
         asset = normalize_text(row["activo"])
-        plan = normalize_text(row["plan"])
+        plan = canonical_plan_name(row["plan"])
         if ot and ot != "SIN ASIGNAR":
             by_ot[ot].append(row)
             if asset and plan:
@@ -88,7 +88,7 @@ def _index_calendar(calendar_rows: list[dict[str, str]]):
 def _match_calendar_item(item, exact, by_ot):
     ot = normalize_text(item.get("numero_ot"))
     asset = normalize_text(item.get("activo_codigo"))
-    plan = normalize_text(item.get("plan_clave_software"))
+    plan = canonical_plan_name(item.get("plan_clave_software"))
     if not ot or ot == "SIN ASIGNAR":
         return None, "SIN_NUMERO_OT"
 
@@ -106,7 +106,7 @@ def _match_calendar_item(item, exact, by_ot):
     # No confundir la OT de un equipo o plan con la de otro.
     if normalize_text(match["activo"]) and normalize_text(match["activo"]) != asset:
         return None, "EQUIPO_NO_COINCIDE"
-    if normalize_text(match["plan"]) and normalize_text(match["plan"]) != plan:
+    if canonical_plan_name(match["plan"]) and canonical_plan_name(match["plan"]) != plan:
         return None, "PLAN_NO_COINCIDE"
     return match, "SOLO_OT"  # Archivo parcial: no trae equipo y/o plan.
 
