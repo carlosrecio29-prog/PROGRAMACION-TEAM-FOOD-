@@ -10,7 +10,7 @@ from typing import Any
 from sqlalchemy import text
 
 from backend.database import get_engine
-from backend.parsers.common import is_operation_plan, normalize_text
+from backend.parsers.common import canonical_plan_name, is_operation_plan, normalize_text
 from backend.services.v2_closure_service import (
     V2ClosureError, _index_calendar, _is_finalized, _parse_calendar, preview_week_closure,
 )
@@ -76,11 +76,11 @@ def _match_backlog_calendar_item(
     # Si una OT agrupa varias actividades, usar equipo + plan para evitar
     # cerrar por error una actividad distinta.
     asset = normalize_text(item.get("activo_codigo"))
-    plan = normalize_text(item.get("plan_clave_software"))
+    plan = canonical_plan_name(item.get("plan_clave_software"))
     exact = [
         row for row in matches
         if normalize_text(row.get("activo")) == asset
-        and normalize_text(row.get("plan")) == plan
+        and canonical_plan_name(row.get("plan")) == plan
     ]
     if len(exact) == 1:
         return exact[0], "OT_EQUIPO_PLAN"
