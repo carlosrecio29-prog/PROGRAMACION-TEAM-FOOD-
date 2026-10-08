@@ -126,4 +126,6 @@ def test_visual_pdf_contains_kpi_charts_and_technical_sections(monkeypatch):
     assert b"DETALLE" in monthly and b"OT-2" in monthly
     assert b"DETALLE" in weekly and b"OT-1" in weekly
     assert b"OT FINALIZADAS NO PROGRAMADAS" in weekly
+    assert b"OT NO PROGRAMADAS REALIZADAS" in weekly
     assert b"OT-NP-1" in weekly
+    assert weekly.rfind(b"OT FINALIZADAS NO PROGRAMADAS") > weekly.rfind(b"DETALLE")

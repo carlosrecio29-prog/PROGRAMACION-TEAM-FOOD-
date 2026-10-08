@@ -18,6 +18,8 @@ GREEN = (.090, .530, .423)
 MINT = (.868, .953, .929)
 AMBER = (.800, .490, .125)
 CREAM = (.989, .948, .871)
+ORANGE_SOFT = (.953, .780, .570)
+ORANGE_PALE = (.996, .965, .918)
 RED = (.760, .295, .315)
 PINK = (.987, .919, .918)
 PALE = (.952, .969, .988)
@@ -237,15 +239,17 @@ class _PDF:
             angle=nxt
         self.emit("h f")
 
-    def table(self, columns, rows, widths, row_height=22, repeat_title=None):
+    def table(self, columns, rows, widths, row_height=22, repeat_title=None,
+              header_fill=NAVY, header_fg=WHITE, alternate_fill=PALE,
+              base_fill=None, line_color=LINE):
         assert len(columns)==len(widths)
         assert sum(widths)<=780
         def header():
             self.ensure(29+row_height)
             x=31
-            self.rect(31,self.y-25,779,28,NAVY)
+            self.rect(31,self.y-25,779,28,header_fill)
             for title,w in zip(columns,widths):
-                self.text(x+6,self.y-16,_clip(title,int((w-12)/4.3)),7.2,WHITE,True)
+                self.text(x+6,self.y-16,_clip(title,int((w-12)/4.3)),7.2,header_fg,True)
                 x+=w
             self.y-=28
         header()
@@ -255,13 +259,15 @@ class _PDF:
                 if repeat_title:
                     self.section(repeat_title)
                 header()
-            if index%2==0:self.rect(31,self.y-row_height,779,row_height,PALE)
+            fill = alternate_fill if index%2==0 else base_fill
+            if fill is not None:
+                self.rect(31,self.y-row_height,779,row_height,fill)
             x=31
             for value,w in zip(row,widths):
                 cap=max(3,int((w-12)/4.3))
                 self.text(x+6,self.y-row_height+7,_clip(value,cap),7.2,INK)
                 x+=w
-            self.rule(31,self.y-row_height,810,self.y-row_height,LINE,.3)
+            self.rule(31,self.y-row_height,810,self.y-row_height,line_color,.3)
             self.y-=row_height
         self.y-=12
 
@@ -447,8 +453,8 @@ def _unplanned_execution_table(pdf, rows):
         "Ejecución adicional detectada dentro del corte semanal. No aumenta el cumplimiento de la programación."
     )
     pdf.cards([
-        ("OT no programadas", _fmt(len(rows)), "Finalizadas dentro del corte", BLUE, PALE),
-        ("HH estimadas", _fmt(total_hh,1), "Carga ejecutada adicional", GREEN, MINT),
+        ("OT NO PROGRAMADAS REALIZADAS", _fmt(len(rows)), "Finalizadas dentro del corte", AMBER, ORANGE_PALE),
+        ("HH ESTIMADAS", _fmt(total_hh,1), "Carga ejecutada adicional", AMBER, ORANGE_PALE),
     ])
     pdf.paragraph(
         "Estas órdenes aparecen como finalizadas en la Lista de Calendario, pero no formaban parte "
@@ -482,6 +488,11 @@ def _unplanned_execution_table(pdf, rows):
         [105,120,250,125,105,74],
         row_height=24,
         repeat_title="OT finalizadas no programadas (continuación)",
+        header_fill=ORANGE_SOFT,
+        header_fg=NAVY,
+        alternate_fill=ORANGE_PALE,
+        base_fill=WHITE,
+        line_color=ORANGE_SOFT,
     )
 
 
@@ -568,8 +579,8 @@ def render_progress_fallback(data: dict[str,Any],year:int,month:int,
                       "actividades, no tiempos de ejecución reportados por técnicos. "
                       "Las OT finalizadas no programadas se muestran aparte y no elevan el cumplimiento.",
                       maxchars=118)
-        _unplanned_execution_table(pdf,unplanned_rows or [])
         _detail_table(pdf,detail_rows or [],monthly=False)
+        _unplanned_execution_table(pdf,unplanned_rows or [])
     kind="mensual" if monthly else "semanal"
     filename=(f"informe_{kind}_mtto_{year}_{month:02d}"
               +(f"_{programming_id}" if programming_id is not None else "")+".pdf")
