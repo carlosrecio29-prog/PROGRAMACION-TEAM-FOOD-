@@ -85,8 +85,8 @@ def aggregate_progress(headers: list[dict[str, Any]], items: list[dict[str, Any]
         "origin_backlog", "hh_programmed", "hh_finalized", "hh_pending", "hh_annulled", "hh_not_found",
     )}
     operational_totals = {
-        "programmed": 0, "finalized": 0, "pending": 0, "unchecked": 0,
-        "hh_programmed": 0.0, "hh_finalized": 0.0, "hh_pending": 0.0,
+        "programmed": 0, "finalized": 0, "pending": 0, "annulled": 0, "unchecked": 0,
+        "hh_programmed": 0.0, "hh_finalized": 0.0, "hh_pending": 0.0, "hh_annulled": 0.0,
         "weeks_tracking": 0, "weeks_closed": 0, "weeks_open": 0,
         "latest_tracking_at": None,
     }
@@ -107,10 +107,12 @@ def aggregate_progress(headers: list[dict[str, Any]], items: list[dict[str, Any]
             week["operational_programmed"] = week["programmed"]
             week["operational_finalized"] = week["finalized"]
             week["operational_pending"] = week["pending"]
+            week["operational_annulled"] = week["annulled"]
             week["operational_unchecked"] = week["not_found"]
             week["operational_hh_programmed"] = week["hh_programmed"]
             week["operational_hh_finalized"] = week["hh_finalized"]
             week["operational_hh_pending"] = week["hh_pending"]
+            week["operational_hh_annulled"] = week["hh_annulled"]
             week["operational_progress_ot_pct"] = week["progress_ot_pct"]
             week["operational_progress_hh_pct"] = week["progress_hh_pct"]
             week["tracking_at"] = None
@@ -120,10 +122,12 @@ def aggregate_progress(headers: list[dict[str, Any]], items: list[dict[str, Any]
             week["operational_programmed"] = int(track.get("total_items") or week["programmed"])
             week["operational_finalized"] = int(track.get("finalizados") or 0)
             week["operational_pending"] = int(track.get("pendientes") or 0)
+            week["operational_annulled"] = 0
             week["operational_unchecked"] = int(track.get("sin_coincidencia") or 0)
             week["operational_hh_programmed"] = float(track.get("hh_programadas") or week["hh_programmed"] or 0)
             week["operational_hh_finalized"] = float(track.get("hh_finalizadas") or 0)
             week["operational_hh_pending"] = float(track.get("hh_pendientes") or 0)
+            week["operational_hh_annulled"] = 0.0
             week["operational_progress_ot_pct"] = float(track.get("avance_ot_pct") or 0)
             week["operational_progress_hh_pct"] = float(track.get("avance_hh_pct") or 0)
             week["tracking_at"] = track.get("registrado_en")
@@ -139,10 +143,12 @@ def aggregate_progress(headers: list[dict[str, Any]], items: list[dict[str, Any]
             week["operational_programmed"] = week["programmed"]
             week["operational_finalized"] = 0
             week["operational_pending"] = 0
+            week["operational_annulled"] = 0
             week["operational_unchecked"] = week["programmed"]
             week["operational_hh_programmed"] = week["hh_programmed"]
             week["operational_hh_finalized"] = 0.0
             week["operational_hh_pending"] = 0.0
+            week["operational_hh_annulled"] = 0.0
             week["operational_progress_ot_pct"] = None
             week["operational_progress_hh_pct"] = None
             week["tracking_at"] = None
@@ -154,9 +160,9 @@ def aggregate_progress(headers: list[dict[str, Any]], items: list[dict[str, Any]
             totals[key] += week[key]
             specialty_agg[week["especialidad"]][key] += week[key]
 
-        for key in ("programmed", "finalized", "pending", "unchecked"):
+        for key in ("programmed", "finalized", "pending", "annulled", "unchecked"):
             operational_totals[key] += int(week[f"operational_{key}"] or 0)
-        for key in ("hh_programmed", "hh_finalized", "hh_pending"):
+        for key in ("hh_programmed", "hh_finalized", "hh_pending", "hh_annulled"):
             operational_totals[key] += float(week[f"operational_{key}"] or 0)
 
         specialty_agg[week["especialidad"]]["weeks"] += 1
@@ -165,13 +171,15 @@ def aggregate_progress(headers: list[dict[str, Any]], items: list[dict[str, Any]
     for key in totals:
         if key.startswith("hh_"):
             totals[key] = round(totals[key], 2)
-    for key in ("hh_programmed", "hh_finalized", "hh_pending"):
+    for key in ("hh_programmed", "hh_finalized", "hh_pending", "hh_annulled"):
         operational_totals[key] = round(operational_totals[key], 2)
     operational_totals["progress_ot_pct"] = _pct(
-        operational_totals["finalized"], operational_totals["programmed"]
+        operational_totals["finalized"],
+        max(0, operational_totals["programmed"] - operational_totals["annulled"]),
     )
     operational_totals["progress_hh_pct"] = _pct(
-        operational_totals["hh_finalized"], operational_totals["hh_programmed"]
+        operational_totals["hh_finalized"],
+        max(0.0, operational_totals["hh_programmed"] - operational_totals["hh_annulled"]),
     )
 
     unique = {"programmed": len(latest), "finalized": 0, "pending": 0, "annulled": 0,
@@ -206,8 +214,12 @@ def aggregate_progress(headers: list[dict[str, Any]], items: list[dict[str, Any]
         for key in totals:
             if key.startswith("hh_"):
                 record[key] = round(record[key], 2)
-        record["progress_ot_pct"] = _pct(record["finalized"], record["programmed"])
-        record["progress_hh_pct"] = _pct(record["hh_finalized"], record["hh_programmed"])
+        record["progress_ot_pct"] = _pct(
+            record["finalized"], max(0, record["programmed"] - record["annulled"])
+        )
+        record["progress_hh_pct"] = _pct(
+            record["hh_finalized"], max(0.0, record["hh_programmed"] - record["hh_annulled"])
+        )
 
     unique["programmed_from_pmp"] = sum(
         1 for record in latest.values()
@@ -220,8 +232,13 @@ def aggregate_progress(headers: list[dict[str, Any]], items: list[dict[str, Any]
     complete = bool(weeks) and all(w["estado"] == "CERRADA" for w in weeks)
     return {
         "weeks": weeks, "specialties": sorted(specialty_agg.values(), key=lambda x: x["especialidad"]),
-        "weekly_totals": {**totals, "progress_ot_pct": _pct(totals["finalized"], totals["programmed"]),
-                          "progress_hh_pct": _pct(totals["hh_finalized"], totals["hh_programmed"])},
+        "weekly_totals": {
+            **totals,
+            "progress_ot_pct": _pct(totals["finalized"], max(0, totals["programmed"] - totals["annulled"])),
+            "progress_hh_pct": _pct(
+                totals["hh_finalized"], max(0.0, totals["hh_programmed"] - totals["hh_annulled"])
+            ),
+        },
         "operational": operational_totals,
         "monthly": {**unique, "pmp_count": int(pmp_count),
                     "not_programmed": max(0, int(pmp_count) - unique["programmed_from_pmp"]),
@@ -315,11 +332,13 @@ def export_progress_pdf(year: int, month: int, programming_id: int | None = None
                 "plan": row.get("plan_trabajo") or "",
                 "estado_cierre": row.get("estado_cierre"),
                 "resultado": (
+                    "ANULADA" if row.get("anulado") else
                     "FINALIZADA" if row.get("finalizado") is True else
                     "PENDIENTE" if row.get("finalizado") is False else
                     "NO ENCONTRADA" if row.get("estado_cierre") else
                     "SIN VERIFICAR"
                 ),
+                "comentario": row.get("comentario_cierre"),
                 "hh_estimada": row.get("hh_programadas") or 0,
             })
     return render_progress_fallback(data, year, month, programming_id, details)

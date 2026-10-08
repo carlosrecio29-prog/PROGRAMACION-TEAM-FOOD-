@@ -69,5 +69,8 @@ def test_annulled_activity_does_not_count_as_pending_or_reduce_compliance():
     assert data["weeks"][0]["pending"] == 0
     assert data["weeks"][0]["not_found"] == 0
     assert data["weeks"][0]["progress_ot_pct"] == 100.0
+    assert data["weeks"][0]["progress_hh_pct"] == 100.0
+    assert data["weekly_totals"]["progress_ot_pct"] == 100.0
+    assert data["weekly_totals"]["progress_hh_pct"] == 100.0
     assert data["monthly"]["annulled"] == 1
     assert data["monthly"]["progress_ot_pct"] == 100.0

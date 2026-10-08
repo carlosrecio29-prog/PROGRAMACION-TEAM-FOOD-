@@ -260,6 +260,7 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
                 AND ps.semana_inicio<:next_period
                 AND COALESCE(pi.origen_backlog,false)=true
                 AND COALESCE(p.es_operacion,false)=false
+                AND upper(COALESCE(o.estado,'')) NOT LIKE 'ANUL%'
             ),
             unplanned_month AS (
               SELECT DISTINCT n.orden_mantenimiento_id AS order_id
@@ -271,6 +272,7 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
                 AND ps.semana_inicio<:next_period
                 AND n.orden_mantenimiento_id IS NOT NULL
                 AND COALESCE(p.es_operacion,false)=false
+                AND upper(COALESCE(o.estado,'')) NOT LIKE 'ANUL%'
             ),
             universe AS (
               SELECT DISTINCT order_id

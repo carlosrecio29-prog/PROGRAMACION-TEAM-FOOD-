@@ -323,6 +323,7 @@ def _summary(pdf, label, summary, monthly=False):
         ("Finalizadas",_fmt(summary["finalized"]),"Resultado del cierre",GREEN,MINT),
         ("Pendientes",_fmt(summary["pending"]),"Por atender",AMBER,CREAM),
         ("No encontradas",_fmt(summary["not_found"]),"Requieren conciliación",RED,PINK),
+        ("Anuladas",_fmt(summary.get("annulled",0)),"No pasan a backlog",GRAY,PALE),
         ("HH programadas",_fmt(summary["hh_programmed"],1),
          "Suma de semanas; estimadas",BLUE,PALE),
         ("HH de OT cerradas",_fmt(summary["hh_finalized"],1),
@@ -343,9 +344,10 @@ def _kpi_note(pdf, summary, monthly=False):
         f"{'OT distintas' if monthly else 'actividades'}. "
         f"Finalizaron {_fmt(summary['finalized'])}, quedaron "
         f"{_fmt(summary['pending'])} pendientes y "
-        f"{_fmt(summary['not_found'])} no encontradas. "
-        f"El cumplimiento fue {_fmt(_pct(summary['finalized'], summary['programmed']),1)}% "
-        f"por OT y {_fmt(_pct(summary['hh_finalized'],summary['hh_programmed']),1)}% "
+        f"{_fmt(summary['not_found'])} no encontradas y "
+        f"{_fmt(summary.get('annulled',0))} anuladas. "
+        f"El cumplimiento fue {_fmt(_pct(summary['finalized'], max(0, summary['programmed']-summary.get('annulled',0))),1)}% "
+        f"por OT y {_fmt(_pct(summary['hh_finalized'],max(0,summary['hh_programmed']-summary.get('hh_annulled',0))),1)}% "
         f"por HH estimadas."
     )
     pdf.y-=8
@@ -359,6 +361,7 @@ def _status_and_progress(pdf, summary):
         ("FINALIZADAS",summary["finalized"],GREEN),
         ("PENDIENTES",summary["pending"],AMBER),
         ("NO ENCONTRADAS",summary["not_found"],RED),
+        ("ANULADAS",summary.get("annulled",0),GRAY),
         ("SIN VERIFICAR",summary.get("unchecked",0),GRAY),
     ]
     pdf.donut(118,center_y,54,segments)
@@ -368,9 +371,9 @@ def _status_and_progress(pdf, summary):
         pdf.text(215,legend_y,label+"   "+_fmt(count),8,INK)
         legend_y-=25
     pdf.progress(435,pdf.y-35,343,"CUMPLIMIENTO POR OT",
-                 summary["finalized"],summary["programmed"],GREEN)
+                 summary["finalized"],max(0,summary["programmed"]-summary.get("annulled",0)),GREEN)
     pdf.progress(435,pdf.y-105,343,"CUMPLIMIENTO POR HH",
-                 summary["hh_finalized"],summary["hh_programmed"],BLUE,
+                 summary["hh_finalized"],max(0,summary["hh_programmed"]-summary.get("hh_annulled",0)),BLUE,
                  "HH estimadas; no horas reales")
     pdf.y-=156
 
@@ -448,7 +451,8 @@ def render_progress_fallback(data: dict[str,Any],year:int,month:int,
     # Month uses unique OT outcomes, but HH sum every scheduled weekly activity.
     if monthly:
         summary={**summary,"hh_programmed":weekly_totals["hh_programmed"],
-                 "hh_finalized":weekly_totals["hh_finalized"]}
+                 "hh_finalized":weekly_totals["hh_finalized"],
+                 "hh_annulled":weekly_totals.get("hh_annulled",0)}
     name=("INFORME GENERAL DE CIERRE MENSUAL" if monthly
           else "INFORME DE CIERRE SEMANAL")
     subtitle=(f"{MONTHS[month]} {year}  |  PLANTA BARRANQUILLA" if monthly else
