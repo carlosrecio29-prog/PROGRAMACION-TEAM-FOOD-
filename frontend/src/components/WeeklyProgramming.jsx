@@ -182,10 +182,16 @@ export default function WeeklyProgramming({year,month,dashboard}){
     const backlogHH=number(base.backlog_available_hh_base)
     const pmpPlusBacklogCount=pmpCount+backlogCount
     const pmpPlusBacklogHH=pmpHH+backlogHH
+    const startPmpPendingCount=number(base.pending_count_base)
+    const startPmpPendingHH=number(base.pending_hh_base)
+    const startPendingCount=number(base.total_pending_count_base)
+    const startPendingHH=number(base.total_pending_hh_base)
+    const overlapHH=Math.max(0,startPmpPendingHH+backlogHH-startPendingHH)
     return {
       pmpCount,pmpHH,coveredCount,coveredHH,pendingCount,pendingHH,
       backlogCount,backlogHH,pmpPlusBacklogCount,pmpPlusBacklogHH,
       backlogPendingCount,backlogPendingHH,totalPendingCount,totalPendingHH,
+      startPmpPendingCount,startPmpPendingHH,startPendingCount,startPendingHH,overlapHH,
       demandBeforeWeekHH,coveragePossible,missingHH:number(base.missing_hh_count),
       totalMissingHH:number(base.total_missing_hh_count)
     }
@@ -219,10 +225,9 @@ export default function WeeklyProgramming({year,month,dashboard}){
       ? 'La capacidad de esta semana puede cubrir todo el PMP pendiente'
       : 'Cobertura posible esta semana: '+fmt(monthly.coveragePossible,1)+'% de las H-H PMP pendientes'
 
-  const nextWeek=weeks[weekIndex+1]||null
-  const nextWeekName=nextWeek
-    ? (nextWeek.transition?'Transición':'Semana '+nextWeek.weekNumber)
-    : 'siguiente semana'
+  const currentWeekName=week
+    ? (week.transition?'Transición':'Semana '+week.weekNumber)
+    : 'semana'
 
   const capacityChange=useMemo(()=>{
     const programming=data?.programming
@@ -276,7 +281,7 @@ export default function WeeklyProgramming({year,month,dashboard}){
       <article><span>PMP del mes + Backlog</span><b>{monthly.pmpPlusBacklogCount}</b><small>{monthly.pmpCount} PMP + {monthly.backlogCount} Backlog</small></article>
       <article><span>H-H PMP + Backlog</span><b>{fmt(monthly.pmpPlusBacklogHH,1)}</b><small>{fmt(monthly.pmpHH,1)} H-H PMP + {fmt(monthly.backlogHH,1)} H-H Backlog</small></article>
       <article className="pending"><span>H-H pendientes mes</span><b>{fmt(monthly.pendingHH,1)}</b><small>{monthly.pendingCount} PMP pendientes</small></article>
-      <article className="workload"><span>Queda para {nextWeekName}</span><b>{fmt(monthly.totalPendingHH,1)}</b><small>{monthly.totalPendingCount} OT pendientes · PMP + Backlog</small></article>
+      <article className="workload"><span>Carga al iniciar {currentWeekName}</span><b>{fmt(monthly.startPendingHH,1)}</b><small>{monthly.startPendingCount} OT únicas · {fmt(monthly.startPmpPendingHH,1)} H-H PMP pend. + {fmt(monthly.backlogHH,1)} H-H Backlog{monthly.overlapHH>.01?` · ${fmt(monthly.overlapHH,1)} H-H coinciden y no se duplican`:``}</small></article>
       <article className="target"><span>Meta preventiva semana</span><b>{fmt(target,1)}</b><small>capacidad máxima</small></article>
       <article className="selected"><span>H-H seleccionadas</span><b>{fmt(selectedHH,1)}</b><small>{selected.size} actividades</small></article>
       <article className={remaining<=.01?'complete':'remaining'}><span>Disponible semana</span><b>{fmt(remaining,1)}</b><small>H-H por programar</small></article>
