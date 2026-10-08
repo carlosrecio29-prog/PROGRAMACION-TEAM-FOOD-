@@ -3,6 +3,7 @@ import {monthWeeks,initialWeekIndex} from "../features/planning/monthWeeks.js";
 import {
   getV2WeekProgramming,
   getV2WeekClosure,
+  getV2WeekTracking,
   previewV2WeekClosure,
   uploadV2WeekClosure,
   downloadV2ProgressPdf,
@@ -42,12 +43,32 @@ function fmt(v, d = 1) {
     maximumFractionDigits: d,
   });
 }
+function when(value) {
+  if (!value) return "—";
+  try {
+    return new Date(value).toLocaleString("es-CO", {
+      day: "2-digit",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return String(value);
+  }
+}
+const UNPLANNED_ORIGIN_LABELS = {
+  PMP_NO_PROGRAMADO: "PMP NO PROGRAMADO",
+  BACKLOG_NO_PROGRAMADO: "BACKLOG NO PROGRAMADO",
+  PROGRAMADA_OTRA_SEMANA: "PROGRAMADA OTRA SEMANA",
+  EMERGENTE_NO_PLANIFICADA: "EMERGENTE / NO PLANIFICADA",
+};
 export default function WeeklyClosure({ year, month, onOpenBacklog }) {
   const weeks = useMemo(() => monthWeeks(year, month), [year, month]);
   const [weekIndex, setWeekIndex] = useState(() => initialWeekIndex(weeks));
   const [specialty, setSpecialty] = useState("MEC");
   const [programming, setProgramming] = useState(null);
   const [closure, setClosure] = useState(null);
+  const [tracking, setTracking] = useState(null);
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [acceptMissing, setAcceptMissing] = useState(false);
@@ -83,14 +104,21 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
       const p = await getV2WeekProgramming(week.from, week.to, specialty);
       setProgramming(p);
       if (p.programming?.id) {
-        setClosure(await getV2WeekClosure(p.programming.id));
+        const [closureResult, trackingResult] = await Promise.all([
+          getV2WeekClosure(p.programming.id),
+          getV2WeekTracking(p.programming.id),
+        ]);
+        setClosure(closureResult);
+        setTracking(trackingResult);
       } else {
         setClosure(null);
+        setTracking(null);
       }
     } catch (e) {
       setError(e.message);
       setProgramming(null);
       setClosure(null);
+      setTracking(null);
     } finally {
       setLoading(false);
     }
@@ -230,6 +258,8 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
   const hhFinalized = number(summary.hh_finalized);
   const hhPending = number(summary.hh_pending);
   const pct = number(summary.compliance_pct);
+  const unplannedRows = tracking?.unplanned?.rows || [];
+  const unplannedHH = unplannedRows.reduce((sum, row) => sum + number(row.hh_estimada), 0);
 
   return (
     <div className="v2-stack">
@@ -362,6 +392,63 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
                   {rows.length} programadas · {fmt(hhTotal, 1)} H-H
                 </span>
               </div>
+            </div>
+          </section>
+
+          <section className="v2-panel">
+            <div className="v2-section-head">
+              <div>
+                <span className="v2-kicker">EJECUCIÓN ADICIONAL</span>
+                <h3>OT realizadas fuera de programación</h3>
+                <p>
+                  Estas OT fueron detectadas como FINALIZADAS durante el seguimiento de esta semana,
+                  pero no pertenecían a la programación semanal. Se muestran aparte y no aumentan
+                  el porcentaje de cumplimiento de la programación.
+                </p>
+              </div>
+              <Badge tone={unplannedRows.length ? "warn" : "ok"}>
+                {unplannedRows.length} OT · {fmt(unplannedHH, 1)} H-H
+              </Badge>
+            </div>
+            <div className="v2-table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Fecha fin</th>
+                    <th>OT</th>
+                    <th>Área</th>
+                    <th>Equipo</th>
+                    <th>Plan de trabajo</th>
+                    <th>Origen</th>
+                    <th>H-H</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {unplannedRows.map((row) => (
+                    <tr key={row.id}>
+                      <td><b>{when(row.fecha_fin_orden)}</b></td>
+                      <td><b>{row.numero_ot || "—"}</b></td>
+                      <td><Badge>{row.area_codigo || "—"}</Badge><small>{row.area_nombre || ""}</small></td>
+                      <td><b>{row.activo_codigo || "—"}</b><small>{row.activo_descripcion || ""}</small></td>
+                      <td><span className="v2-plan">{row.plan_trabajo || "—"}</span></td>
+                      <td>
+                        <Badge tone={row.origen === "BACKLOG_NO_PROGRAMADO" ? "backlog" : undefined}>
+                          {UNPLANNED_ORIGIN_LABELS[row.origen] || row.origen || "SIN CLASIFICAR"}
+                        </Badge>
+                        <small>{row.detalle_origen || ""}</small>
+                      </td>
+                      <td><b>{fmt(row.hh_estimada, 1)}</b></td>
+                    </tr>
+                  ))}
+                  {!unplannedRows.length && (
+                    <tr>
+                      <td colSpan="7" className="v2-empty">
+                        No se han detectado OT finalizadas fuera de la programación para esta semana.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </section>
 
