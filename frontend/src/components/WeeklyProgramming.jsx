@@ -179,10 +179,12 @@ export default function WeeklyProgramming({year,month,dashboard}){
     const demandBeforeWeekHH=Math.max(0,pmpHH-number(base.covered_hh_base))
     const coveragePossible=demandBeforeWeekHH>0?Math.min(100,target/demandBeforeWeekHH*100):100
     const backlogCount=number(base.backlog_available_count_base)
+    const backlogHH=number(base.backlog_available_hh_base)
     const pmpPlusBacklogCount=pmpCount+backlogCount
+    const pmpPlusBacklogHH=pmpHH+backlogHH
     return {
       pmpCount,pmpHH,coveredCount,coveredHH,pendingCount,pendingHH,
-      backlogCount,pmpPlusBacklogCount,
+      backlogCount,backlogHH,pmpPlusBacklogCount,pmpPlusBacklogHH,
       backlogPendingCount,backlogPendingHH,totalPendingCount,totalPendingHH,
       demandBeforeWeekHH,coveragePossible,missingHH:number(base.missing_hh_count),
       totalMissingHH:number(base.total_missing_hh_count)
@@ -267,7 +269,7 @@ export default function WeeklyProgramming({year,month,dashboard}){
 
     <section className="tf-key-kpis">
       <article><span>PMP del mes + Backlog</span><b>{monthly.pmpPlusBacklogCount}</b><small>{monthly.pmpCount} PMP + {monthly.backlogCount} Backlog</small></article>
-      <article><span>H-H PMP del mes</span><b>{fmt(monthly.pmpHH,1)}</b><small>demanda mensual</small></article>
+      <article><span>H-H PMP + Backlog</span><b>{fmt(monthly.pmpPlusBacklogHH,1)}</b><small>{fmt(monthly.pmpHH,1)} H-H PMP + {fmt(monthly.backlogHH,1)} H-H Backlog</small></article>
       <article className="pending"><span>H-H pendientes mes</span><b>{fmt(monthly.pendingHH,1)}</b><small>{monthly.pendingCount} PMP pendientes</small></article>
       <article className="workload"><span>Carga total pendiente</span><b>{fmt(monthly.totalPendingHH,1)}</b><small>{monthly.totalPendingCount} OT únicas · incluye Backlog</small></article>
       <article className="target"><span>Meta preventiva semana</span><b>{fmt(target,1)}</b><small>capacidad máxima</small></article>
