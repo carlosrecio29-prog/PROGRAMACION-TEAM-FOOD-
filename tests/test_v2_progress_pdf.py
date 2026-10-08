@@ -1,4 +1,7 @@
 from datetime import date
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
 
 from backend.services import v2_progress_service as progress
 from backend.services import v2_closure_service as closure
