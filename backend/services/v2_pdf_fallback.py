@@ -378,6 +378,111 @@ def _status_and_progress(pdf, summary):
     pdf.y-=156
 
 
+def _executive_summary(pdf, summary, monthly=False, unplanned_rows=None):
+    effective_ot = max(0, int(summary.get("programmed") or 0) - int(summary.get("annulled") or 0))
+    effective_hh = max(
+        0.0,
+        float(summary.get("hh_programmed") or 0) - float(summary.get("hh_annulled") or 0),
+    )
+    unplanned_rows = unplanned_rows or []
+    unplanned_hh = round(sum(float(item.get("hh_estimada") or 0) for item in unplanned_rows), 2)
+
+    pdf.section(
+        "Resumen ejecutivo",
+        "Lectura rápida del resultado del periodo. El detalle técnico se presenta en las secciones siguientes.",
+    )
+
+    metrics = [
+        (
+            "OT distintas" if monthly else "OT programadas",
+            _fmt(summary.get("programmed", 0)),
+            "Base del periodo" if monthly else "Base de la semana",
+            BLUE, PALE,
+        ),
+        (
+            "Finalizadas",
+            _fmt(summary.get("finalized", 0)),
+            "Cierre confirmado",
+            GREEN, MINT,
+        ),
+        (
+            "Cumplimiento OT",
+            _fmt(_pct(summary.get("finalized", 0), effective_ot), 1) + "%",
+            "Anuladas fuera de la base",
+            GREEN, MINT,
+        ),
+        (
+            "Cumplimiento H-H",
+            _fmt(_pct(summary.get("hh_finalized", 0), effective_hh), 1) + "%",
+            "H-H estimadas",
+            BLUE, PALE,
+        ),
+        (
+            "Pendientes",
+            _fmt(summary.get("pending", 0)),
+            "Pasan a atención/backlog",
+            AMBER, CREAM,
+        ),
+        (
+            "No programadas cerradas" if not monthly else "No encontradas",
+            _fmt(len(unplanned_rows) if not monthly else summary.get("not_found", 0)),
+            (
+                f"{_fmt(unplanned_hh,1)} H-H adicionales"
+                if not monthly
+                else "Requieren conciliación"
+            ),
+            AMBER if unplanned_rows else GRAY,
+            CREAM if unplanned_rows else PALE,
+        ),
+    ]
+    pdf.cards(metrics, cols=3)
+
+    pdf.section("Avance del periodo")
+    pdf.progress(
+        31, pdf.y-12, 365, "CUMPLIMIENTO POR OT",
+        summary.get("finalized", 0), effective_ot, GREEN,
+        "Finalizadas sobre la base válida del cierre",
+    )
+    pdf.progress(
+        445, pdf.y-12, 365, "CUMPLIMIENTO POR H-H",
+        summary.get("hh_finalized", 0), effective_hh, BLUE,
+        "H-H estimadas finalizadas",
+    )
+    pdf.y -= 55
+
+    pdf.section("Puntos de atención")
+    findings = [
+        f"Pendientes: {_fmt(summary.get('pending',0))} OT.",
+        f"No encontradas: {_fmt(summary.get('not_found',0))} OT.",
+        f"Anuladas: {_fmt(summary.get('annulled',0))} OT; no pasan a backlog.",
+    ]
+    if not monthly:
+        findings.append(
+            f"Ejecución adicional: {_fmt(len(unplanned_rows))} OT no programadas finalizadas "
+            f"({_fmt(unplanned_hh,1)} H-H estimadas)."
+        )
+    for finding in findings:
+        pdf.paragraph("- " + finding, maxchars=118, size=8.5, gap=12)
+    pdf.y -= 3
+
+
+def _report_map(pdf, monthly=False):
+    pdf.section("Mapa del informe", "Usa estos bloques para ubicar rápidamente la información.")
+    if monthly:
+        blocks = [
+            ("1. EVOLUCIÓN", "Resultado por semana y tendencia del mes", BLUE, PALE),
+            ("2. ESPECIALIDADES", "Comparativo MEC / ELE / SER / MET", GREEN, MINT),
+            ("3. PENDIENTES", "Detalle de OT que requieren atención", AMBER, CREAM),
+        ]
+    else:
+        blocks = [
+            ("1. PROGRAMACIÓN", "Qué se programó y cómo cerró", BLUE, PALE),
+            ("2. NO PROGRAMADAS", "OT ejecutadas fuera de la programación", GREEN, MINT),
+            ("3. DETALLE", "Estado individual de cada actividad programada", AMBER, CREAM),
+        ]
+    pdf.cards(blocks, cols=3)
+
+
 def _weekly_rows(pdf,weeks):
     pdf.section("Evolución semanal", "Barras verdes: finalizadas | barras azules: programadas.")
     chart=[{**w,"label":_name(w)} for w in weeks]
@@ -417,8 +522,9 @@ def _specialty_rows(pdf, data):
 def _detail_table(pdf, rows, monthly=False):
     if not rows:
         return
+    pdf.tag = "PENDIENTES" if monthly else "DETALLE"
     pdf.new_page()
-    pdf.section("Detalle de OT no finalizadas" if monthly else "Detalle técnico de órdenes",
+    pdf.section("Detalle de OT no finalizadas" if monthly else "Detalle de OT programadas",
                 "Estado del último cierre (sin duplicados)" if monthly
                 else "Resultado y condición de cada actividad programada.")
     cols=["OT","ESPECIALIDAD","EQUIPO","PLAN DE TRABAJO",
@@ -440,6 +546,7 @@ def _detail_table(pdf, rows, monthly=False):
 def _unplanned_execution_table(pdf, rows):
     if not rows:
         return
+    pdf.tag = "NO PROGRAMADAS"
     pdf.new_page()
     total_hh = round(sum(float(item.get("hh_estimada") or 0) for item in rows), 2)
     pdf.section(
@@ -507,7 +614,7 @@ def render_progress_fallback(data: dict[str,Any],year:int,month:int,
     subtitle=(f"{MONTHS[month]} {year}  |  PLANTA BARRANQUILLA" if monthly else
               f"{weeks[0]['week_from']} AL {weeks[0]['week_to']}  |  "
               f"{NAMES.get(weeks[0]['especialidad'], weeks[0]['especialidad'])}")
-    pdf=_PDF(name,subtitle,("MENSUAL" if monthly else "SEMANAL"))
+    pdf=_PDF(name,subtitle,"RESUMEN")
     pdf.text(31,502,"REPORTE DE MANTENIMIENTO / C.E.K",8,GRAY,True)
     pdf.y=476
     anticipated=any(w["estado"]=="CERRADA" and w["semana_fin"]>date.today()
@@ -519,13 +626,16 @@ def render_progress_fallback(data: dict[str,Any],year:int,month:int,
                   GREEN if summary["all_weeks_closed"] else AMBER)
     elif weeks[0]["estado"]!="CERRADA":
         pdf.badge("SIN CIERRE CONFIRMADO / INFORME PARCIAL",CREAM,AMBER)
-    _summary(pdf,"INDICADORES",summary,monthly)
-    _status_and_progress(pdf,summary)
-    _kpi_note(pdf,summary,monthly)
-    if pdf.y < 205:
-        pdf.new_page()
+    _executive_summary(
+        pdf, summary, monthly=monthly,
+        unplanned_rows=(unplanned_rows or []) if not monthly else None,
+    )
+    _report_map(pdf, monthly=monthly)
+
     if monthly:
-        pdf.section("Alcance del mes")
+        pdf.tag = "EVOLUCIÓN"
+        pdf.new_page()
+        pdf.section("Evolución y alcance del mes")
         pdf.cards([
             ("Registros PMP",_fmt(summary["pmp_count"]),"Mantenimiento; OPERACIÓN excluida",BLUE,PALE),
             ("OT únicas",_fmt(summary["programmed"]),"Reprogramaciones sin duplicar",GREEN,MINT),
@@ -537,6 +647,7 @@ def render_progress_fallback(data: dict[str,Any],year:int,month:int,
                       "una OT reprogramada puede aportar HH en más de una semana.",maxchars=118)
         pdf.y-=10
         _weekly_rows(pdf,weeks)
+        pdf.tag = "ESPECIALIDADES"
         pdf.new_page()
         _specialty_rows(pdf,data)
         pdf.section("Balance y criterios")
@@ -551,23 +662,27 @@ def render_progress_fallback(data: dict[str,Any],year:int,month:int,
             pdf.badge("INFORME PARCIAL: EXISTEN PROGRAMACIONES SIN CERRAR",CREAM,AMBER)
         _detail_table(pdf,data.get("unresolved",[]),monthly=True)
     else:
-        pdf.section("OT programadas y finalizadas")
+        pdf.tag = "PROGRAMACIÓN"
+        pdf.new_page()
+        pdf.section("Resultado de la programación",
+                    "Lectura exclusiva de las actividades que sí fueron programadas para la semana.")
         pdf.bar_chart([{**weeks[0],"label":NAMES.get(weeks[0]["especialidad"],
                       weeks[0]["especialidad"])}])
-        pdf.section("Resultados del cierre semanal")
+        pdf.section("Resumen del cierre programado")
         w=weeks[0]
         pdf.table(["PROGRAMADAS","FINALIZADAS","PENDIENTES","NO ENCONTRADAS",
-                   "HH EST. PROG.","HH EST. CERRADAS"],
+                   "ANULADAS","HH CERRADAS"],
                   [[_fmt(w["programmed"]),_fmt(w["finalized"]),_fmt(w["pending"]),
-                    _fmt(w["not_found"]),_fmt(w["hh_programmed"],2),
+                    _fmt(w["not_found"]),_fmt(w.get("annulled",0)),
                     _fmt(w["hh_finalized"],2)]],
-                  [129,129,129,129,131,132])
-        pdf.section("Criterios del informe")
-        pdf.paragraph("La clasificación del cierre se toma del calendario de mantenimiento "
-                      "conciliado con las OT programadas. Las HH son estimaciones de las "
-                      "actividades, no tiempos de ejecución reportados por técnicos. "
-                      "Las OT finalizadas no programadas se muestran aparte y no elevan el cumplimiento.",
-                      maxchars=118)
+                  [129,129,129,129,129,134])
+        pdf.section("Criterio de lectura")
+        pdf.paragraph(
+            "El cumplimiento se calcula únicamente con la programación base. "
+            "Las OT anuladas se retiran de la base de cumplimiento y las OT finalizadas no programadas "
+            "se reportan en una sección independiente, sin aumentar el porcentaje semanal.",
+            maxchars=118,
+        )
         _unplanned_execution_table(pdf,unplanned_rows or [])
         _detail_table(pdf,detail_rows or [],monthly=False)
     kind="mensual" if monthly else "semanal"
