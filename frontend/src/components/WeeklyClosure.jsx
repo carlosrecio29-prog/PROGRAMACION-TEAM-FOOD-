@@ -3,7 +3,6 @@ import {monthWeeks,initialWeekIndex} from "../features/planning/monthWeeks.js";
 import {
   getV2WeekProgramming,
   getV2WeekClosure,
-  getV2WeekTracking,
   previewV2WeekClosure,
   uploadV2WeekClosure,
   downloadV2ProgressPdf,
@@ -68,7 +67,6 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
   const [specialty, setSpecialty] = useState("MEC");
   const [programming, setProgramming] = useState(null);
   const [closure, setClosure] = useState(null);
-  const [tracking, setTracking] = useState(null);
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [acceptMissing, setAcceptMissing] = useState(false);
@@ -84,9 +82,14 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
     const resolution = manualResolutions[row.orden_mantenimiento_id] || {};
     return !(String(resolution.numero_ot || "").trim() || resolution.estado_manual);
   });
+  const annulledWithoutComment = noOtRows.filter(row => {
+    const resolution = manualResolutions[row.orden_mantenimiento_id] || {};
+    return resolution.estado_manual === "ANULADA" && !String(resolution.comentario || "").trim();
+  });
   const closureBlocked =
     conflictingRows.length > 0 ||
     unresolvedNoOtRows.length > 0 ||
+    annulledWithoutComment.length > 0 ||
     (missingRows.length > 0 && !acceptMissing);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -104,21 +107,15 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
       const p = await getV2WeekProgramming(week.from, week.to, specialty);
       setProgramming(p);
       if (p.programming?.id) {
-        const [closureResult, trackingResult] = await Promise.all([
-          getV2WeekClosure(p.programming.id),
-          getV2WeekTracking(p.programming.id),
-        ]);
+        const closureResult = await getV2WeekClosure(p.programming.id);
         setClosure(closureResult);
-        setTracking(trackingResult);
       } else {
         setClosure(null);
-        setTracking(null);
       }
     } catch (e) {
       setError(e.message);
       setProgramming(null);
       setClosure(null);
-      setTracking(null);
     } finally {
       setLoading(false);
     }
@@ -188,8 +185,12 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
     }
     if (unresolvedNoOtRows.length > 0) {
       setError(
-        `Hay ${unresolvedNoOtRows.length} actividad(es) sin OT. Asigna la OT o define si quedó FINALIZADA o PENDIENTE antes de cerrar.`,
+        `Hay ${unresolvedNoOtRows.length} actividad(es) sin OT. Asigna la OT o define si quedó FINALIZADA, PENDIENTE o ANULADA antes de cerrar.`,
       );
+      return;
+    }
+    if (annulledWithoutComment.length > 0) {
+      setError("Toda actividad ANULADA debe llevar un comentario indicando el motivo.");
       return;
     }
     if (missingRows.length > 0 && !acceptMissing) {
@@ -214,6 +215,7 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
           orden_mantenimiento_id: row.orden_mantenimiento_id,
           numero_ot: String(value.numero_ot || "").trim() || null,
           estado_manual: value.estado_manual || null,
+          comentario: String(value.comentario || "").trim() || null,
         };
       });
       const result = await uploadV2WeekClosure(id, file, "", resolutions);
@@ -221,7 +223,7 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
       await load();
       const s = result.summary || {};
       setMessage(
-        `Cierre realizado: ${number(s.finalized)} finalizadas, ${number(s.pending)} pendientes y ${number(s.not_found)} no encontradas. ${number(s.moved_to_backlog)} OT quedaron en BACKLOG.`,
+        `Cierre realizado: ${number(s.finalized)} finalizadas, ${number(s.pending)} pendientes, ${number(s.annulled)} anuladas y ${number(s.not_found)} no encontradas. ${number(s.moved_to_backlog)} OT quedaron en BACKLOG.`,
       );
       setFile(null);
       setPreview(null);
@@ -252,61 +254,43 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
   const finalized = number(summary.finalized);
   const pending = number(summary.pending);
   const notFound = number(summary.not_found);
+  const annulled = number(summary.annulled);
   const unchecked = number(summary.unchecked, rows.length);
   const verified = summary.verified === true;
   const hhTotal = number(summary.hh_programmed);
   const hhFinalized = number(summary.hh_finalized);
   const hhPending = number(summary.hh_pending);
+  const hhAnnulled = number(summary.hh_annulled);
   const pct = number(summary.compliance_pct);
-  const unplannedRows = tracking?.unplanned?.rows || [];
-  const unplannedHH = unplannedRows.reduce((sum, row) => sum + number(row.hh_estimada), 0);
 
   return (
     <div className="v2-stack">
-      <section className="v2-panel">
-        <div className="v2-section-head">
-          <div>
-            <span className="v2-kicker">CIERRE SEMANAL</span>
-            <h3>Selecciona la semana que vas a verificar</h3>
-            <p>
-              Sube nuevamente la lista de calendario/PMP exportada del software.
-              La app compara solo las OT que programaste en esa semana.
-            </p>
-          </div>
-          <Badge>
+      <section className="tf-program-controls tf-closure-controls">
+        <div className="tf-program-selectors">
+          <label>
+            <span>Semana</span>
+            <select value={weekIndex} onChange={(event) => setWeekIndex(Number(event.target.value))}>
+              {weeks.map((item, index) => (
+                <option key={item.from} value={index}>
+                  {item.transition ? "Transición" : `Semana ${item.weekNumber}`} · {item.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Especialidad</span>
+            <select value={specialty} onChange={(event) => setSpecialty(event.target.value)}>
+              {SPECS.map((item) => (
+                <option key={item} value={item}>{item} · {SPEC_NAMES[item]}</option>
+              ))}
+            </select>
+          </label>
+          <div className="tf-tech-count">
             {loading
               ? "Consultando..."
               : programming?.programming?.id
-                ? `Programación #${programming.programming.id}`
-                : "Sin programación"}
-          </Badge>
-        </div>
-        <div className="v2-week-selector">
-          <div className="v2-week-buttons">
-            {weeks.map((w, i) => (
-              <button
-                type="button"
-                key={w.from}
-                className={weekIndex === i ? "active" : ""}
-                onClick={() => setWeekIndex(i)}
-              >
-                <b>{w.transition ? 'Transición' : `Semana ${w.weekNumber}`}</b>
-                <span>{w.label}</span>
-              </button>
-            ))}
-          </div>
-          <div className="v2-specialty-buttons">
-            {SPECS.map((s) => (
-              <button
-                type="button"
-                key={s}
-                className={specialty === s ? "active" : ""}
-                onClick={() => setSpecialty(s)}
-              >
-                <b>{s}</b>
-                <span>{SPEC_NAMES[s]}</span>
-              </button>
-            ))}
+                ? <>Programación <b>#{programming.programming.id}</b></>
+                : "Sin programación guardada"}
           </div>
         </div>
       </section>
@@ -398,63 +382,6 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
           <section className="v2-panel">
             <div className="v2-section-head">
               <div>
-                <span className="v2-kicker">EJECUCIÓN ADICIONAL</span>
-                <h3>OT realizadas fuera de programación</h3>
-                <p>
-                  Estas OT fueron detectadas como FINALIZADAS durante el seguimiento de esta semana,
-                  pero no pertenecían a la programación semanal. Se muestran aparte y no aumentan
-                  el porcentaje de cumplimiento de la programación.
-                </p>
-              </div>
-              <Badge tone={unplannedRows.length ? "warn" : "ok"}>
-                {unplannedRows.length} OT · {fmt(unplannedHH, 1)} H-H
-              </Badge>
-            </div>
-            <div className="v2-table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Fecha fin</th>
-                    <th>OT</th>
-                    <th>Área</th>
-                    <th>Equipo</th>
-                    <th>Plan de trabajo</th>
-                    <th>Origen</th>
-                    <th>H-H</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {unplannedRows.map((row) => (
-                    <tr key={row.id}>
-                      <td><b>{when(row.fecha_fin_orden)}</b></td>
-                      <td><b>{row.numero_ot || "—"}</b></td>
-                      <td><Badge>{row.area_codigo || "—"}</Badge><small>{row.area_nombre || ""}</small></td>
-                      <td><b>{row.activo_codigo || "—"}</b><small>{row.activo_descripcion || ""}</small></td>
-                      <td><span className="v2-plan">{row.plan_trabajo || "—"}</span></td>
-                      <td>
-                        <Badge tone={row.origen === "BACKLOG_NO_PROGRAMADO" ? "backlog" : undefined}>
-                          {UNPLANNED_ORIGIN_LABELS[row.origen] || row.origen || "SIN CLASIFICAR"}
-                        </Badge>
-                        <small>{row.detalle_origen || ""}</small>
-                      </td>
-                      <td><b>{fmt(row.hh_estimada, 1)}</b></td>
-                    </tr>
-                  ))}
-                  {!unplannedRows.length && (
-                    <tr>
-                      <td colSpan="7" className="v2-empty">
-                        No se han detectado OT finalizadas fuera de la programación para esta semana.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          <section className="v2-panel">
-            <div className="v2-section-head">
-              <div>
                 <span className="v2-kicker">ACTUALIZAR ESTADO</span>
                 <h3>Cargar calendario/PMP para cerrar la semana</h3>
                 <p>
@@ -510,7 +437,7 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
                   <div className={unresolvedNoOtRows.length ? "v2-warning" : "v2-success"} role="status" style={{ marginBottom: 12 }}>
                     <b>{noOtRows.length} actividad(es) programada(s) no tienen OT.</b>{" "}
                     {unresolvedNoOtRows.length
-                      ? "Resuelve cada una en la tabla: asigna la OT correcta o define manualmente FINALIZADA/PENDIENTE."
+                      ? "Abre “Ver resultado del cierre” y resuelve cada una: asigna la OT o define FINALIZADA, PENDIENTE o ANULADA."
                       : "Todas las actividades sin OT ya tienen una resolución definida para este cierre."}
                   </div>
                 )}
@@ -532,16 +459,21 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
                 {missingRows.length > 0 && !acceptMissing && conflictingRows.length === 0 && unresolvedNoOtRows.length === 0 && (
                   <div className="v2-warning" role="status">Para habilitar Confirmar cierre semanal, marca la casilla anterior.</div>
                 )}
-                {conflictingRows.length === 0 && unresolvedNoOtRows.length === 0 && (missingRows.length === 0 || acceptMissing) && (
+                {annulledWithoutComment.length > 0 && (
+                  <div className="v2-warning" role="status" style={{ marginBottom: 12 }}>
+                    Falta comentario obligatorio en {annulledWithoutComment.length} actividad(es) marcada(s) como ANULADA.
+                  </div>
+                )}
+                {conflictingRows.length === 0 && unresolvedNoOtRows.length === 0 && annulledWithoutComment.length === 0 && (missingRows.length === 0 || acceptMissing) && (
                   <div className="v2-success" role="status">Conciliación revisada: puedes confirmar el cierre semanal.</div>
                 )}
-                <details open={problemRows.length > 0}>
-                  <summary>Ver las {problemRows.length} OT que requieren atención (y el detalle de toda la semana)</summary>
+                <details className="v2-closure-result-details">
+                  <summary>Ver resultado del cierre · {preview.rows?.length || 0} actividades</summary>
                   {problemRows.length > 0 && <div className="v2-error" style={{ marginTop:8 }}>
                     OT a revisar: {problemRows.map(row => row.numero_ot || "SIN OT").join(" · ")}
                   </div>}
                   <div className="v2-table-wrap"><table>
-                    <thead><tr><th>OT programada</th><th>Equipo</th><th>Plan</th><th>H-H</th><th>Estado en Excel</th><th>Coincidencia</th><th>Resolver SIN OT</th><th>Resultado</th></tr></thead>
+                    <thead><tr><th>OT programada</th><th>Equipo</th><th>Plan</th><th>H-H</th><th>Estado en Excel</th><th>Coincidencia</th><th>Definir actividad</th><th>Comentario</th><th>Resultado</th></tr></thead>
                     <tbody>{(preview.rows||[]).map((row,i)=>(
                       <tr key={i} style={row.finalizado === null ? { background: "rgba(234, 179, 8, 0.12)" } : undefined}>
                         <td><b>{row.numero_ot || "SIN OT"}</b></td><td>{row.activo}</td><td>{row.plan}</td>
@@ -578,12 +510,39 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
                                   <option value="">Seleccionar...</option>
                                   <option value="FINALIZADA">FINALIZADA</option>
                                   <option value="PENDIENTE">PENDIENTE</option>
+                                  <option value="ANULADA">ANULADA</option>
                                 </select>
                               </label>
                             </div>
                           ) : "—"}
                         </td>
-                        <td>{row.finalizado === true ? "FINALIZADA" : row.finalizado === false ? "PENDIENTE → BACKLOG" : row.coincidencia === "SIN_NUMERO_OT" && !unresolvedNoOtRows.some(item => item.orden_mantenimiento_id === row.orden_mantenimiento_id) ? "RESUELTA · LISTA PARA CIERRE" : "REVISAR"}</td>
+                        <td>
+                          {row.coincidencia === "SIN_NUMERO_OT" ? (
+                            <label className="v2-no-ot-comment">
+                              <span>Comentario</span>
+                              <textarea
+                                rows="2"
+                                maxLength="1000"
+                                placeholder="Motivo obligatorio si anulas; opcional para cualquier otra observación."
+                                value={manualResolutions[row.orden_mantenimiento_id]?.comentario || ""}
+                                onChange={(event) =>
+                                  updateNoOtResolution(row.orden_mantenimiento_id, { comentario: event.target.value })
+                                }
+                              />
+                            </label>
+                          ) : "—"}
+                        </td>
+                        <td>{
+                          manualResolutions[row.orden_mantenimiento_id]?.estado_manual === "ANULADA"
+                            ? "ANULADA · NO VA A BACKLOG"
+                            : row.finalizado === true
+                              ? "FINALIZADA"
+                              : row.finalizado === false
+                                ? "PENDIENTE → BACKLOG"
+                                : row.coincidencia === "SIN_NUMERO_OT" && !unresolvedNoOtRows.some(item => item.orden_mantenimiento_id === row.orden_mantenimiento_id)
+                                  ? "RESUELTA · LISTA PARA CIERRE"
+                                  : "REVISAR"
+                        }</td>
                       </tr>
                     ))}</tbody>
                   </table></div>
@@ -599,89 +558,64 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
             {message && <div className="v2-success">{message}</div>}
           </section>
 
-          <section className="v2-panel">
-            <div className="v2-section-head">
-              <div>
-                <span className="v2-kicker">RESULTADO DEL CIERRE</span>
-                <h3>OT programadas vs. estado del software</h3>
-                <p>
-                  El origen queda guardado para distinguir lo que se programó
-                  desde el PMP del mes de lo que fue recuperado desde backlog.
-                </p>
-              </div>
-              <Badge>{rows.length} actividades</Badge>
-            </div>
-            <div className="v2-table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Origen</th>
-                    <th>OT</th>
-                    <th>Área</th>
-                    <th>Equipo</th>
-                    <th>Plan de trabajo</th>
-                    <th>H-H</th>
-                    <th>Estado cierre</th>
-                    <th>Resultado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r) => (
-                    <tr key={r.programacion_item_id}>
-                      <td>
-                        {r.origen_backlog ? (
-                          <Badge tone="backlog">BACKLOG</Badge>
-                        ) : (
-                          <Badge>PMP DEL MES</Badge>
-                        )}
-                      </td>
-                      <td>
-                        <b>{r.numero_ot || "SIN ASIGNAR"}</b>
-                        {r.finalizado !== true && r.estado_cierre && (
-                          <button type="button" className="v2-backlog-link" onClick={() => onOpenBacklog?.(r.orden_mantenimiento_id)}>
-                            Ver en Backlog
-                          </button>
-                        )}
-                      </td>
-                      <td>
-                        <Badge>{r.area_codigo || "—"}</Badge>
-                      </td>
-                      <td>
-                        <b>{r.activo_codigo}</b>
-                        <small>{r.activo_descripcion}</small>
-                      </td>
-                      <td>
-                        <span className="v2-plan">{r.plan_trabajo || "—"}</span>
-                        <small>{r.descripcion_grupo || ""}</small>
-                      </td>
-                      <td>
-                        <b>{fmt(r.hh_programadas, 1)}</b>
-                      </td>
-                      <td>{r.estado_cierre || "SIN VERIFICAR"}</td>
-                      <td>
-                        {r.finalizado === true ? (
-                          <Badge tone="ok">FINALIZADA</Badge>
-                        ) : r.finalizado === false ? (
-                          <Badge tone="warn">PENDIENTE → BACKLOG</Badge>
-                        ) : r.estado_cierre ? (
-                          <Badge tone="warn">NO ENCONTRADA → BACKLOG</Badge>
-                        ) : (
-                          <Badge>POR VERIFICAR</Badge>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                  {!rows.length && (
+          {closure?.programming?.estado === "CERRADA" && (
+            <details className="v2-closure-result-details v2-closure-stored-result">
+              <summary>
+                Ver resultado guardado del cierre · {rows.length} actividades
+                {annulled ? ` · ${annulled} anulada(s)` : ""}
+              </summary>
+              <div className="v2-table-wrap">
+                <table>
+                  <thead>
                     <tr>
-                      <td colSpan="8" className="v2-empty">
-                        La programación no tiene actividades.
-                      </td>
+                      <th>Origen</th><th>OT</th><th>Área</th><th>Equipo</th>
+                      <th>Plan de trabajo</th><th>H-H</th><th>Estado cierre</th>
+                      <th>Resultado</th><th>Comentario</th>
                     </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
+                  </thead>
+                  <tbody>
+                    {rows.map((r) => (
+                      <tr key={r.programacion_item_id}>
+                        <td>{r.origen_backlog ? <Badge tone="backlog">BACKLOG</Badge> : <Badge>PMP DEL MES</Badge>}</td>
+                        <td>
+                          <b>{r.numero_ot || "SIN ASIGNAR"}</b>
+                          {!r.anulado && r.finalizado !== true && r.estado_cierre && (
+                            <button type="button" className="v2-backlog-link" onClick={() => onOpenBacklog?.(r.orden_mantenimiento_id)}>
+                              Ver en Backlog
+                            </button>
+                          )}
+                        </td>
+                        <td><Badge>{r.area_codigo || "—"}</Badge></td>
+                        <td><b>{r.activo_codigo}</b><small>{r.activo_descripcion}</small></td>
+                        <td><span className="v2-plan">{r.plan_trabajo || "—"}</span><small>{r.descripcion_grupo || ""}</small></td>
+                        <td><b>{fmt(r.hh_programadas, 1)}</b></td>
+                        <td>{r.estado_cierre || "SIN VERIFICAR"}</td>
+                        <td>
+                          {r.anulado ? (
+                            <Badge>ANULADA</Badge>
+                          ) : r.finalizado === true ? (
+                            <Badge tone="ok">FINALIZADA</Badge>
+                          ) : r.finalizado === false ? (
+                            <Badge tone="warn">PENDIENTE → BACKLOG</Badge>
+                          ) : r.estado_cierre ? (
+                            <Badge tone="warn">NO ENCONTRADA → BACKLOG</Badge>
+                          ) : (
+                            <Badge>POR VERIFICAR</Badge>
+                          )}
+                        </td>
+                        <td className="v2-closure-comment">{r.comentario_cierre || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {annulled > 0 && (
+                <div className="v2-closure-annulled-note">
+                  {annulled} actividad(es) anulada(s) · {fmt(hhAnnulled, 1)} H-H retiradas de la base de cumplimiento y del backlog.
+                </div>
+              )}
+            </details>
+          )}
         </>
       )}
     </div>

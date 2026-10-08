@@ -3262,3 +3262,89 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
     grid-template-columns:1fr;
   }
 }
+
+
+/* Cierre semanal: selectores compactos, resultado plegable y comentarios */
+.tf-closure-controls{
+  padding:14px 16px;
+}
+.tf-closure-controls .tf-program-selectors{
+  align-items:end;
+}
+.v2-closure-result-details{
+  margin-top:12px;
+  border:1px solid #dbe6ee;
+  border-radius:12px;
+  background:#fff;
+  overflow:hidden;
+}
+.v2-closure-result-details>summary{
+  cursor:pointer;
+  list-style:none;
+  padding:12px 14px;
+  color:#214764;
+  font-size:9px;
+  font-weight:900;
+  background:#f7fafc;
+  border-bottom:1px solid transparent;
+}
+.v2-closure-result-details[open]>summary{
+  border-bottom-color:#e2eaf0;
+}
+.v2-closure-result-details>summary::-webkit-details-marker{
+  display:none;
+}
+.v2-closure-result-details>summary::after{
+  content:"Ver";
+  float:right;
+  color:#178bc6;
+  font-size:8px;
+}
+.v2-closure-result-details[open]>summary::after{
+  content:"Ocultar";
+}
+.v2-closure-stored-result{
+  margin-top:0;
+}
+.v2-no-ot-comment{
+  display:block;
+  min-width:210px;
+}
+.v2-no-ot-comment span{
+  display:block;
+  margin-bottom:4px;
+  color:#63788a;
+  font-size:7.5px;
+  font-weight:850;
+}
+.v2-no-ot-comment textarea{
+  width:100%;
+  min-height:54px;
+  resize:vertical;
+  border:1px solid #d4e0e8;
+  border-radius:8px;
+  padding:7px 8px;
+  font:inherit;
+  font-size:8px;
+  color:#263f54;
+  background:#fff;
+}
+.v2-closure-comment{
+  min-width:180px;
+  max-width:320px;
+  white-space:normal;
+  line-height:1.4;
+}
+.v2-closure-annulled-note{
+  margin:10px 12px 12px;
+  padding:9px 10px;
+  border-radius:9px;
+  background:#f4f7f9;
+  color:#566d7f;
+  font-size:8px;
+}
+@media(max-width:720px){
+  .tf-closure-controls .tf-program-selectors{
+    grid-template-columns:1fr;
+  }
+}
