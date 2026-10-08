@@ -190,6 +190,11 @@ def _is_finalized(value: str) -> bool:
     return state.startswith("FINALIZ") or state in {"CERRADO", "CERRADA", "COMPLETADO", "COMPLETADA"}
 
 
+def _is_annulled(value: str) -> bool:
+    state = normalize_text(value)
+    return state.startswith("ANUL")
+
+
 def get_week_closure(programming_id: int) -> dict[str, Any]:
     with get_engine().connect() as conn:
         header = conn.execute(text("""
@@ -202,7 +207,7 @@ def get_week_closure(programming_id: int) -> dict[str, Any]:
             raise V2ClosureError("Programación semanal no encontrada")
         rows = [dict(r) for r in conn.execute(text("""
             SELECT pi.id AS programacion_item_id,pi.orden_mantenimiento_id,pi.hh_programadas,
-                   pi.origen_backlog,pi.estado_cierre,pi.finalizado,pi.verificado_en,
+                   pi.origen_backlog,pi.estado_cierre,pi.finalizado,pi.anulado,pi.comentario_cierre,pi.verificado_en,
                    o.numero_ot,o.estado AS estado_actual,a.codigo AS activo_codigo,
                    a.descripcion AS activo_descripcion,a.area_codigo,
                    p.plan_trabajo,p.descripcion_grupo
@@ -214,18 +219,25 @@ def get_week_closure(programming_id: int) -> dict[str, Any]:
             ORDER BY pi.finalizado DESC NULLS LAST,a.area_codigo,o.numero_ot NULLS LAST,a.codigo,p.plan_trabajo
         """), {"id": programming_id}).mappings()]
     verified_rows = [row for row in rows if row.get("estado_cierre")]
+    active_verified_rows = [row for row in verified_rows if not row.get("anulado")]
     hh_programmed = round(sum(float(row.get("hh_programadas") or 0) for row in rows), 2)
+    hh_annulled = round(sum(
+        float(row.get("hh_programadas") or 0)
+        for row in verified_rows if row.get("anulado")
+    ), 2)
+    hh_compliance_base = round(max(0.0, hh_programmed - hh_annulled), 2)
     hh_finalized = round(sum(
         float(row.get("hh_programadas") or 0)
-        for row in verified_rows if row.get("finalizado") is True
+        for row in active_verified_rows if row.get("finalizado") is True
     ), 2)
     hh_pending = round(sum(
         float(row.get("hh_programadas") or 0)
-        for row in verified_rows if row.get("finalizado") is not True
+        for row in active_verified_rows if row.get("finalizado") is not True
     ), 2)
-    finalized = sum(1 for row in verified_rows if row.get("finalizado") is True)
-    pending = sum(1 for row in verified_rows if row.get("finalizado") is False)
-    not_found = sum(1 for row in verified_rows if row.get("finalizado") is None)
+    finalized = sum(1 for row in active_verified_rows if row.get("finalizado") is True)
+    pending = sum(1 for row in active_verified_rows if row.get("finalizado") is False)
+    not_found = sum(1 for row in active_verified_rows if row.get("finalizado") is None)
+    annulled = sum(1 for row in verified_rows if row.get("anulado"))
     return {
         "programming": dict(header),
         "rows": rows,
@@ -235,11 +247,14 @@ def get_week_closure(programming_id: int) -> dict[str, Any]:
             "finalized": finalized,
             "pending": pending,
             "not_found": not_found,
+            "annulled": annulled,
             "unchecked": len(rows) - len(verified_rows),
             "hh_programmed": hh_programmed,
+            "hh_compliance_base": hh_compliance_base,
+            "hh_annulled": hh_annulled,
             "hh_finalized": hh_finalized,
             "hh_pending": hh_pending,
-            "compliance_pct": round(hh_finalized / hh_programmed * 100, 1) if hh_programmed else 0,
+            "compliance_pct": round(hh_finalized / hh_compliance_base * 100, 1) if hh_compliance_base else 0,
         },
     }
 
@@ -266,19 +281,25 @@ def close_week_from_calendar(
             raise V2ClosureError(f"La actividad {order_id} tiene más de una resolución manual.")
         assigned_ot = _scalar(raw.get("numero_ot"))
         manual_state = normalize_text(raw.get("estado_manual"))
+        comment = _scalar(raw.get("comentario"))
+        if len(comment) > 1000:
+            raise V2ClosureError("El comentario de cierre no puede superar 1000 caracteres.")
         if assigned_ot and manual_state:
             raise V2ClosureError(
                 "Para una actividad sin OT usa solo una opción: asignar OT o definir el estado manual."
             )
-        if manual_state and manual_state not in {"FINALIZADA", "PENDIENTE"}:
+        if manual_state and manual_state not in {"FINALIZADA", "PENDIENTE", "ANULADA"}:
             raise V2ClosureError(
-                "El estado manual de una actividad sin OT solo puede ser FINALIZADA o PENDIENTE."
+                "El estado manual solo puede ser FINALIZADA, PENDIENTE o ANULADA."
             )
+        if manual_state == "ANULADA" and not comment:
+            raise V2ClosureError("Para anular una actividad debes registrar un comentario con el motivo.")
         if not assigned_ot and not manual_state:
             continue
         resolution_map[order_id] = {
             "numero_ot": assigned_ot or None,
             "estado_manual": manual_state or None,
+            "comentario": comment or None,
         }
 
     with get_engine().begin() as conn:
@@ -308,22 +329,25 @@ def close_week_from_calendar(
         finalized_ids: list[int] = []
         pending_ids: list[int] = []
         not_found_ids: list[int] = []
+        annulled_ids: list[int] = []
 
         for item in items:
             original_ot = normalize_text(item.get("numero_ot"))
             manual_state = None
             assigned_ot = None
+            manual_comment = None
 
             if not original_ot or original_ot == "SIN ASIGNAR":
                 resolution = resolution_map.get(int(item["orden_mantenimiento_id"]))
                 if not resolution:
                     raise V2ClosureError(
                         f"Actividad sin OT · {item['activo_codigo']} · {item['plan_clave_software']}: "
-                        "debes asignar una OT o definir manualmente si quedó FINALIZADA o PENDIENTE."
+                        "debes asignar una OT o definir manualmente si quedó FINALIZADA, PENDIENTE o ANULADA."
                     )
 
                 assigned_ot = resolution.get("numero_ot")
                 manual_state = resolution.get("estado_manual")
+                manual_comment = resolution.get("comentario")
 
                 if assigned_ot:
                     duplicate = conn.execute(text("""
@@ -375,7 +399,7 @@ def close_week_from_calendar(
             if matched is None:
                 conn.execute(text("""
                     UPDATE programacion.programacion_item_v2
-                    SET estado_cierre=:reason,finalizado=NULL,
+                    SET estado_cierre=:reason,finalizado=NULL,anulado=false,comentario_cierre=NULL,
                         verificado_en=now(),cierre_fuente=:filename
                     WHERE id=:item_id
                 """), {"filename": filename, "item_id": item["item_id"], "reason": match_reason})
@@ -388,7 +412,8 @@ def close_week_from_calendar(
                     f"{'OT ' + str(item['numero_ot']) if item.get('numero_ot') else 'Actividad sin OT'}: ESTADO_VACIO en el calendario. "
                     "El archivo no permite decidir entre FINALIZADA o PENDIENTE."
                 )
-            finalized = _is_finalized(state)
+            annulled = _is_annulled(state)
+            finalized = False if annulled else _is_finalized(state)
             closure_source = (
                 f"{filename} · RESOLUCIÓN MANUAL"
                 if match_reason == "ESTADO_MANUAL_SIN_OT"
@@ -396,15 +421,29 @@ def close_week_from_calendar(
             )
             conn.execute(text("""
                 UPDATE programacion.programacion_item_v2
-                SET estado_cierre=:state,finalizado=:finalized,verificado_en=now(),cierre_fuente=:filename
+                SET estado_cierre=:state,
+                    finalizado=CASE WHEN :annulled THEN NULL ELSE :finalized END,
+                    anulado=:annulled,comentario_cierre=:comment,
+                    verificado_en=now(),cierre_fuente=:filename
                 WHERE id=:item_id
-            """), {"state": state, "finalized": finalized, "filename": closure_source, "item_id": item["item_id"]})
+            """), {
+                "state": state, "finalized": finalized, "annulled": annulled,
+                "comment": manual_comment, "filename": closure_source, "item_id": item["item_id"],
+            })
             conn.execute(text("""
                 UPDATE programacion.orden_mantenimiento
-                SET estado=:state,actualizado_en=now()
+                SET estado=:state,
+                    ultimo_comentario_cierre=COALESCE(:comment,ultimo_comentario_cierre),
+                    ultimo_comentario_cierre_en=CASE WHEN :comment IS NULL THEN ultimo_comentario_cierre_en ELSE now() END,
+                    actualizado_en=now()
                 WHERE id=:order_id
-            """), {"state": state, "order_id": item["orden_mantenimiento_id"]})
-            if finalized:
+            """), {
+                "state": state, "comment": manual_comment,
+                "order_id": item["orden_mantenimiento_id"],
+            })
+            if annulled:
+                annulled_ids.append(int(item["orden_mantenimiento_id"]))
+            elif finalized:
                 finalized_ids.append(int(item["orden_mantenimiento_id"]))
             else:
                 pending_ids.append(int(item["orden_mantenimiento_id"]))
@@ -457,11 +496,19 @@ def close_week_from_calendar(
                 WHERE orden_mantenimiento_id=ANY(CAST(:ids AS bigint[]))
             """), {"ids": finalized_ids, "closed_by": closed_by})
 
+        if annulled_ids:
+            conn.execute(text("""
+                UPDATE programacion.backlog_v2
+                SET estado_seguimiento='ANULADA',ultimo_resultado_cierre='ANULADA',
+                    ultimo_cierre_en=now(),ultima_programacion_id=NULL,actualizado_en=now()
+                WHERE orden_mantenimiento_id=ANY(CAST(:ids AS bigint[]))
+            """), {"ids": annulled_ids})
+
         conn.execute(text("""
             UPDATE programacion.programacion_semanal_v2
             SET estado='CERRADA',cierre_en=now(),cierre_por=:closed_by,cierre_archivo=:filename,
                 cierre_total=:total,cierre_finalizadas=:finalized,cierre_pendientes=:pending,
-                cierre_no_encontradas=:not_found,actualizado_en=now()
+                cierre_no_encontradas=:not_found,cierre_anuladas=:annulled,actualizado_en=now()
             WHERE id=:id
         """), {
             "closed_by": closed_by,
@@ -470,6 +517,7 @@ def close_week_from_calendar(
             "finalized": len(finalized_ids),
             "pending": len(pending_ids),
             "not_found": len(not_found_ids),
+            "annulled": len(annulled_ids),
             "id": programming_id,
         })
 

@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from backend.services.v2_closure_service import (
-    _index_calendar, _match_calendar_item, _is_finalized,
+    _index_calendar, _match_calendar_item, _is_finalized, _is_annulled,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -163,3 +163,18 @@ def test_frontend_blocks_close_until_no_ot_rows_are_resolved():
     assert "Asignar OT" in source
     assert "FINALIZADA" in source
     assert "PENDIENTE" in source
+
+
+def test_annulled_status_is_terminal_not_finalized():
+    assert _is_annulled("ANULADA")
+    assert _is_annulled("anulado")
+    assert not _is_finalized("ANULADA")
+
+
+def test_frontend_supports_annulment_comment_and_compact_selectors():
+    source = (ROOT / "frontend/src/components/WeeklyClosure.jsx").read_text()
+    assert '<option value="ANULADA">ANULADA</option>' in source
+    assert "comentario" in source
+    assert "Motivo obligatorio si anulas" in source
+    assert "tf-program-selectors" in source
+    assert "Ver resultado del cierre" in source

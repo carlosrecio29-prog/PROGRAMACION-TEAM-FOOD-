@@ -14,7 +14,7 @@ def header(id, start, end, spec, state):
 def item(week, oid, finished, hh=2, state="FINALIZADO", backlog=False):
     return {
         "programacion_id": week, "orden_mantenimiento_id": oid,
-        "hh_programadas": hh, "finalizado": finished,
+        "hh_programadas": hh, "finalizado": finished, "anulado": False,
         "estado_cierre": state if finished is not None else "NO_ENCONTRADA",
         "origen_backlog": backlog, "numero_ot": f"OT-{oid}",
         "activo_codigo": "BA-TEST", "plan_clave_software": "1-TEST",
@@ -57,3 +57,17 @@ def test_saved_week_does_not_create_false_finalized_or_pending_results():
 
 def test_month_period_validation_and_december_transition():
     assert _period(2026, 12) == (date(2026, 12, 1), date(2027, 1, 1))
+
+
+def test_annulled_activity_does_not_count_as_pending_or_reduce_compliance():
+    weeks = [header(8, "2026-10-01", "2026-10-07", "MEC", "CERRADA")]
+    done = item(8, 80, True, hh=2)
+    annulled = item(8, 81, None, hh=3, state="ANULADA")
+    annulled["anulado"] = True
+    data = aggregate_progress(weeks, [done, annulled], 2)
+    assert data["weeks"][0]["annulled"] == 1
+    assert data["weeks"][0]["pending"] == 0
+    assert data["weeks"][0]["not_found"] == 0
+    assert data["weeks"][0]["progress_ot_pct"] == 100.0
+    assert data["monthly"]["annulled"] == 1
+    assert data["monthly"]["progress_ot_pct"] == 100.0

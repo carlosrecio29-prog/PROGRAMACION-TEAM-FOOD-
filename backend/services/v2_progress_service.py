@@ -36,10 +36,10 @@ def aggregate_progress(headers: list[dict[str, Any]], items: list[dict[str, Any]
         week = dict(row)
         week.update({
             "programming_id": int(row["id"]),
-            "programmed": 0, "finalized": 0, "pending": 0,
+            "programmed": 0, "finalized": 0, "pending": 0, "annulled": 0,
             "not_found": 0, "unchecked": 0,
             "hh_programmed": 0.0, "hh_finalized": 0.0,
-            "hh_pending": 0.0, "hh_not_found": 0.0,
+            "hh_pending": 0.0, "hh_annulled": 0.0, "hh_not_found": 0.0,
             "origin_backlog": 0, "progress_ot_pct": 0.0,
             "progress_hh_pct": 0.0,
         })
@@ -59,7 +59,10 @@ def aggregate_progress(headers: list[dict[str, Any]], items: list[dict[str, Any]
             week["origin_backlog"] += 1
         # Una programación GUARDADA todavía no equivale a una OT finalizada o pendiente.
         if week["estado"] == "CERRADA" and item.get("estado_cierre"):
-            if item["finalizado"] is True:
+            if item.get("anulado"):
+                week["annulled"] += 1
+                week["hh_annulled"] += hh
+            elif item["finalizado"] is True:
                 week["finalized"] += 1
                 week["hh_finalized"] += hh
             elif item["finalizado"] is False:
@@ -78,8 +81,8 @@ def aggregate_progress(headers: list[dict[str, Any]], items: list[dict[str, Any]
 
     weeks = sorted(by_week.values(), key=lambda w: (w["semana_inicio"], w["especialidad"]))
     totals = {key: 0 for key in (
-        "programmed", "finalized", "pending", "not_found", "unchecked",
-        "origin_backlog", "hh_programmed", "hh_finalized", "hh_pending", "hh_not_found",
+        "programmed", "finalized", "pending", "annulled", "not_found", "unchecked",
+        "origin_backlog", "hh_programmed", "hh_finalized", "hh_pending", "hh_annulled", "hh_not_found",
     )}
     operational_totals = {
         "programmed": 0, "finalized": 0, "pending": 0, "unchecked": 0,
@@ -94,8 +97,10 @@ def aggregate_progress(headers: list[dict[str, Any]], items: list[dict[str, Any]
         closed = week["estado"] == "CERRADA"
         track = tracking.get(int(week["id"]))
 
-        week["progress_ot_pct"] = _pct(week["finalized"], week["programmed"]) if closed else None
-        week["progress_hh_pct"] = _pct(week["hh_finalized"], week["hh_programmed"]) if closed else None
+        effective_programmed = max(0, week["programmed"] - week["annulled"])
+        effective_hh = max(0.0, week["hh_programmed"] - week["hh_annulled"])
+        week["progress_ot_pct"] = _pct(week["finalized"], effective_programmed) if closed else None
+        week["progress_hh_pct"] = _pct(week["hh_finalized"], effective_hh) if closed else None
 
         if closed:
             week["operational_source"] = "CIERRE"
@@ -169,20 +174,22 @@ def aggregate_progress(headers: list[dict[str, Any]], items: list[dict[str, Any]
         operational_totals["hh_finalized"], operational_totals["hh_programmed"]
     )
 
-    unique = {"programmed": len(latest), "finalized": 0, "pending": 0,
+    unique = {"programmed": len(latest), "finalized": 0, "pending": 0, "annulled": 0,
               "not_found": 0, "unchecked": 0}
     unresolved = []
     for record in latest.values():
         status = record["_estado_programacion"]
         if status != "CERRADA" or not record.get("estado_cierre"):
             unique["unchecked"] += 1
+        elif record.get("anulado"):
+            unique["annulled"] += 1
         elif record["finalizado"] is True:
             unique["finalized"] += 1
         elif record["finalizado"] is False:
             unique["pending"] += 1
         else:
             unique["not_found"] += 1
-        if status == "CERRADA" and record["finalizado"] is not True:
+        if status == "CERRADA" and not record.get("anulado") and record["finalizado"] is not True:
             unresolved.append({
                 "numero_ot": record.get("numero_ot") or "SIN ASIGNAR",
                 "activo": record.get("activo_codigo") or "",
@@ -207,7 +214,9 @@ def aggregate_progress(headers: list[dict[str, Any]], items: list[dict[str, Any]
         if month_period is None or record.get("periodo") == month_period
     )
     unique["from_prior_backlog"] = unique["programmed"] - unique["programmed_from_pmp"]
-    unique["progress_ot_pct"] = _pct(unique["finalized"], unique["programmed"])
+    unique["progress_ot_pct"] = _pct(
+        unique["finalized"], max(0, unique["programmed"] - unique["annulled"])
+    )
     complete = bool(weeks) and all(w["estado"] == "CERRADA" for w in weeks)
     return {
         "weeks": weeks, "specialties": sorted(specialty_agg.values(), key=lambda x: x["especialidad"]),
@@ -243,7 +252,7 @@ def get_progress(year: int, month: int) -> dict[str, Any]:
         """), {"begin": begin, "end": end}).mappings()]
         items = [dict(r) for r in conn.execute(text("""
             SELECT i.programacion_id,i.orden_mantenimiento_id,i.hh_programadas,
-                   i.finalizado,i.estado_cierre,i.origen_backlog,
+                   i.finalizado,i.anulado,i.comentario_cierre,i.estado_cierre,i.origen_backlog,
                    o.numero_ot,o.plan_clave_software,o.especialidad,o.periodo,
                    a.codigo AS activo_codigo
             FROM programacion.programacion_item_v2 i

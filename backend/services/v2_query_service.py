@@ -158,6 +158,7 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
                 END AS hh,
                 (
                   upper(COALESCE(o.estado,'')) LIKE 'FINALIZ%'
+                  OR upper(COALESCE(o.estado,'')) LIKE 'ANUL%'
                   OR EXISTS (
                     SELECT 1
                     FROM programacion.seguimiento_no_programado_v2 snp
@@ -199,6 +200,7 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
               LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
               WHERE b.estado_seguimiento='PENDIENTE_DISPONIBLE'
                 AND upper(COALESCE(o.estado,'')) NOT LIKE 'FINALIZ%'
+                AND upper(COALESCE(o.estado,'')) NOT LIKE 'ANUL%'
                 AND NOT EXISTS (
                   SELECT 1
                   FROM programacion.seguimiento_no_programado_v2 snp
@@ -238,6 +240,7 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
               LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
               WHERE o.periodo=:period
                 AND COALESCE(p.es_operacion,false)=false
+                AND upper(COALESCE(o.estado,'')) NOT LIKE 'ANUL%'
             ),
             backlog_available AS (
               SELECT DISTINCT b.orden_mantenimiento_id AS order_id
