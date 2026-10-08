@@ -138,3 +138,13 @@ def test_first_page_kpis_are_compact_and_without_removed_notes():
     assert "Suma de semanas; estimadas" not in summary_block
     assert "Estimadas; no horas reales" not in summary_block
     assert summary_block.count('("') >= 8
+
+
+def test_weekly_pdf_removed_explanatory_labels_and_bar():
+    source = (ROOT / "backend/services/v2_pdf_fallback.py").read_text()
+    assert "Cada tarjeta refleja datos verificados en los cierres" not in source
+    assert "Sobre HH estimadas" not in source
+    assert "HH estimadas; no horas reales" not in source
+    weekly_block = source[source.index("    else:"):source.index('    kind="mensual"')]
+    assert 'pdf.section("OT programadas y finalizadas")' not in weekly_block
+    assert 'pdf.section("Criterios del informe")' not in weekly_block

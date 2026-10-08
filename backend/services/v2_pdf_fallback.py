@@ -322,7 +322,7 @@ def _name(week):
 
 
 def _summary(pdf, label, summary, monthly=False):
-    pdf.section("Indicadores principales", "Cada tarjeta refleja datos verificados en los cierres.")
+    pdf.section("Indicadores principales")
     metrics=[
         ("OT distintas" if monthly else "OT programadas",_fmt(summary["programmed"]),
          "Sin duplicar reprogramadas" if monthly else "Actividades de la semana",BLUE,PALE),
@@ -334,7 +334,7 @@ def _summary(pdf, label, summary, monthly=False):
         ("Cumplimiento OT",_fmt(_pct(summary["finalized"],summary["programmed"]),1)+"%",
          "Sobre OT programadas",BLUE,PALE),
         ("Cumplimiento HH",_fmt(_pct(summary["hh_finalized"],summary["hh_programmed"]),1)+"%",
-         "Sobre HH estimadas",GREEN,MINT),
+         "",GREEN,MINT),
     ]
     pdf.cards(metrics)
 
@@ -376,8 +376,7 @@ def _status_and_progress(pdf, summary):
     pdf.progress(435,pdf.y-31,343,"CUMPLIMIENTO POR OT",
                  summary["finalized"],max(0,summary["programmed"]-summary.get("annulled",0)),GREEN)
     pdf.progress(435,pdf.y-96,343,"CUMPLIMIENTO POR HH",
-                 summary["hh_finalized"],max(0,summary["hh_programmed"]-summary.get("hh_annulled",0)),BLUE,
-                 "HH estimadas; no horas reales")
+                 summary["hh_finalized"],max(0,summary["hh_programmed"]-summary.get("hh_annulled",0)),BLUE)
     pdf.y-=146
 
 
@@ -559,9 +558,6 @@ def render_progress_fallback(data: dict[str,Any],year:int,month:int,
             pdf.badge("INFORME PARCIAL: EXISTEN PROGRAMACIONES SIN CERRAR",CREAM,AMBER)
         _detail_table(pdf,data.get("unresolved",[]),monthly=True)
     else:
-        pdf.section("OT programadas y finalizadas")
-        pdf.bar_chart([{**weeks[0],"label":NAMES.get(weeks[0]["especialidad"],
-                      weeks[0]["especialidad"])}])
         pdf.section("Resultados del cierre semanal")
         w=weeks[0]
         pdf.table(["PROGRAMADAS","FINALIZADAS","PENDIENTES","NO ENCONTRADAS",
@@ -570,12 +566,6 @@ def render_progress_fallback(data: dict[str,Any],year:int,month:int,
                     _fmt(w["not_found"]),_fmt(w["hh_programmed"],2),
                     _fmt(w["hh_finalized"],2)]],
                   [129,129,129,129,131,132])
-        pdf.section("Criterios del informe")
-        pdf.paragraph("La clasificación del cierre se toma del calendario de mantenimiento "
-                      "conciliado con las OT programadas. Las HH son estimaciones de las "
-                      "actividades, no tiempos de ejecución reportados por técnicos. "
-                      "Las OT finalizadas no programadas se muestran aparte y no elevan el cumplimiento.",
-                      maxchars=118)
         _detail_table(pdf,detail_rows or [],monthly=False)
         _unplanned_execution_table(pdf,unplanned_rows or [])
     kind="mensual" if monthly else "semanal"
