@@ -450,37 +450,36 @@ def _executive_summary(pdf, summary, monthly=False, unplanned_rows=None):
     )
     pdf.y -= 55
 
-    pdf.section("Puntos de atención")
-    findings = [
-        f"Pendientes: {_fmt(summary.get('pending',0))} OT.",
-        f"No encontradas: {_fmt(summary.get('not_found',0))} OT.",
-        f"Anuladas: {_fmt(summary.get('annulled',0))} OT; no pasan a backlog.",
-    ]
+    attention = (
+        f"ATENCIÓN: {_fmt(summary.get('pending',0))} pendientes | "
+        f"{_fmt(summary.get('not_found',0))} no encontradas | "
+        f"{_fmt(summary.get('annulled',0))} anuladas"
+    )
     if not monthly:
-        findings.append(
-            f"Ejecución adicional: {_fmt(len(unplanned_rows))} OT no programadas finalizadas "
-            f"({_fmt(unplanned_hh,1)} H-H estimadas)."
-        )
-    for finding in findings:
-        pdf.paragraph("- " + finding, maxchars=118, size=8.5, gap=12)
-    pdf.y -= 3
+        attention += f" | {_fmt(len(unplanned_rows))} no programadas cerradas"
+    pdf.badge(attention, CREAM if summary.get("pending") or summary.get("not_found") else MINT,
+              AMBER if summary.get("pending") or summary.get("not_found") else GREEN)
 
 
 def _report_map(pdf, monthly=False):
-    pdf.section("Mapa del informe", "Usa estos bloques para ubicar rápidamente la información.")
+    pdf.section("Mapa del informe", "Ubica la información por bloques, de lo general a lo detallado.")
     if monthly:
-        blocks = [
-            ("1. EVOLUCIÓN", "Resultado por semana y tendencia del mes", BLUE, PALE),
-            ("2. ESPECIALIDADES", "Comparativo MEC / ELE / SER / MET", GREEN, MINT),
-            ("3. PENDIENTES", "Detalle de OT que requieren atención", AMBER, CREAM),
+        lines = [
+            ("1. EVOLUCIÓN", "Resultado por semana y comportamiento del mes."),
+            ("2. ESPECIALIDADES", "Comparativo entre MEC, ELE, SER y MET."),
+            ("3. PENDIENTES", "OT que requieren atención o conciliación."),
         ]
     else:
-        blocks = [
-            ("1. PROGRAMACIÓN", "Qué se programó y cómo cerró", BLUE, PALE),
-            ("2. NO PROGRAMADAS", "OT ejecutadas fuera de la programación", GREEN, MINT),
-            ("3. DETALLE", "Estado individual de cada actividad programada", AMBER, CREAM),
+        lines = [
+            ("1. PROGRAMACIÓN", "Qué se programó y cómo cerró."),
+            ("2. NO PROGRAMADAS", "OT finalizadas fuera de la programación semanal."),
+            ("3. DETALLE", "Estado individual de cada actividad programada."),
         ]
-    pdf.cards(blocks, cols=3)
+    for title, description in lines:
+        pdf.text(40, pdf.y, title, 8.5, NAVY, True)
+        pdf.text(165, pdf.y, description, 8.2, INK)
+        pdf.y -= 15
+    pdf.y -= 2
 
 
 def _weekly_rows(pdf,weeks):
