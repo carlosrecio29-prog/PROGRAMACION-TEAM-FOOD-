@@ -23,10 +23,20 @@ def normalize_key(value: Any) -> str:
     return re.sub(r"[^A-Z0-9]", "", normalize_text(value))
 
 def canonical_plan_name(value: Any) -> str:
-    return re.sub(r"^\d+\s*[-–—:._/|]+\s*", "", normalize_text(value)).strip()
+    canonical = re.sub(r"^\d+\s*[-–—:._/|]+\s*", "", normalize_text(value)).strip()
+    # Regla vigente: las rutinas de MEDICION DE RESISTENCIA ya no son OPERACION.
+    # Algunos registros históricos conservan ese prefijo; se elimina solo para
+    # esta familia de rutinas para que coincidan con el nombre actual.
+    if "MEDICION DE RESISTENCIA" in canonical:
+        canonical = re.sub(
+            r"^OPERACION\s*[-–—:._/|]+\s*",
+            "",
+            canonical,
+        ).strip()
+    return canonical
 
 def is_operation_plan(value: Any) -> bool:
-    """True only when OPERACIÓN is the leading plan label (optional numeric prefix)."""
+    """True only for plans that are genuinely still labeled as OPERACIÓN."""
     canonical = canonical_plan_name(value)
     return bool(re.match(r"^OPERACION(?=\s|[-–—:._/|]|$)", canonical))
 
