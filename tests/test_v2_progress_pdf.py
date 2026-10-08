@@ -129,3 +129,12 @@ def test_visual_pdf_contains_kpi_charts_and_technical_sections(monkeypatch):
     assert b"OT NO PROGRAMADAS REALIZADAS" in weekly
     assert b"OT-NP-1" in weekly
     assert weekly.rfind(b"OT FINALIZADAS NO PROGRAMADAS") > weekly.rfind(b"DETALLE")
+
+
+def test_first_page_kpis_are_compact_and_without_removed_notes():
+    source = (ROOT / "backend/services/v2_pdf_fallback.py").read_text()
+    summary_block = source[source.index("def _summary"):source.index("def _kpi_note")]
+    assert '("No encontradas"' not in summary_block
+    assert "Suma de semanas; estimadas" not in summary_block
+    assert "Estimadas; no horas reales" not in summary_block
+    assert summary_block.count('("') >= 8

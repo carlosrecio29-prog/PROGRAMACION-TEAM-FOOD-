@@ -328,12 +328,9 @@ def _summary(pdf, label, summary, monthly=False):
          "Sin duplicar reprogramadas" if monthly else "Actividades de la semana",BLUE,PALE),
         ("Finalizadas",_fmt(summary["finalized"]),"Resultado del cierre",GREEN,MINT),
         ("Pendientes",_fmt(summary["pending"]),"Por atender",AMBER,CREAM),
-        ("No encontradas",_fmt(summary["not_found"]),"Requieren conciliación",RED,PINK),
         ("Anuladas",_fmt(summary.get("annulled",0)),"No pasan a backlog",GRAY,PALE),
-        ("HH programadas",_fmt(summary["hh_programmed"],1),
-         "Suma de semanas; estimadas",BLUE,PALE),
-        ("HH de OT cerradas",_fmt(summary["hh_finalized"],1),
-         "Estimadas; no horas reales",GREEN,MINT),
+        ("HH programadas",_fmt(summary["hh_programmed"],1),"",BLUE,PALE),
+        ("HH de OT cerradas",_fmt(summary["hh_finalized"],1),"",GREEN,MINT),
         ("Cumplimiento OT",_fmt(_pct(summary["finalized"],summary["programmed"]),1)+"%",
          "Sobre OT programadas",BLUE,PALE),
         ("Cumplimiento HH",_fmt(_pct(summary["hh_finalized"],summary["hh_programmed"]),1)+"%",
@@ -361,8 +358,8 @@ def _kpi_note(pdf, summary, monthly=False):
 
 def _status_and_progress(pdf, summary):
     pdf.section("Distribución del resultado y cumplimiento")
-    pdf.ensure(151)
-    center_y=pdf.y-70
+    pdf.ensure(146)
+    center_y=pdf.y-66
     segments=[
         ("FINALIZADAS",summary["finalized"],GREEN),
         ("PENDIENTES",summary["pending"],AMBER),
@@ -371,17 +368,17 @@ def _status_and_progress(pdf, summary):
         ("SIN VERIFICAR",summary.get("unchecked",0),GRAY),
     ]
     pdf.donut(118,center_y,54,segments)
-    legend_y=pdf.y-20
+    legend_y=pdf.y-16
     for label,count,color in segments:
         pdf.rect(199,legend_y-3,9,9,color)
         pdf.text(215,legend_y,label+"   "+_fmt(count),8,INK)
         legend_y-=25
-    pdf.progress(435,pdf.y-35,343,"CUMPLIMIENTO POR OT",
+    pdf.progress(435,pdf.y-31,343,"CUMPLIMIENTO POR OT",
                  summary["finalized"],max(0,summary["programmed"]-summary.get("annulled",0)),GREEN)
-    pdf.progress(435,pdf.y-105,343,"CUMPLIMIENTO POR HH",
+    pdf.progress(435,pdf.y-96,343,"CUMPLIMIENTO POR HH",
                  summary["hh_finalized"],max(0,summary["hh_programmed"]-summary.get("hh_annulled",0)),BLUE,
                  "HH estimadas; no horas reales")
-    pdf.y-=156
+    pdf.y-=146
 
 
 def _weekly_rows(pdf,weeks):
