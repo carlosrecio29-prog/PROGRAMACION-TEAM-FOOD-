@@ -2,6 +2,7 @@ from datetime import date
 
 from backend.services import v2_progress_service as progress
 from backend.services import v2_closure_service as closure
+from backend.services import v2_week_tracking_service as tracking
 
 
 def fake_progress():
@@ -45,9 +46,29 @@ def _fake_week_closure(programming_id):
     ]}
 
 
+
+
+
+def _fake_week_tracking(programming_id):
+    return {
+        "unplanned": {
+            "rows": [
+                {
+                    "numero_ot": "OT-NP-1",
+                    "activo_codigo": "BA-NP",
+                    "plan_trabajo": "PLAN NO PROGRAMADO",
+                    "origen": "PMP_NO_PROGRAMADO",
+                    "fecha_fin_orden": "2026-09-12T15:30:00",
+                    "hh_estimada": 1.5,
+                }
+            ]
+        }
+    }
+
 def test_pdf_monthly_and_weekly_are_real_pdf_bytes(monkeypatch):
     monkeypatch.setattr(progress, "get_progress", lambda year, month: fake_progress())
     monkeypatch.setattr(closure, "get_week_closure", _fake_week_closure)
+    monkeypatch.setattr(tracking, "get_week_tracking", _fake_week_tracking)
     monthly, name = progress.export_progress_pdf(2026, 9)
     assert monthly.startswith(b"%PDF-")
     assert len(monthly) > 1000
@@ -70,6 +91,8 @@ def test_pdf_falls_back_if_reportlab_missing(monkeypatch):
     import builtins
 
     monkeypatch.setattr(progress, "get_progress", lambda year, month: fake_progress())
+    monkeypatch.setattr(closure, "get_week_closure", _fake_week_closure)
+    monkeypatch.setattr(tracking, "get_week_tracking", _fake_week_tracking)
     original_import = builtins.__import__
 
     def without_reportlab(name, *args, **kwargs):
@@ -89,6 +112,7 @@ def test_pdf_falls_back_if_reportlab_missing(monkeypatch):
 def test_visual_pdf_contains_kpi_charts_and_technical_sections(monkeypatch):
     monkeypatch.setattr(progress, "get_progress", lambda year, month: fake_progress())
     monkeypatch.setattr(closure, "get_week_closure", _fake_week_closure)
+    monkeypatch.setattr(tracking, "get_week_tracking", _fake_week_tracking)
     monthly, _ = progress.export_progress_pdf(2026, 9)
     weekly, _ = progress.export_progress_pdf(2026, 9, 42)
     for document in (monthly, weekly):
@@ -101,3 +125,5 @@ def test_visual_pdf_contains_kpi_charts_and_technical_sections(monkeypatch):
     assert b"COMPARATIVO POR ESPECIALIDAD" in monthly
     assert b"DETALLE" in monthly and b"OT-2" in monthly
     assert b"DETALLE" in weekly and b"OT-1" in weekly
+    assert b"OT FINALIZADAS NO PROGRAMADAS" in weekly
+    assert b"OT-NP-1" in weekly

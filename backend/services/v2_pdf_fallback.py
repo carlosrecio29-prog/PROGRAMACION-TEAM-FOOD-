@@ -437,9 +437,58 @@ def _detail_table(pdf, rows, monthly=False):
               row_height=22,repeat_title="Detalle de OT (continuación)")
 
 
+def _unplanned_execution_table(pdf, rows):
+    if not rows:
+        return
+    pdf.new_page()
+    total_hh = round(sum(float(item.get("hh_estimada") or 0) for item in rows), 2)
+    pdf.section(
+        "OT finalizadas no programadas",
+        "Ejecución adicional detectada dentro del corte semanal. No aumenta el cumplimiento de la programación."
+    )
+    pdf.cards([
+        ("OT no programadas", _fmt(len(rows)), "Finalizadas dentro del corte", BLUE, PALE),
+        ("HH estimadas", _fmt(total_hh,1), "Carga ejecutada adicional", GREEN, MINT),
+    ])
+    pdf.paragraph(
+        "Estas órdenes aparecen como finalizadas en la Lista de Calendario, pero no formaban parte "
+        "de la programación base de esta semana. Se reportan por separado para conservar la "
+        "trazabilidad de la ejecución real.",
+        maxchars=118,
+    )
+    pdf.y -= 8
+
+    origin_names = {
+        "PMP_NO_PROGRAMADO": "PMP NO PROGRAMADO",
+        "BACKLOG_NO_PROGRAMADO": "BACKLOG NO PROGRAMADO",
+        "PROGRAMADA_OTRA_SEMANA": "OTRA SEMANA",
+        "EMERGENTE_NO_PLANIFICADA": "EMERGENTE",
+    }
+    table_rows = []
+    for item in rows:
+        raw_date = str(item.get("fecha_fin_orden") or "")
+        date_text = raw_date[:16].replace("T", " ") if raw_date else "—"
+        table_rows.append([
+            item.get("numero_ot") or "SIN ASIGNAR",
+            item.get("activo_codigo") or "",
+            item.get("plan_trabajo") or "",
+            origin_names.get(item.get("origen"), item.get("origen") or "SIN CLASIFICAR"),
+            date_text,
+            _fmt(item.get("hh_estimada",0),2),
+        ])
+    pdf.table(
+        ["OT","EQUIPO","PLAN DE TRABAJO","ORIGEN","FECHA FIN","HH EST."],
+        table_rows,
+        [105,120,250,125,105,74],
+        row_height=24,
+        repeat_title="OT finalizadas no programadas (continuación)",
+    )
+
+
 def render_progress_fallback(data: dict[str,Any],year:int,month:int,
                              programming_id:int|None=None,
-                             detail_rows:list[dict[str,Any]]|None=None)->tuple[bytes,str]:
+                             detail_rows:list[dict[str,Any]]|None=None,
+                             unplanned_rows:list[dict[str,Any]]|None=None)->tuple[bytes,str]:
     weeks=data["weeks"]
     if programming_id is not None:
         weeks=[w for w in weeks if w["programming_id"]==programming_id]
@@ -516,8 +565,10 @@ def render_progress_fallback(data: dict[str,Any],year:int,month:int,
         pdf.section("Criterios del informe")
         pdf.paragraph("La clasificación del cierre se toma del calendario de mantenimiento "
                       "conciliado con las OT programadas. Las HH son estimaciones de las "
-                      "actividades, no tiempos de ejecución reportados por técnicos.",
+                      "actividades, no tiempos de ejecución reportados por técnicos. "
+                      "Las OT finalizadas no programadas se muestran aparte y no elevan el cumplimiento.",
                       maxchars=118)
+        _unplanned_execution_table(pdf,unplanned_rows or [])
         _detail_table(pdf,detail_rows or [],monthly=False)
     kind="mensual" if monthly else "semanal"
     filename=(f"informe_{kind}_mtto_{year}_{month:02d}"

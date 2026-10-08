@@ -316,13 +316,17 @@ def export_progress_pdf(year: int, month: int, programming_id: int | None = None
 
     data = get_progress(year, month)
     details = None
+    unplanned_details = None
     if programming_id is not None:
         week = next((w for w in data["weeks"] if w["programming_id"] == programming_id), None)
         if week is None:
             raise ValueError("La programación no corresponde al mes indicado")
         from backend.services.v2_closure_service import get_week_closure
+        from backend.services.v2_week_tracking_service import get_week_tracking
 
         report = get_week_closure(programming_id)
+        tracking = get_week_tracking(programming_id)
+        unplanned_details = list((tracking.get("unplanned") or {}).get("rows") or [])
         details = []
         for row in report["rows"]:
             details.append({
@@ -341,4 +345,7 @@ def export_progress_pdf(year: int, month: int, programming_id: int | None = None
                 "comentario": row.get("comentario_cierre"),
                 "hh_estimada": row.get("hh_programadas") or 0,
             })
-    return render_progress_fallback(data, year, month, programming_id, details)
+    return render_progress_fallback(
+        data, year, month, programming_id, details,
+        unplanned_rows=unplanned_details,
+    )
