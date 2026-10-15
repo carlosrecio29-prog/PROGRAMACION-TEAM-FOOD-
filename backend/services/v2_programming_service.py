@@ -245,8 +245,8 @@ def _monthly_demand(conn, month_date: date, specialty: str, exclude_programming_
         "exclude_programming_id": exclude_programming_id,
     }).mappings().one()
 
-    remaining_workload = conn.execute(text("""
-        WITH universe AS (
+    remaining_for_week = conn.execute(text("""
+        WITH month_pmp AS (
           SELECT
             o.id AS orden_mantenimiento_id,
             CASE
@@ -264,11 +264,32 @@ def _monthly_demand(conn, month_date: date, specialty: str, exclude_programming_
           WHERE o.especialidad=:specialty
             AND o.periodo=:period
             AND NOT COALESCE(p.es_operacion,false)
-
-          UNION
-
+        ),
+        prior_closed_items AS (
           SELECT
-            o.id AS orden_mantenimiento_id,
+            pi.orden_mantenimiento_id,
+            max(pi.hh_programadas) AS hh_programadas,
+            bool_or(COALESCE(pi.finalizado,false) OR COALESCE(pi.anulado,false)) AS resuelta
+          FROM programacion.programacion_item_v2 pi
+          JOIN programacion.programacion_semanal_v2 ps ON ps.id=pi.programacion_id
+          WHERE ps.especialidad=:specialty
+            AND ps.estado='CERRADA'
+            AND ps.semana_fin < :week_start
+            AND ps.semana_fin >= :period
+          GROUP BY pi.orden_mantenimiento_id
+        ),
+        prior_unplanned_finished AS (
+          SELECT DISTINCT snp.orden_mantenimiento_id
+          FROM programacion.seguimiento_no_programado_v2 snp
+          JOIN programacion.programacion_semanal_v2 ps ON ps.id=snp.programacion_id
+          WHERE snp.orden_mantenimiento_id IS NOT NULL
+            AND ps.especialidad=:specialty
+            AND ps.semana_fin < :week_start
+            AND ps.semana_fin >= :period
+        ),
+        prior_pending_backlog AS (
+          SELECT
+            pci.orden_mantenimiento_id,
             CASE
               WHEN p.numero_personas_efectivo IS NOT NULL
                AND COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min) IS NOT NULL
@@ -277,80 +298,41 @@ def _monthly_demand(conn, month_date: date, specialty: str, exclude_programming_
                 * p.numero_personas_efectivo,
                 2
               )
-              ELSE NULL
+              ELSE pci.hh_programadas
             END AS hh
-          FROM programacion.backlog_v2 b
-          JOIN programacion.orden_mantenimiento o ON o.id=b.orden_mantenimiento_id
-          JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
-          WHERE b.especialidad=:specialty
-            AND b.estado_seguimiento IN ('PENDIENTE_DISPONIBLE','PENDIENTE_PROGRAMADA')
-            AND NOT COALESCE(p.es_operacion,false)
+          FROM prior_closed_items pci
+          JOIN programacion.orden_mantenimiento o ON o.id=pci.orden_mantenimiento_id
+          LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
+          WHERE pci.resuelta=false
+        ),
+        universe AS (
+          SELECT orden_mantenimiento_id,hh FROM month_pmp
+          UNION
+          SELECT orden_mantenimiento_id,hh FROM prior_pending_backlog
         ),
         dedup AS (
           SELECT orden_mantenimiento_id,max(hh) AS hh
           FROM universe
           GROUP BY orden_mantenimiento_id
+        ),
+        resolved AS (
+          SELECT orden_mantenimiento_id FROM prior_closed_items WHERE resuelta=true
+          UNION
+          SELECT orden_mantenimiento_id FROM prior_unplanned_finished
         )
         SELECT
           count(*)::int AS remaining_count,
           round(COALESCE(sum(d.hh),0),2) AS remaining_hh,
           count(*) FILTER (WHERE d.hh IS NULL)::int AS missing_hh
         FROM dedup d
-        JOIN programacion.orden_mantenimiento o ON o.id=d.orden_mantenimiento_id
-        WHERE upper(COALESCE(o.estado,'')) NOT LIKE 'FINALIZ%'
-          AND upper(COALESCE(o.estado,'')) NOT LIKE 'ANUL%'
-          AND NOT EXISTS (
-            SELECT 1
-            FROM programacion.seguimiento_no_programado_v2 snp
-            WHERE snp.orden_mantenimiento_id=o.id
-               OR (
-                 snp.numero_ot IS NOT NULL
-                 AND o.numero_ot IS NOT NULL
-                 AND upper(btrim(snp.numero_ot))=upper(btrim(o.numero_ot))
-               )
-          )
-          AND NOT EXISTS (
-            SELECT 1
-            FROM programacion.programacion_item_v2 pi
-            WHERE pi.orden_mantenimiento_id=o.id
-              AND (COALESCE(pi.finalizado,false)=true OR COALESCE(pi.anulado,false)=true)
-          )
-    """), {
-        "period": period,
-        "specialty": specialty,
-    }).mappings().one()
-
-    capacity_window = conn.execute(text("""
-        WITH bounds AS (
-          SELECT
-            CAST(:period AS date) AS month_start,
-            (date_trunc('month',CAST(:period AS date))+interval '1 month - 1 day')::date AS month_end,
-            (
-              SELECT max(ps.semana_fin) + 1
-              FROM programacion.programacion_semanal_v2 ps
-              WHERE ps.especialidad=:specialty
-                AND ps.estado='CERRADA'
-                AND ps.semana_inicio <= (date_trunc('month',CAST(:period AS date))+interval '1 month - 1 day')::date
-                AND ps.semana_fin >= CAST(:period AS date)
-            ) AS after_last_closed
+        WHERE NOT EXISTS (
+          SELECT 1 FROM resolved r WHERE r.orden_mantenimiento_id=d.orden_mantenimiento_id
         )
-        SELECT
-          greatest(month_start,COALESCE(after_last_closed,month_start)) AS capacity_from,
-          month_end AS capacity_to,
-          round(COALESCE((
-            SELECT sum(pt.horas_disponibles)
-            FROM programacion.programacion_tecnico pt
-            JOIN programacion.tecnico t ON t.id=pt.tecnico_id
-            WHERE t.especialidad_efectiva=:specialty
-              AND pt.fecha BETWEEN greatest(month_start,COALESCE(after_last_closed,month_start)) AND month_end
-          ),0),2) AS gross_hh
-        FROM bounds
     """), {
         "period": period,
         "specialty": specialty,
+        "week_start": month_date,
     }).mappings().one()
-
-    remaining_capacity_split = capacity_split(float(capacity_window["gross_hh"] or 0))
 
     return {
         "period": period.isoformat(),
@@ -366,13 +348,9 @@ def _monthly_demand(conn, month_date: date, specialty: str, exclude_programming_
         "total_pending_count_base": int(workload["total_pending_count_base"] or 0),
         "total_pending_hh_base": round(float(workload["total_pending_hh_base"] or 0),2),
         "total_missing_hh_count": int(workload["total_missing_hh_count"] or 0),
-        "remaining_after_close_count": int(remaining_workload["remaining_count"] or 0),
-        "remaining_after_close_hh": round(float(remaining_workload["remaining_hh"] or 0),2),
-        "remaining_after_close_missing_hh": int(remaining_workload["missing_hh"] or 0),
-        "technician_capacity_from": capacity_window["capacity_from"].isoformat(),
-        "technician_capacity_to": capacity_window["capacity_to"].isoformat(),
-        "technician_gross_remaining_hh": round(float(capacity_window["gross_hh"] or 0),2),
-        "technician_preventive_remaining_hh": round(float(remaining_capacity_split["preventive"] or 0),2),
+        "remaining_for_week_count": int(remaining_for_week["remaining_count"] or 0),
+        "remaining_for_week_hh": round(float(remaining_for_week["remaining_hh"] or 0),2),
+        "remaining_for_week_missing_hh": int(remaining_for_week["missing_hh"] or 0),
     }
 
 

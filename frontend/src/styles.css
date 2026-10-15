@@ -3560,3 +3560,61 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
   .tf-program-month-ref{flex-wrap:wrap}
   .tf-program-month-ref>span{width:100%}
 }
+
+
+/* Programación semanal: indicador de carga restante por cierre */
+.tf-program-remaining-card{
+  display:grid;
+  grid-template-columns:minmax(260px,1fr) auto;
+  gap:18px;
+  align-items:center;
+  padding:13px 14px;
+  border:1px solid #d7e5dd;
+  border-radius:10px;
+  background:linear-gradient(145deg,#fbfdfc,#f6faf8);
+}
+.tf-program-remaining-card>div:first-child>span{
+  display:block;
+  color:#375a4b;
+  font-size:8px;
+  font-weight:950;
+  letter-spacing:.38px;
+}
+.tf-program-remaining-card>div:first-child>small{
+  display:block;
+  margin-top:4px;
+  color:#809087;
+  font-size:7px;
+}
+.tf-program-remaining-values{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(135px,1fr));
+  min-width:310px;
+}
+.tf-program-remaining-values>div{
+  padding:2px 14px;
+  border-left:1px solid #dbe6e0;
+}
+.tf-program-remaining-values b{
+  display:block;
+  color:#173b31;
+  font-size:23px;
+  line-height:1;
+}
+.tf-program-remaining-values span{
+  display:block;
+  margin-top:4px;
+  color:#6f8278;
+  font-size:7px;
+}
+@media(max-width:720px){
+  .tf-program-remaining-card{grid-template-columns:1fr}
+  .tf-program-remaining-values{
+    min-width:0;
+    width:100%;
+  }
+  .tf-program-remaining-values>div:first-child{
+    border-left:0;
+    padding-left:0;
+  }
+}

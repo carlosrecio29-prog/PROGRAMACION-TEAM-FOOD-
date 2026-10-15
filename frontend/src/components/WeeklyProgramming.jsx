@@ -127,11 +127,9 @@ export default function WeeklyProgramming({year,month,dashboard}){
   const monthlyBase=data?.monthly_demand||{}
   const monthPmpCount=number(monthlyBase.pmp_count)
   const monthPmpHH=number(monthlyBase.pmp_hh)
-  const remainingWorkCount=number(monthlyBase.remaining_after_close_count)
-  const remainingWorkHH=number(monthlyBase.remaining_after_close_hh)
-  const remainingTechHH=number(monthlyBase.technician_preventive_remaining_hh)
-  const remainingMissingHH=number(monthlyBase.remaining_after_close_missing_hh)
-  const capacityBalance=round2(remainingTechHH-remainingWorkHH)
+  const remainingWorkCount=number(monthlyBase.remaining_for_week_count)
+  const remainingWorkHH=number(monthlyBase.remaining_for_week_hh)
+  const remainingMissingHH=number(monthlyBase.remaining_for_week_missing_hh)
   const weeklyProgressPct=target>0?Math.min(100,selectedHH/target*100):0
 
   const groupedRows=useMemo(()=>{
@@ -212,31 +210,16 @@ export default function WeeklyProgramming({year,month,dashboard}){
         <b>{fmt(monthPmpHH,1)} H-H</b>
       </div>
 
-      <div className="tf-program-balance-grid">
-        <article className="tf-program-load-card">
-          <div className="tf-program-indicator-label">CARGA PENDIENTE DESPUÉS DE CIERRES</div>
-          <div className="tf-program-load-values">
-            <div><b>{remainingWorkCount}</b><span>PMP + Backlog por atender</span></div>
-            <div><b>{fmt(remainingWorkHH,1)}</b><span>H-H pendientes</span></div>
-          </div>
-          <small>Solo disminuye cuando la actividad queda finalizada o anulada.</small>
-        </article>
-
-        <div className="tf-program-versus">VS</div>
-
-        <article className="tf-program-capacity-card">
-          <div className="tf-program-indicator-label">CAPACIDAD PREVENTIVA DE TÉCNICOS RESTANTE</div>
-          <b>{fmt(remainingTechHH,1)} H-H</b>
-          <span>Disponible para preventivo en lo que resta del mes</span>
-          <small>80% efectivo × 80% preventivo</small>
-        </article>
-
-        <div className={'tf-program-balance-result '+(capacityBalance>=0?'enough':'deficit')}>
-          <span>{capacityBalance>=0?'CAPACIDAD DISPONIBLE':'DÉFICIT DE CAPACIDAD'}</span>
-          <b>{capacityBalance>=0?'+':''}{fmt(capacityBalance,1)} H-H</b>
-          <small>{capacityBalance>=0?'La capacidad restante cubre la carga pendiente.':'La carga pendiente supera las H-H preventivas restantes.'}</small>
+      <article className="tf-program-remaining-card">
+        <div>
+          <span>PMP + H-H QUE QUEDAN</span>
+          <small>Resultado acumulado de los cierres anteriores a la semana seleccionada</small>
         </div>
-      </div>
+        <div className="tf-program-remaining-values">
+          <div><b>{remainingWorkCount}</b><span>PMP + Backlog pendientes</span></div>
+          <div><b>{fmt(remainingWorkHH,1)}</b><span>H-H pendientes</span></div>
+        </div>
+      </article>
 
       {remainingMissingHH>0&&(
         <div className="tf-program-data-warning">{remainingMissingHH} actividad(es) pendientes no tienen H-H calculables y no están incluidas en la comparación de horas.</div>
