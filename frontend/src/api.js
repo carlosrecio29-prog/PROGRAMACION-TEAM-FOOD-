@@ -238,7 +238,8 @@ export async function getV2WeekProgramming(dateFrom, dateTo, specialty) {
     date_to: dateTo,
     specialty,
   });
-  return check(await fetch(`/api/v2/programming/week?${qs}`));
+  qs.set("_ts", String(Date.now()));
+  return check(await fetch(`/api/v2/programming/week?${qs}`, { cache: "no-store" }));
 }
 export async function saveV2WeekProgramming(payload) {
   return check(

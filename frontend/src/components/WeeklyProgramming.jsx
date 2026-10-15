@@ -1,4 +1,4 @@
-import {useEffect,useMemo,useState} from 'react'
+import {useEffect,useMemo,useRef,useState} from 'react'
 import {monthWeeks,initialWeekIndex} from '../features/planning/monthWeeks.js'
 import {getV2WeekProgramming,saveV2WeekProgramming,downloadV2WeeklyReport} from '../api'
 import {emptyFilters,matchesFilters,updateGroupFilters} from '../features/planning/weeklyProgrammingFilters'
@@ -116,10 +116,35 @@ function SelectionSummary({rows,editing,onToggle,dashboard}){
 export default function WeeklyProgramming({year,month,dashboard}){
   const weeks=useMemo(()=>monthWeeks(year,month),[year,month])
   const [weekIndex,setWeekIndex]=useState(()=>initialWeekIndex(weeks));const [specialty,setSpecialty]=useState('MEC');const [data,setData]=useState(null);const [selected,setSelected]=useState(new Set());const [filters,setFilters]=useState(emptyFilters);const [loading,setLoading]=useState(false);const [saving,setSaving]=useState(false);const [error,setError]=useState('');const [message,setMessage]=useState('');const [dirty,setDirty]=useState(false);const [programmingId,setProgrammingId]=useState(null);const [editing,setEditing]=useState(true)
+  const loadSequence=useRef(0)
   const week=weeks[Math.min(weekIndex,weeks.length-1)]||weeks[0]
-  async function load(){if(!week)return;try{setLoading(true);setError('');const result=await getV2WeekProgramming(week.from,week.to,specialty);setData(result);setSelected(new Set((result.selected_ids||[]).map(Number)));setProgrammingId(result.programming?.id||null);setEditing(!result.programming);setDirty(false)}catch(cause){setError(cause.message)}finally{setLoading(false)}}
+  async function load(){
+    if(!week)return
+    const sequence=++loadSequence.current
+    const requestWeek={from:week.from,to:week.to}
+    const requestSpecialty=specialty
+    try{
+      setLoading(true)
+      setError('')
+      const result=await getV2WeekProgramming(requestWeek.from,requestWeek.to,requestSpecialty)
+      if(sequence!==loadSequence.current)return
+      setData(result)
+      setSelected(new Set((result.selected_ids||[]).map(Number)))
+      setProgrammingId(result.programming?.id||null)
+      setEditing(!result.programming)
+      setDirty(false)
+    }catch(cause){
+      if(sequence===loadSequence.current)setError(cause.message)
+    }finally{
+      if(sequence===loadSequence.current)setLoading(false)
+    }
+  }
   useEffect(()=>{setWeekIndex(initialWeekIndex(weeks))},[month])
   useEffect(()=>{
+    loadSequence.current+=1
+    setData(null)
+    setSelected(new Set())
+    setProgrammingId(null)
     setFilters({
       operating:{area:'',search:''},
       stopped:{area:'',search:''},
