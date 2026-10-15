@@ -118,7 +118,15 @@ export default function WeeklyProgramming({year,month,dashboard}){
   const [weekIndex,setWeekIndex]=useState(()=>initialWeekIndex(weeks));const [specialty,setSpecialty]=useState('MEC');const [data,setData]=useState(null);const [selected,setSelected]=useState(new Set());const [filters,setFilters]=useState(emptyFilters);const [loading,setLoading]=useState(false);const [saving,setSaving]=useState(false);const [error,setError]=useState('');const [message,setMessage]=useState('');const [dirty,setDirty]=useState(false);const [programmingId,setProgrammingId]=useState(null);const [editing,setEditing]=useState(true)
   const week=weeks[Math.min(weekIndex,weeks.length-1)]||weeks[0]
   async function load(){if(!week)return;try{setLoading(true);setError('');const result=await getV2WeekProgramming(week.from,week.to,specialty);setData(result);setSelected(new Set((result.selected_ids||[]).map(Number)));setProgrammingId(result.programming?.id||null);setEditing(!result.programming);setDirty(false)}catch(cause){setError(cause.message)}finally{setLoading(false)}}
-  useEffect(()=>{setWeekIndex(initialWeekIndex(weeks))},[month]);useEffect(()=>{load()},[week?.from,week?.to,specialty])
+  useEffect(()=>{setWeekIndex(initialWeekIndex(weeks))},[month])
+  useEffect(()=>{
+    setFilters({
+      operating:{area:'',search:''},
+      stopped:{area:'',search:''},
+      backlog:{area:'',search:''}
+    })
+  },[week?.from,week?.to,specialty])
+  useEffect(()=>{load()},[week?.from,week?.to,specialty])
   const allRows=useMemo(()=>[...(data?.operating||[]),...(data?.stopped||[]),...(data?.backlog||[])],[data])
   const rowMap=useMemo(()=>new Map(allRows.map(row=>[Number(row.orden_mantenimiento_id),row])),[allRows])
   const selectedRows=useMemo(()=>[...selected].map(id=>rowMap.get(Number(id))).filter(Boolean).sort((left,right)=>Number(left.requiere_parada)-Number(right.requiere_parada)||String(left.area_codigo||'').localeCompare(String(right.area_codigo||''))||String(left.numero_ot||'').localeCompare(String(right.numero_ot||''))),[selected,rowMap])
@@ -287,7 +295,7 @@ export default function WeeklyProgramming({year,month,dashboard}){
       </div>
     </section>}
 
-    <SelectionSummary rows={selectedRows} editing={editing} onToggle={toggle} dashboard={dashboard}/>
+    <SelectionSummary key={week.from+'-'+specialty} rows={selectedRows} editing={editing} onToggle={toggle} dashboard={dashboard}/>
 
     {(editing||!programmingId)&&<section className="tf-save-strip">
       <div><b>{selected.size} actividades · {fmt(selectedHH,1)} H-H</b><span>{dirty?'Cambios sin guardar':'Selección actual'}</span></div>
