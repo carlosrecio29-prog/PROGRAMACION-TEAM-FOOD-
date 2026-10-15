@@ -24,7 +24,7 @@ function ActivityGroup({kind,rows,dashboard,editing,selected,closedWeek,filters,
   return <section className={'v2-activity-section tf-program-table-section '+kind} aria-label={config.title}>
     <div className="tf-program-table-head">
       <div><h3>{config.title}</h3><p>{config.description}</p></div>
-      <Badge tone={config.tone}>{closedWeek?`${visible.length} no programadas`:`${selectedVisible} seleccionadas · ${visible.length} total`}</Badge>
+      <Badge tone={config.tone}>{editing?`${selectedVisible} seleccionadas · ${visible.length} total`:`${selectedVisible} programadas ✓ · ${visible.length-selectedVisible} no seleccionadas`}</Badge>
     </div>
     <div className="tf-table-filterbar" aria-label={'Filtros de '+config.title}>
       <label><span>Área</span><select aria-label={'Área en '+config.title} value={filters.area} onChange={event=>onFiltersChange({area:event.target.value})}><option value="">Todas</option>{(dashboard?.areas||[]).map(area=><option key={area.codigo} value={area.codigo}>{area.codigo} · {area.nombre||area.codigo}</option>)}</select></label>
@@ -34,9 +34,9 @@ function ActivityGroup({kind,rows,dashboard,editing,selected,closedWeek,filters,
       {visible.map(row=>{
         const id=Number(row.orden_mantenimiento_id)
         const chosen=selected.has(id)
-        return <tr key={id} className={chosen?'v2-selected-row':''}>
+        return <tr key={id} className={chosen?'v2-selected-row tf-programmed-highlight':'tf-unselected-activity'}>
           {kind==='backlog'&&<td><div className="v2-backlog-origin"><b>Backlog</b><small>{row.semana_origen_inicio||'Semana anterior'} {row.semana_origen_fin?'→ '+row.semana_origen_fin:''}</small></div></td>}
-          <td><b>{row.numero_ot||'SIN ASIGNAR'}</b></td>
+          <td><b className={chosen?'tf-ot-programmed-underline':''}>{row.numero_ot||'SIN ASIGNAR'}</b>{chosen&&<small className="tf-programmed-note">✓ Seleccionada en esta semana</small>}</td>
           <td><Badge>{row.area_codigo||'—'}</Badge><small>{row.area_nombre||''}</small></td>
           <td><b>{row.activo_codigo}</b><small>{row.activo_descripcion}</small></td>
           <td><span className="v2-plan">{row.plan_trabajo}</span><small>{row.descripcion_grupo||''}</small></td>
@@ -45,7 +45,7 @@ function ActivityGroup({kind,rows,dashboard,editing,selected,closedWeek,filters,
           <td><b>{fmt(row.hh,1)}</b></td>
           <td>{editing
             ? <button type="button" className={chosen?'v2-unselect':'v2-select'} onClick={()=>onToggle(row)}>{chosen?'Quitar':'Agregar'}</button>
-            : <span className={chosen?'tf-programmed-tag':'tf-readonly-dash'}>{chosen?'Programada ✓':'—'}</span>}
+            : <span className={chosen?'tf-programmed-tag':'tf-not-programmed-tag'}>{chosen?'✓ Programada':'No seleccionada'}</span>}
           </td>
         </tr>
       })}
@@ -91,10 +91,10 @@ function SelectionSummary({rows,editing,onToggle,dashboard}){
     <div className="v2-table-wrap v2-selected-table"><table>
       <thead><tr><th>Condición</th><th>Origen</th><th>OT</th><th>Área</th><th>Equipo</th><th>Plan de trabajo</th><th>Personas</th><th>Tiempo</th><th>H-H</th>{editing&&<th>Acción</th>}</tr></thead>
       <tbody>
-        {visibleRows.map(row=><tr key={row.orden_mantenimiento_id}>
+        {visibleRows.map(row=><tr className="tf-selected-summary-row" key={row.orden_mantenimiento_id}>
           <td>{row.requiere_parada?<Badge tone="stop">Equipo detenido</Badge>:<Badge tone="ok">Equipo funcionando</Badge>}</td>
           <td>{row.origen==='BACKLOG'||row.origen_backlog?<Badge tone="backlog">BACKLOG</Badge>:<Badge>PMP DEL MES</Badge>}</td>
-          <td><b>{row.numero_ot||'SIN ASIGNAR'}</b></td>
+          <td><b className="tf-ot-programmed-underline">{row.numero_ot||'SIN ASIGNAR'}</b><small className="tf-programmed-note">✓ Programada en esta semana</small></td>
           <td><Badge>{row.area_codigo||'—'}</Badge><small>{row.area_nombre||''}</small></td>
           <td><b>{row.activo_codigo}</b><small>{row.activo_descripcion}</small></td>
           <td><span className="v2-plan">{row.plan_trabajo}</span><small>{row.descripcion_grupo||''}</small></td>
@@ -141,12 +141,13 @@ export default function WeeklyProgramming({year,month,dashboard}){
     row.ejecutada_pendiente_cierre===true
     && !selected.has(Number(row.orden_mantenimiento_id))
   ),[allRows,selected])
-  // En semanas cerradas las programadas se muestran solo en Programadas;
-  // las detectadas como ejecutadas se identifican en el aviso de seguimiento.
+  // Conservar en las tablas de su semana las OT seleccionadas, también después
+  // del cierre, para resaltarlas sin alterar la programación ni el saldo.
+  // Sólo se apartan del programador las detectadas como finalizadas en un
+  // seguimiento aún pendiente de cierre (otras semanas).
   const listedRows=useMemo(()=>allRows.filter(row=>
-    (!closedWeek||!selected.has(Number(row.orden_mantenimiento_id)))
-    && row.ejecutada_pendiente_cierre!==true
-  ),[allRows,selected,closedWeek])
+    row.ejecutada_pendiente_cierre!==true
+  ),[allRows])
   // El indicador muestra la carga al COMIENZO del corte: nunca resta
   // las OT seleccionadas en la misma semana antes de su cierre.
   const availableWorkMetrics=useMemo(()=>allRows.reduce((totals,row)=>{
