@@ -124,78 +124,15 @@ export default function WeeklyProgramming({year,month,dashboard}){
   const techniciansAssigned=number(data?.capacity?.technicians_assigned,data?.capacity?.technicians||0)
   const remaining=Math.max(0,target-selectedHH)
 
-  const monthly=useMemo(()=>{
-    const base=data?.monthly_demand||{}
-    const monthKey=String(week?.from||'').slice(0,7)
-    const selectedMonthRows=selectedRows.filter(row=>String(row.periodo||'').slice(0,7)===monthKey)
-    const selectedMonthHH=selectedMonthRows.reduce((sum,row)=>sum+number(row.hh),0)
-    const selectedAvailableBacklogRows=selectedRows.filter(row=>
-      row.es_backlog===true && String(row.periodo||'').slice(0,7)!==monthKey
-    )
-    const selectedAvailableBacklogHH=selectedAvailableBacklogRows.reduce((sum,row)=>sum+number(row.hh),0)
-    const removedSavedBacklogRows=allRows.filter(row=>
-      programmingId
-      && !selected.has(Number(row.orden_mantenimiento_id))
-      && row.origen_backlog===true
-      && row.es_backlog!==true
-      && String(row.periodo||'').slice(0,7)!==monthKey
-    )
-    const removedSavedBacklogHH=removedSavedBacklogRows.reduce((sum,row)=>sum+number(row.hh),0)
-
-    const pmpCount=number(base.pmp_count)
-    const pmpHH=number(base.pmp_hh)
-    const coveredCount=Math.min(pmpCount,number(base.covered_count_base)+selectedMonthRows.length)
-    const coveredHH=Math.min(pmpHH,number(base.covered_hh_base)+selectedMonthHH)
-    const pendingCount=Math.max(0,pmpCount-coveredCount)
-    const pendingHH=Math.max(0,pmpHH-coveredHH)
-
-    const backlogPendingCount=Math.max(
-      0,
-      number(base.backlog_available_count_base)
-        - selectedAvailableBacklogRows.length
-        + removedSavedBacklogRows.length
-    )
-    const backlogPendingHH=Math.max(
-      0,
-      number(base.backlog_available_hh_base)
-        - selectedAvailableBacklogHH
-        + removedSavedBacklogHH
-    )
-    const totalPendingCount=Math.max(
-      0,
-      number(base.total_pending_count_base)
-        - selectedMonthRows.length
-        - selectedAvailableBacklogRows.length
-        + removedSavedBacklogRows.length
-    )
-    const totalPendingHH=Math.max(
-      0,
-      number(base.total_pending_hh_base)
-        - selectedMonthHH
-        - selectedAvailableBacklogHH
-        + removedSavedBacklogHH
-    )
-
-    const demandBeforeWeekHH=Math.max(0,pmpHH-number(base.covered_hh_base))
-    const coveragePossible=demandBeforeWeekHH>0?Math.min(100,target/demandBeforeWeekHH*100):100
-    const backlogCount=number(base.backlog_available_count_base)
-    const backlogHH=number(base.backlog_available_hh_base)
-    const pmpPlusBacklogCount=pmpCount+backlogCount
-    const pmpPlusBacklogHH=pmpHH+backlogHH
-    const startPmpPendingCount=number(base.pending_count_base)
-    const startPmpPendingHH=number(base.pending_hh_base)
-    const startPendingCount=number(base.total_pending_count_base)
-    const startPendingHH=number(base.total_pending_hh_base)
-    const overlapHH=Math.max(0,startPmpPendingHH+backlogHH-startPendingHH)
-    return {
-      pmpCount,pmpHH,coveredCount,coveredHH,pendingCount,pendingHH,
-      backlogCount,backlogHH,pmpPlusBacklogCount,pmpPlusBacklogHH,
-      backlogPendingCount,backlogPendingHH,totalPendingCount,totalPendingHH,
-      startPmpPendingCount,startPmpPendingHH,startPendingCount,startPendingHH,overlapHH,
-      demandBeforeWeekHH,coveragePossible,missingHH:number(base.missing_hh_count),
-      totalMissingHH:number(base.total_missing_hh_count)
-    }
-  },[data,selectedRows,allRows,selected,programmingId,target,week?.from])
+  const monthlyBase=data?.monthly_demand||{}
+  const monthPmpCount=number(monthlyBase.pmp_count)
+  const monthPmpHH=number(monthlyBase.pmp_hh)
+  const remainingWorkCount=number(monthlyBase.remaining_after_close_count)
+  const remainingWorkHH=number(monthlyBase.remaining_after_close_hh)
+  const remainingTechHH=number(monthlyBase.technician_preventive_remaining_hh)
+  const remainingMissingHH=number(monthlyBase.remaining_after_close_missing_hh)
+  const capacityBalance=round2(remainingTechHH-remainingWorkHH)
+  const weeklyProgressPct=target>0?Math.min(100,selectedHH/target*100):0
 
   const groupedRows=useMemo(()=>{
     const backlog=[]
@@ -264,6 +201,64 @@ export default function WeeklyProgramming({year,month,dashboard}){
         {programmingId&&editing&&<button type="button" onClick={cancelEdit}>Cancelar cambios</button>}
         {programmingId&&<button type="button" disabled={dirty} onClick={()=>report('xlsx')}>Excel</button>}
         {programmingId&&<button type="button" disabled={dirty} onClick={()=>report('pdf')}>PDF</button>}
+      </div>
+    </section>
+
+    <section className="tf-program-indicator-board" aria-label="Indicadores de programación semanal">
+      <div className="tf-program-month-ref">
+        <span>REFERENCIA DEL MES · {SPEC_NAMES[specialty]}</span>
+        <b>{monthPmpCount} PMP</b>
+        <i>·</i>
+        <b>{fmt(monthPmpHH,1)} H-H</b>
+      </div>
+
+      <div className="tf-program-balance-grid">
+        <article className="tf-program-load-card">
+          <div className="tf-program-indicator-label">CARGA PENDIENTE DESPUÉS DE CIERRES</div>
+          <div className="tf-program-load-values">
+            <div><b>{remainingWorkCount}</b><span>PMP + Backlog por atender</span></div>
+            <div><b>{fmt(remainingWorkHH,1)}</b><span>H-H pendientes</span></div>
+          </div>
+          <small>Solo disminuye cuando la actividad queda finalizada o anulada.</small>
+        </article>
+
+        <div className="tf-program-versus">VS</div>
+
+        <article className="tf-program-capacity-card">
+          <div className="tf-program-indicator-label">CAPACIDAD PREVENTIVA DE TÉCNICOS RESTANTE</div>
+          <b>{fmt(remainingTechHH,1)} H-H</b>
+          <span>Disponible para preventivo en lo que resta del mes</span>
+          <small>80% efectivo × 80% preventivo</small>
+        </article>
+
+        <div className={'tf-program-balance-result '+(capacityBalance>=0?'enough':'deficit')}>
+          <span>{capacityBalance>=0?'CAPACIDAD DISPONIBLE':'DÉFICIT DE CAPACIDAD'}</span>
+          <b>{capacityBalance>=0?'+':''}{fmt(capacityBalance,1)} H-H</b>
+          <small>{capacityBalance>=0?'La capacidad restante cubre la carga pendiente.':'La carga pendiente supera las H-H preventivas restantes.'}</small>
+        </div>
+      </div>
+
+      {remainingMissingHH>0&&(
+        <div className="tf-program-data-warning">{remainingMissingHH} actividad(es) pendientes no tienen H-H calculables y no están incluidas en la comparación de horas.</div>
+      )}
+
+      <div className="tf-week-progress-card">
+        <div className="tf-week-progress-head">
+          <div>
+            <span>PROGRAMACIÓN DE ESTA SEMANA</span>
+            <strong>{fmt(selectedHH,1)} / {fmt(target,1)} H-H</strong>
+          </div>
+          <div className="tf-week-progress-meta">
+            <b>{selected.size}</b><span>actividades seleccionadas</span>
+          </div>
+        </div>
+        <div className="tf-week-progress-track">
+          <div className="tf-week-progress-fill" style={{width:String(weeklyProgressPct)+'%'}} />
+        </div>
+        <div className="tf-week-progress-foot">
+          <span>{fmt(weeklyProgressPct,1)}% programado</span>
+          <b>{selectedHH>target?fmt(selectedHH-target,1)+' H-H sobre la meta':fmt(Math.max(0,target-selectedHH),1)+' H-H por programar'}</b>
+        </div>
       </div>
     </section>
 
