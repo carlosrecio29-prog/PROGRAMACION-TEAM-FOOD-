@@ -297,6 +297,7 @@ def get_week_programming(*, date_from: date, date_to: date, specialty: str) -> d
                 )
                 OR (
                   current_item.id IS NULL
+                  AND CAST(:is_closed AS boolean)=false
                   AND EXISTS (
                     SELECT 1
                     FROM programacion.finalizaciones_detectadas_v2 fd
@@ -356,6 +357,7 @@ def get_week_programming(*, date_from: date, date_to: date, specialty: str) -> d
             "date_from": date_from,
             "specialty": specialty,
             "programming_id": programming_id,
+            "is_closed": bool(programming and programming["estado"] == "CERRADA"),
         }).mappings()]
         selected_hh = round(sum(float(r["hh"] or 0) for r in rows if r["seleccionado"]), 2)
         monthly_demand = _monthly_demand(conn, date_from, specialty, programming_id)
