@@ -295,6 +295,19 @@ def get_week_programming(*, date_from: date, date_to: date, specialty: str) -> d
                       )
                     )
                 )
+                OR (
+                  current_item.id IS NULL
+                  AND EXISTS (
+                    SELECT 1
+                    FROM programacion.finalizaciones_detectadas_v2 fd
+                    JOIN programacion.programacion_semanal_v2 first_seen
+                      ON first_seen.id=fd.programacion_origen_id
+                    WHERE fd.orden_mantenimiento_id=o.id
+                      AND fd.especialidad=:specialty
+                      AND fd.periodo=date_trunc('month',CAST(:date_from AS date))::date
+                      AND first_seen.semana_inicio<=:date_from
+                  )
+                )
               ) AS ejecutada_pendiente_cierre
             FROM base_universe bu
             JOIN programacion.orden_mantenimiento o ON o.id=bu.orden_mantenimiento_id
@@ -437,6 +450,31 @@ def save_week_programming(*, date_from: date, date_to: date, specialty: str, ord
                 f"La OT {first_ot} está registrada como FINALIZADA fuera de programación "
                 "en un seguimiento anterior o actual. No se puede programar de nuevo; "
                 "debe confirmarse el cierre correspondiente."
+            )
+
+        detected_in_month = conn.execute(text("""
+            SELECT DISTINCT o.numero_ot
+            FROM programacion.orden_mantenimiento o
+            JOIN programacion.finalizaciones_detectadas_v2 fd
+              ON fd.orden_mantenimiento_id=o.id
+            JOIN programacion.programacion_semanal_v2 detected_week
+              ON detected_week.id=fd.programacion_origen_id
+            WHERE o.id=ANY(CAST(:ids AS bigint[]))
+              AND fd.especialidad=:specialty
+              AND fd.periodo=date_trunc('month',CAST(:date_from AS date))::date
+              AND detected_week.semana_inicio<=:date_from
+              AND NOT EXISTS (
+                SELECT 1 FROM programacion.programacion_item_v2 own
+                WHERE own.programacion_id=CAST(:current_id AS bigint)
+                  AND own.orden_mantenimiento_id=o.id
+              )
+            LIMIT 10
+        """), {"ids": unique_ids, "specialty": specialty,
+                "date_from": date_from, "current_id": current_id}).scalars().all()
+        if detected_in_month:
+            raise V2ProgrammingError(
+                f"La OT {detected_in_month[0] or 'SIN ASIGNAR'} ya fue detectada como "
+                "FINALIZADA al actualizar el seguimiento del mes; no debe programarse otra vez."
             )
 
         rows = [dict(r) for r in conn.execute(text("""
