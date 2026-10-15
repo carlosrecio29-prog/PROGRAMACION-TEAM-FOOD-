@@ -134,6 +134,8 @@ export default function WeeklyProgramming({year,month,dashboard}){
   const remainingWorkCount=number(monthlyBase.remaining_for_week_count)
   const remainingWorkHH=number(monthlyBase.remaining_for_week_hh)
   const remainingMissingHH=number(monthlyBase.remaining_for_week_missing_hh)
+  const remainingPmpHH=number(monthlyBase.remaining_pmp_hh)
+  const remainingBacklogHH=number(monthlyBase.remaining_backlog_hh)
   const technicianMonthHH=number(monthlyBase.technician_month_preventive_hh)
   const technicianRemainingHH=number(monthlyBase.technician_remaining_preventive_hh)
   const weeklyProgressPct=target>0?Math.min(100,selectedHH/target*100):0
@@ -225,7 +227,11 @@ export default function WeeklyProgramming({year,month,dashboard}){
           </div>
           <div className="tf-program-remaining-values">
             <div><b>{remainingWorkCount}</b><span>OT pendientes</span></div>
-            <div><b>{fmt(remainingWorkHH,1)}</b><span>H-H pendientes</span></div>
+            <div>
+              <b>{fmt(remainingWorkHH,1)}</b>
+              <span>H-H pendientes</span>
+              <small className="tf-program-hh-breakdown">PMP del mes: {fmt(remainingPmpHH,1)} H-H · Backlog: {fmt(remainingBacklogHH,1)} H-H</small>
+            </div>
           </div>
         </article>
 

@@ -3675,3 +3675,11 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
 @media(max-width:860px){
   .tf-program-status-row{grid-template-columns:1fr}
 }
+
+.tf-program-hh-breakdown{
+  display:block!important;
+  margin-top:5px!important;
+  color:#8a9a92!important;
+  font-size:6.5px!important;
+  line-height:1.25!important;
+}

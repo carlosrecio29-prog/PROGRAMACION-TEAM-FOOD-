@@ -358,7 +358,37 @@ def _monthly_demand(conn, month_date: date, specialty: str, exclude_programming_
                 FROM resolved_before_week r
                 WHERE r.orden_mantenimiento_id=bu.orden_mantenimiento_id
               )
-          )::int AS remaining_missing_hh
+          )::int AS remaining_missing_hh,
+          count(*) FILTER (
+            WHERE bu.es_pmp_mes
+              AND NOT EXISTS (
+                SELECT 1 FROM resolved_before_week r
+                WHERE r.orden_mantenimiento_id=bu.orden_mantenimiento_id
+              )
+          )::int AS remaining_pmp_count,
+          round(COALESCE(sum(bu.hh) FILTER (
+            WHERE bu.es_pmp_mes
+              AND NOT EXISTS (
+                SELECT 1 FROM resolved_before_week r
+                WHERE r.orden_mantenimiento_id=bu.orden_mantenimiento_id
+              )
+          ),0),2) AS remaining_pmp_hh,
+          count(*) FILTER (
+            WHERE bu.es_backlog
+              AND NOT bu.es_pmp_mes
+              AND NOT EXISTS (
+                SELECT 1 FROM resolved_before_week r
+                WHERE r.orden_mantenimiento_id=bu.orden_mantenimiento_id
+              )
+          )::int AS remaining_backlog_count,
+          round(COALESCE(sum(bu.hh) FILTER (
+            WHERE bu.es_backlog
+              AND NOT bu.es_pmp_mes
+              AND NOT EXISTS (
+                SELECT 1 FROM resolved_before_week r
+                WHERE r.orden_mantenimiento_id=bu.orden_mantenimiento_id
+              )
+          ),0),2) AS remaining_backlog_hh
         FROM base_universe bu
     """), {
         "period": period,
@@ -410,6 +440,10 @@ def _monthly_demand(conn, month_date: date, specialty: str, exclude_programming_
         "remaining_for_week_count": int(workload_for_week["remaining_count"] or 0),
         "remaining_for_week_hh": round(float(workload_for_week["remaining_hh"] or 0),2),
         "remaining_for_week_missing_hh": int(workload_for_week["remaining_missing_hh"] or 0),
+        "remaining_pmp_count": int(workload_for_week["remaining_pmp_count"] or 0),
+        "remaining_pmp_hh": round(float(workload_for_week["remaining_pmp_hh"] or 0),2),
+        "remaining_backlog_count": int(workload_for_week["remaining_backlog_count"] or 0),
+        "remaining_backlog_hh": round(float(workload_for_week["remaining_backlog_hh"] or 0),2),
         "technician_month_gross_hh": round(float(technician_capacity["gross_month_hh"] or 0),2),
         "technician_month_preventive_hh": round(float(technician_month_split["preventive"] or 0),2),
         "technician_remaining_gross_hh": round(float(technician_capacity["gross_remaining_hh"] or 0),2),
