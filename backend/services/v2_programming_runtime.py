@@ -29,266 +29,199 @@ def get_week_programming(*, date_from: date, date_to: date, specialty: str) -> d
         """), {"date_from": date_from, "date_to": date_to, "specialty": specialty}).mappings().first()
         programming_id = int(programming["id"]) if programming else None
 
-        if programming and programming["estado"] == "CERRADA":
-            rows = [dict(r) for r in conn.execute(text("""
-                WITH month_pmp AS (
-                  SELECT
-                    o.id AS orden_mantenimiento_id,
-                    true AS es_pmp_mes,
-                    false AS es_backlog_inicial
-                  FROM programacion.orden_mantenimiento o
-                  JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
-                  WHERE o.especialidad=:specialty
-                    AND o.periodo=date_trunc('month',CAST(:date_from AS date))::date
-                    AND NOT COALESCE(p.es_operacion,false)
-                ),
-                initial_backlog AS (
-                  SELECT
-                    o.id AS orden_mantenimiento_id,
-                    false AS es_pmp_mes,
-                    true AS es_backlog_inicial
-                  FROM programacion.backlog_v2 b
-                  JOIN programacion.orden_mantenimiento o ON o.id=b.orden_mantenimiento_id
-                  JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
-                  WHERE b.especialidad=:specialty
-                    AND NOT COALESCE(p.es_operacion,false)
-                    AND COALESCE(
-                      b.primera_semana_origen_inicio,
-                      b.semana_origen_inicio,
-                      o.periodo
-                    ) < date_trunc('month',CAST(:date_from AS date))::date
-                    AND (
-                      b.estado_seguimiento IN ('PENDIENTE_DISPONIBLE','PENDIENTE_PROGRAMADA')
-                      OR (
-                        b.estado_seguimiento='FINALIZADA'
-                        AND b.finalizado_en IS NOT NULL
-                        AND b.finalizado_en::date >= date_trunc('month',CAST(:date_from AS date))::date
-                      )
-                      OR (
-                        b.estado_seguimiento='ANULADA'
-                        AND COALESCE(b.ultimo_cierre_en,b.actualizado_en)::date >= date_trunc('month',CAST(:date_from AS date))::date
-                      )
-                    )
-                ),
-                base_universe AS (
-                  SELECT
-                    orden_mantenimiento_id,
-                    bool_or(es_pmp_mes) AS es_pmp_mes,
-                    bool_or(es_backlog_inicial) AS es_backlog_inicial
-                  FROM (
-                    SELECT * FROM month_pmp
-                    UNION ALL
-                    SELECT * FROM initial_backlog
-                  ) u
-                  GROUP BY orden_mantenimiento_id
-                ),
-                resolved_before_week AS (
-                  SELECT DISTINCT pi.orden_mantenimiento_id
-                  FROM programacion.programacion_item_v2 pi
-                  JOIN programacion.programacion_semanal_v2 ps ON ps.id=pi.programacion_id
-                  WHERE ps.especialidad=:specialty
-                    AND ps.estado='CERRADA'
-                    AND ps.semana_fin < :date_from
-                    AND ps.semana_fin >= date_trunc('month',CAST(:date_from AS date))::date
-                    AND (
-                      COALESCE(pi.finalizado,false)=true
-                      OR COALESCE(pi.anulado,false)=true
-                    )
-
-                  UNION
-
-                  SELECT DISTINCT COALESCE(snp.orden_mantenimiento_id,o.id)
-                  FROM programacion.seguimiento_no_programado_v2 snp
-                  JOIN programacion.programacion_semanal_v2 ps ON ps.id=snp.programacion_id
-                  LEFT JOIN programacion.orden_mantenimiento o
-                    ON snp.orden_mantenimiento_id IS NULL
-                   AND snp.numero_ot IS NOT NULL
-                   AND o.numero_ot IS NOT NULL
-                   AND upper(btrim(o.numero_ot))=upper(btrim(snp.numero_ot))
-                  WHERE ps.especialidad=:specialty
-                    AND ps.estado='CERRADA'
-                    AND ps.semana_fin < :date_from
-                    AND ps.semana_fin >= date_trunc('month',CAST(:date_from AS date))::date
-                    AND COALESCE(snp.orden_mantenimiento_id,o.id) IS NOT NULL
-                ),
-                moved_to_backlog_before_week AS (
-                  SELECT DISTINCT pi.orden_mantenimiento_id
-                  FROM programacion.programacion_item_v2 pi
-                  JOIN programacion.programacion_semanal_v2 ps ON ps.id=pi.programacion_id
-                  WHERE ps.especialidad=:specialty
-                    AND ps.estado='CERRADA'
-                    AND ps.semana_fin < :date_from
-                    AND ps.semana_fin >= date_trunc('month',CAST(:date_from AS date))::date
-                    AND COALESCE(pi.finalizado,false)=false
-                    AND COALESCE(pi.anulado,false)=false
-                )
-                SELECT
-                  o.id AS orden_mantenimiento_id,
-                  o.numero_ot,
-                  o.titulo,
-                  o.estado,
-                  o.especialidad,
-                  o.periodo,
-                  a.codigo AS activo_codigo,
-                  a.descripcion AS activo_descripcion,
-                  a.area_codigo,
-                  root.descripcion AS area_nombre,
-                  p.id AS plan_trabajo_id,
-                  p.plan_trabajo,
-                  p.descripcion_grupo,
-                  p.numero_personas_efectivo,
-                  p.tiempo_parada_efectivo_min,
-                  p.requiere_parada,
-                  COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min) AS tiempo_min,
-                  round(
-                    COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min)/60.0
-                    * p.numero_personas_efectivo,
-                    2
-                  ) AS hh,
-                  b.id AS backlog_id,
+        # Todos los cortes reconstruyen la misma base historica.
+        # Solo los cierres confirmados descuentan trabajo realizado/anulado;
+        # un seguimiento provisional nunca reduce semanas posteriores.
+        rows = [dict(r) for r in conn.execute(text("""
+            WITH month_pmp AS (
+              SELECT
+                o.id AS orden_mantenimiento_id,
+                true AS es_pmp_mes,
+                false AS es_backlog_inicial
+              FROM programacion.orden_mantenimiento o
+              JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
+              WHERE o.especialidad=:specialty
+                AND o.periodo=date_trunc('month',CAST(:date_from AS date))::date
+                AND NOT COALESCE(p.es_operacion,false)
+            ),
+            initial_backlog AS (
+              SELECT
+                o.id AS orden_mantenimiento_id,
+                false AS es_pmp_mes,
+                true AS es_backlog_inicial
+              FROM programacion.backlog_v2 b
+              JOIN programacion.orden_mantenimiento o ON o.id=b.orden_mantenimiento_id
+              JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
+              WHERE b.especialidad=:specialty
+                AND NOT COALESCE(p.es_operacion,false)
+                AND COALESCE(
+                  b.primera_semana_origen_inicio,
                   b.semana_origen_inicio,
-                  b.semana_origen_fin,
-                  b.movido_en,
-                  CASE WHEN current_item.id IS NOT NULL THEN true ELSE false END AS seleccionado,
-                  CASE
-                    WHEN current_item.id IS NOT NULL THEN COALESCE(current_item.origen_backlog,false)
-                    ELSE (
-                      bu.es_backlog_inicial
-                      OR moved.orden_mantenimiento_id IS NOT NULL
-                    )
-                  END AS es_backlog,
-                  CASE
-                    WHEN current_item.id IS NOT NULL THEN COALESCE(current_item.origen_backlog,false)
-                    ELSE (
-                      bu.es_backlog_inicial
-                      OR moved.orden_mantenimiento_id IS NOT NULL
-                    )
-                  END AS origen_backlog,
-                  CASE
-                    WHEN current_item.id IS NOT NULL THEN current_item.origen
-                    WHEN bu.es_backlog_inicial OR moved.orden_mantenimiento_id IS NOT NULL THEN 'BACKLOG'
-                    ELSE 'PMP_MES'
-                  END AS origen,
-                  current_item.estado_cierre,
-                  current_item.finalizado,
-                  current_item.verificado_en
-                FROM base_universe bu
-                JOIN programacion.orden_mantenimiento o ON o.id=bu.orden_mantenimiento_id
-                JOIN programacion.activo a ON a.id=o.activo_id
-                LEFT JOIN programacion.activo root ON root.codigo='BA-'||a.area_codigo
-                JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
-                LEFT JOIN programacion.backlog_v2 b
-                  ON b.orden_mantenimiento_id=o.id
-                 AND b.especialidad=:specialty
-                LEFT JOIN moved_to_backlog_before_week moved
-                  ON moved.orden_mantenimiento_id=o.id
-                LEFT JOIN programacion.programacion_item_v2 current_item
-                  ON current_item.orden_mantenimiento_id=o.id
-                 AND current_item.programacion_id=CAST(:programming_id AS bigint)
-                WHERE NOT EXISTS (
-                  SELECT 1
-                  FROM resolved_before_week r
-                  WHERE r.orden_mantenimiento_id=o.id
-                )
-                  AND (
-                    current_item.id IS NOT NULL
-                    OR (
-                      p.numero_personas_efectivo IS NOT NULL
-                      AND p.tiempo_parada_efectivo_min IS NOT NULL
-                      AND p.requiere_parada IS NOT NULL
-                      AND COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min) IS NOT NULL
-                    )
+                  o.periodo
+                ) < date_trunc('month',CAST(:date_from AS date))::date
+                AND (
+                  b.estado_seguimiento IN ('PENDIENTE_DISPONIBLE','PENDIENTE_PROGRAMADA')
+                  OR (
+                    b.estado_seguimiento='FINALIZADA'
+                    AND b.finalizado_en IS NOT NULL
+                    AND b.finalizado_en::date >= date_trunc('month',CAST(:date_from AS date))::date
                   )
-                ORDER BY a.area_codigo,o.numero_ot NULLS LAST,a.codigo,p.plan_trabajo
-            """), {
-                "date_from": date_from,
-                "specialty": specialty,
-                "programming_id": programming_id,
-            }).mappings()]
-        else:
-            rows = [dict(r) for r in conn.execute(text("""
-                        WITH candidate AS (
-                          SELECT DISTINCT ON (o.id)
-                            o.id AS orden_mantenimiento_id,o.numero_ot,o.titulo,o.estado,o.especialidad,o.periodo,
-                            a.codigo AS activo_codigo,a.descripcion AS activo_descripcion,a.area_codigo,root.descripcion AS area_nombre,
-                            p.id AS plan_trabajo_id,p.plan_trabajo,p.descripcion_grupo,p.numero_personas_efectivo,
-                            p.tiempo_parada_efectivo_min,p.requiere_parada,
-                            COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min) AS tiempo_min,
-                            round(COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min)/60.0*p.numero_personas_efectivo,2) AS hh,
-                            b.id AS backlog_id,b.semana_origen_inicio,b.semana_origen_fin,b.movido_en
-                          FROM programacion.orden_mantenimiento o
-                          JOIN programacion.activo a ON a.id=o.activo_id
-                          LEFT JOIN programacion.activo root ON root.codigo='BA-'||a.area_codigo
-                          JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
-                          LEFT JOIN programacion.backlog_v2 b ON b.orden_mantenimiento_id=o.id
-                            AND b.especialidad=:specialty AND b.estado_seguimiento='PENDIENTE_DISPONIBLE'
-                          LEFT JOIN programacion.programacion_item_v2 ci
-                            ON ci.orden_mantenimiento_id=o.id AND ci.programacion_id=CAST(:programming_id AS bigint)
-                          WHERE o.especialidad=:specialty
-                            AND NOT p.es_operacion
-                            AND (o.periodo=date_trunc('month',CAST(:date_from AS date))::date OR b.id IS NOT NULL OR ci.id IS NOT NULL)
-                            AND (upper(COALESCE(o.estado,'')) NOT LIKE 'FINALIZ%' OR ci.id IS NOT NULL)
-                            AND (
-                              ci.id IS NOT NULL
-                              OR NOT EXISTS (
-                                SELECT 1
-                                FROM programacion.seguimiento_no_programado_v2 snp
-                                WHERE snp.orden_mantenimiento_id=o.id
-                                   OR (
-                                     snp.numero_ot IS NOT NULL
-                                     AND o.numero_ot IS NOT NULL
-                                     AND upper(btrim(snp.numero_ot))=upper(btrim(o.numero_ot))
-                                   )
-                              )
-                            )
-                            AND (
-                              ci.id IS NOT NULL
-                              OR NOT EXISTS (
-                                SELECT 1
-                                FROM programacion.programacion_item_v2 prev_item
-                                JOIN programacion.programacion_semanal_v2 prev_program
-                                  ON prev_program.id=prev_item.programacion_id
-                                WHERE prev_item.orden_mantenimiento_id=o.id
-                                  AND prev_program.especialidad=:specialty
-                                  AND prev_program.estado='CERRADA'
-                                  AND prev_program.semana_fin<:date_from
-                                  AND COALESCE(prev_item.anulado,false)=true
-                              )
-                            )
-                            AND p.numero_personas_efectivo IS NOT NULL
-                            AND p.tiempo_parada_efectivo_min IS NOT NULL
-                            AND p.requiere_parada IS NOT NULL
-                            AND COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min) IS NOT NULL
-                          ORDER BY o.id,b.movido_en DESC NULLS LAST
-                        )
-                        SELECT c.*,
-                          CASE WHEN current_item.id IS NOT NULL THEN true ELSE false END AS seleccionado,
-                          CASE WHEN c.backlog_id IS NOT NULL AND current_item.id IS NULL THEN true ELSE false END AS es_backlog,
-                          CASE WHEN current_item.id IS NOT NULL THEN current_item.origen_backlog ELSE c.backlog_id IS NOT NULL END AS origen_backlog,
-                          CASE
-                            WHEN current_item.id IS NOT NULL THEN current_item.origen
-                            WHEN c.backlog_id IS NOT NULL THEN 'BACKLOG'
-                            ELSE 'PMP_MES'
-                          END AS origen,
-                          current_item.estado_cierre,current_item.finalizado,current_item.verificado_en
-                        FROM candidate c
-                        LEFT JOIN programacion.programacion_item_v2 current_item
-                          ON current_item.orden_mantenimiento_id=c.orden_mantenimiento_id
-                         AND current_item.programacion_id=CAST(:programming_id AS bigint)
-                        WHERE NOT EXISTS (
-                          SELECT 1
-                          FROM programacion.programacion_item_v2 other_item
-                          JOIN programacion.programacion_semanal_v2 other_program ON other_program.id=other_item.programacion_id
-                          WHERE other_item.orden_mantenimiento_id=c.orden_mantenimiento_id
-                            AND other_program.estado<>'CERRADA'
-                            AND other_program.semana_inicio<=:date_from
-                            AND (CAST(:programming_id AS bigint) IS NULL OR other_program.id<>CAST(:programming_id AS bigint))
-                        )
-                        ORDER BY c.area_codigo,c.numero_ot NULLS LAST,c.activo_codigo,c.plan_trabajo
-                    """), {"date_from": date_from, "specialty": specialty, "programming_id": programming_id}).mappings()]
-            
-            
+                  OR (
+                    b.estado_seguimiento='ANULADA'
+                    AND COALESCE(b.ultimo_cierre_en,b.actualizado_en)::date >= date_trunc('month',CAST(:date_from AS date))::date
+                  )
+                )
+            ),
+            base_universe AS (
+              SELECT
+                orden_mantenimiento_id,
+                bool_or(es_pmp_mes) AS es_pmp_mes,
+                bool_or(es_backlog_inicial) AS es_backlog_inicial
+              FROM (
+                SELECT * FROM month_pmp
+                UNION ALL
+                SELECT * FROM initial_backlog
+              ) u
+              GROUP BY orden_mantenimiento_id
+            ),
+            resolved_before_week AS (
+              SELECT DISTINCT pi.orden_mantenimiento_id
+              FROM programacion.programacion_item_v2 pi
+              JOIN programacion.programacion_semanal_v2 ps ON ps.id=pi.programacion_id
+              WHERE ps.especialidad=:specialty
+                AND ps.estado='CERRADA'
+                AND ps.semana_fin < :date_from
+                AND ps.semana_fin >= date_trunc('month',CAST(:date_from AS date))::date
+                AND (
+                  COALESCE(pi.finalizado,false)=true
+                  OR COALESCE(pi.anulado,false)=true
+                )
 
+              UNION
+
+              SELECT DISTINCT COALESCE(snp.orden_mantenimiento_id,o.id)
+              FROM programacion.seguimiento_no_programado_v2 snp
+              JOIN programacion.programacion_semanal_v2 ps ON ps.id=snp.programacion_id
+              LEFT JOIN programacion.orden_mantenimiento o
+                ON snp.orden_mantenimiento_id IS NULL
+               AND snp.numero_ot IS NOT NULL
+               AND o.numero_ot IS NOT NULL
+               AND upper(btrim(o.numero_ot))=upper(btrim(snp.numero_ot))
+              WHERE ps.especialidad=:specialty
+                AND ps.estado='CERRADA'
+                AND ps.semana_fin < :date_from
+                AND ps.semana_fin >= date_trunc('month',CAST(:date_from AS date))::date
+                AND COALESCE(snp.orden_mantenimiento_id,o.id) IS NOT NULL
+            ),
+            moved_to_backlog_before_week AS (
+              SELECT DISTINCT pi.orden_mantenimiento_id
+              FROM programacion.programacion_item_v2 pi
+              JOIN programacion.programacion_semanal_v2 ps ON ps.id=pi.programacion_id
+              WHERE ps.especialidad=:specialty
+                AND ps.estado='CERRADA'
+                AND ps.semana_fin < :date_from
+                AND ps.semana_fin >= date_trunc('month',CAST(:date_from AS date))::date
+                AND COALESCE(pi.finalizado,false)=false
+                AND COALESCE(pi.anulado,false)=false
+            )
+            SELECT
+              o.id AS orden_mantenimiento_id,
+              o.numero_ot,
+              o.titulo,
+              o.estado,
+              o.especialidad,
+              o.periodo,
+              a.codigo AS activo_codigo,
+              a.descripcion AS activo_descripcion,
+              a.area_codigo,
+              root.descripcion AS area_nombre,
+              p.id AS plan_trabajo_id,
+              p.plan_trabajo,
+              p.descripcion_grupo,
+              p.numero_personas_efectivo,
+              p.tiempo_parada_efectivo_min,
+              p.requiere_parada,
+              COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min) AS tiempo_min,
+              round(
+                COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min)/60.0
+                * p.numero_personas_efectivo,
+                2
+              ) AS hh,
+              b.id AS backlog_id,
+              b.semana_origen_inicio,
+              b.semana_origen_fin,
+              b.movido_en,
+              CASE WHEN current_item.id IS NOT NULL THEN true ELSE false END AS seleccionado,
+              CASE
+                WHEN current_item.id IS NOT NULL THEN COALESCE(current_item.origen_backlog,false)
+                ELSE (
+                  bu.es_backlog_inicial
+                  OR moved.orden_mantenimiento_id IS NOT NULL
+                )
+              END AS es_backlog,
+              CASE
+                WHEN current_item.id IS NOT NULL THEN COALESCE(current_item.origen_backlog,false)
+                ELSE (
+                  bu.es_backlog_inicial
+                  OR moved.orden_mantenimiento_id IS NOT NULL
+                )
+              END AS origen_backlog,
+              CASE
+                WHEN current_item.id IS NOT NULL THEN current_item.origen
+                WHEN bu.es_backlog_inicial OR moved.orden_mantenimiento_id IS NOT NULL THEN 'BACKLOG'
+                ELSE 'PMP_MES'
+              END AS origen,
+              current_item.estado_cierre,
+              current_item.finalizado,
+              current_item.verificado_en
+            FROM base_universe bu
+            JOIN programacion.orden_mantenimiento o ON o.id=bu.orden_mantenimiento_id
+            JOIN programacion.activo a ON a.id=o.activo_id
+            LEFT JOIN programacion.activo root ON root.codigo='BA-'||a.area_codigo
+            JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
+            LEFT JOIN programacion.backlog_v2 b
+              ON b.orden_mantenimiento_id=o.id
+             AND b.especialidad=:specialty
+            LEFT JOIN moved_to_backlog_before_week moved
+              ON moved.orden_mantenimiento_id=o.id
+            LEFT JOIN programacion.programacion_item_v2 current_item
+              ON current_item.orden_mantenimiento_id=o.id
+             AND current_item.programacion_id=CAST(:programming_id AS bigint)
+            WHERE NOT EXISTS (
+              SELECT 1
+              FROM resolved_before_week r
+              WHERE r.orden_mantenimiento_id=o.id
+            )
+              AND (
+                current_item.id IS NOT NULL
+                OR (
+                  p.numero_personas_efectivo IS NOT NULL
+                  AND p.tiempo_parada_efectivo_min IS NOT NULL
+                  AND p.requiere_parada IS NOT NULL
+                  AND COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min) IS NOT NULL
+                )
+              )
+            -- Proteger historico y reservas de semanas abiertas anteriores.
+            AND NOT EXISTS (
+              SELECT 1
+              FROM programacion.programacion_item_v2 other_item
+              JOIN programacion.programacion_semanal_v2 other_program
+                ON other_program.id=other_item.programacion_id
+              WHERE other_item.orden_mantenimiento_id=o.id
+                AND other_program.especialidad=:specialty
+                AND other_program.estado<>'CERRADA'
+                AND other_program.semana_inicio<=:date_from
+                AND (
+                  CAST(:programming_id AS bigint) IS NULL
+                  OR other_program.id<>CAST(:programming_id AS bigint)
+                )
+            )
+            ORDER BY a.area_codigo,o.numero_ot NULLS LAST,a.codigo,p.plan_trabajo
+        """), {
+            "date_from": date_from,
+            "specialty": specialty,
+            "programming_id": programming_id,
+        }).mappings()]
         selected_hh = round(sum(float(r["hh"] or 0) for r in rows if r["seleccionado"]), 2)
         monthly_demand = _monthly_demand(conn, date_from, specialty, programming_id)
 
