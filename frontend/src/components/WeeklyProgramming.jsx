@@ -152,18 +152,11 @@ export default function WeeklyProgramming({year,month,dashboard}){
   const technicianRemainingHH=number(monthlyBase.technician_remaining_preventive_hh)
   const weeklyProgressPct=target>0?Math.min(100,selectedHH/target*100):0
 
-  const groupedRows=useMemo(()=>{
-    const backlog=[]
-    const stopped=[]
-    const operating=[]
-    for(const row of allRows){
-      const isBacklog=row.origen==='BACKLOG'||row.origen_backlog===true||row.es_backlog===true
-      if(isBacklog)backlog.push(row)
-      else if(row.requiere_parada===true)stopped.push(row)
-      else operating.push(row)
-    }
-    return {operating,stopped,backlog}
-  },[allRows])
+  const groupedRows=useMemo(()=>({
+    operating:[...(data?.operating||[])],
+    stopped:[...(data?.stopped||[])],
+    backlog:[...(data?.backlog||[])]
+  }),[data])
   function updateFilters(kind,patch){setFilters(current=>updateGroupFilters(current,kind,patch))}
   function toggle(row){if(!editing)return;const id=Number(row.orden_mantenimiento_id);setError('');setMessage('');setSelected(current=>{const result=toggleWeeklySelection({selected:current,id,row,rowMap,target});if(result.error){setError(`No se puede seleccionar esta actividad: llegarías a ${fmt(result.nextHH,1)} H-H y la meta máxima es ${fmt(target,1)} H-H.`);return current}if(result.changed)setDirty(true);return result.selected})}
   async function save(){if(!selected.size){setError('Selecciona al menos una orden para guardar la semana.');return}try{setSaving(true);setError('');setMessage('');const result=await saveV2WeekProgramming({date_from:week.from,date_to:week.to,specialty,order_ids:[...selected]});setProgrammingId(result.programming_id);setDirty(false);await load();setMessage(`Programación guardada: ${fmt(result.hh_programmed,1)} H-H de ${fmt(result.hh_target,1)} H-H objetivo.${result.moved_to_backlog?` ${result.moved_to_backlog} OT movida(s) a BACKLOG.`:''}`)}catch(cause){setError(cause.message)}finally{setSaving(false)}}
