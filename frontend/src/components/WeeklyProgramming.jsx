@@ -19,12 +19,16 @@ function ActivityGroup({kind,rows,dashboard,editing,selected,filters,onFiltersCh
     stopped:{title:'Equipo detenido',description:'Actividades que requieren coordinación de parada.',tone:'stop'},
     backlog:{title:'Backlog',description:'Pendientes provenientes de programaciones anteriores.',tone:'backlog'}
   }[kind]
-  const visible=matchesFilters(rows,filters)
-  const selectedVisible=visible.filter(row=>selected.has(Number(row.orden_mantenimiento_id))).length
+  const availableRows=rows.filter(row=>!selected.has(Number(row.orden_mantenimiento_id)))
+  const visible=matchesFilters(availableRows,filters)
+  const visibleHH=visible.reduce((sum,row)=>sum+number(row.hh),0)
   return <section className={'v2-activity-section tf-program-table-section '+kind} aria-label={config.title}>
     <div className="tf-program-table-head">
       <div><h3>{config.title}</h3><p>{config.description}</p></div>
-      <Badge tone={config.tone}>{selectedVisible} seleccionadas · {visible.length} total</Badge>
+      <div className={'tf-table-mini-kpi '+config.tone}>
+        <span><b>{visible.length}</b> OT</span>
+        <span><b>{fmt(visibleHH,1)}</b> H-H</span>
+      </div>
     </div>
     <div className="tf-table-filterbar" aria-label={'Filtros de '+config.title}>
       <label><span>Área</span><select aria-label={'Área en '+config.title} value={filters.area} onChange={event=>onFiltersChange({area:event.target.value})}><option value="">Todas</option>{(dashboard?.areas||[]).map(area=><option key={area.codigo} value={area.codigo}>{area.codigo} · {area.nombre||area.codigo}</option>)}</select></label>
@@ -33,8 +37,7 @@ function ActivityGroup({kind,rows,dashboard,editing,selected,filters,onFiltersCh
     <div className="v2-table-wrap v2-program-table"><table><thead><tr>{kind==='backlog'&&<th>Origen</th>}<th>OT</th><th>Área</th><th>Equipo</th><th>Plan de trabajo</th><th>Personas</th><th>Tiempo</th><th>H-H</th><th>Acción</th></tr></thead><tbody>
       {visible.map(row=>{
         const id=Number(row.orden_mantenimiento_id)
-        const chosen=selected.has(id)
-        return <tr key={id} className={chosen?'v2-selected-row':''}>
+        return <tr key={id}>
           {kind==='backlog'&&<td><div className="v2-backlog-origin"><b>Backlog</b><small>{row.semana_origen_inicio||'Semana anterior'} {row.semana_origen_fin?'→ '+row.semana_origen_fin:''}</small></div></td>}
           <td><b>{row.numero_ot||'SIN ASIGNAR'}</b></td>
           <td><Badge>{row.area_codigo||'—'}</Badge><small>{row.area_nombre||''}</small></td>
@@ -44,8 +47,8 @@ function ActivityGroup({kind,rows,dashboard,editing,selected,filters,onFiltersCh
           <td>{fmt(row.tiempo_min,0)} min</td>
           <td><b>{fmt(row.hh,1)}</b></td>
           <td>{editing
-            ? <button type="button" className={chosen?'v2-unselect':'v2-select'} onClick={()=>onToggle(row)}>{chosen?'Quitar':'Agregar'}</button>
-            : <span className={chosen?'tf-programmed-tag':'tf-readonly-dash'}>{chosen?'Programada ✓':'—'}</span>}
+            ? <button type="button" className="v2-select" onClick={()=>onToggle(row)}>Agregar</button>
+            : <span className="tf-readonly-dash">—</span>}
           </td>
         </tr>
       })}
@@ -76,11 +79,12 @@ function SelectionSummary({rows,editing,onToggle,dashboard}){
         <h3>{editing?'Selección actual':'Programación actual de la semana'}</h3>
         <p>{editing?'Aquí ves únicamente las actividades que estás programando.':'Estas son las actividades guardadas para la semana.'}</p>
       </div>
-      <div className="v2-selected-totals">
-        <span><b>{rows.length}</b> actividades</span>
-        <span><b>{fmt(operatingHH,1)}</b> H-H operando</span>
-        <span><b>{fmt(stoppedHH,1)}</b> H-H detenido</span>
-        <span className="total"><b>{fmt(totalHH,1)}</b> H-H total</span>
+      <div className="tf-programmed-mini-wrap">
+        <div className="tf-table-mini-kpi programmed">
+          <span><b>{rows.length}</b> OT</span>
+          <span><b>{fmt(totalHH,1)}</b> H-H</span>
+        </div>
+        <small>{fmt(operatingHH,1)} H-H operando · {fmt(stoppedHH,1)} H-H detenido</small>
       </div>
     </div>
     <div className="tf-table-filterbar tf-selected-filterbar">
