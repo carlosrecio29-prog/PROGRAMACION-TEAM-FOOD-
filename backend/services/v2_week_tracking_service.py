@@ -184,6 +184,109 @@ def _reconcile_backlog_from_calendar(
     }
 
 
+def _record_monthly_finalized_from_calendar(
+    conn,
+    *,
+    programming: dict[str, Any],
+    calendar_rows: list[dict[str, Any]],
+    tracking_id: int,
+) -> dict[str, int]:
+    """Fase 2: registrar PMP/backlog finalizados, incluso si no estaban programados.
+
+    La detección se limita al mes del corte y a fechas <= cierre del corte.
+    Se conserva una sola fila por OT aunque aparezca en muchas cargas o semanas.
+    Registrar no cambia el cierre semanal ni el estado maestro.
+    """
+    specialty = _ot_key(programming.get("especialidad"))
+    month_start = programming["semana_inicio"].replace(day=1)
+    week_end = programming["semana_fin"]
+    programming_id = int(programming["id"])
+
+    eligible = [row for row in calendar_rows
+                if not is_operation_plan(str(row.get("plan") or ""))
+                and not is_operation_plan(str(row.get("plan") or "").lstrip(" -–—:._/|"))]
+    _, by_ot = _index_calendar(eligible)
+    if not by_ot:
+        return {"revisadas": 0, "finalizadas_mes": 0, "nuevas_mes": 0,
+                "no_programadas_mes": 0, "no_programadas_nuevas_mes": 0}
+
+    candidates = [dict(row) for row in conn.execute(text("""
+        SELECT o.id AS orden_mantenimiento_id,o.numero_ot,o.plan_clave_software,
+               a.codigo AS activo_codigo
+        FROM programacion.orden_mantenimiento o
+        JOIN programacion.activo a ON a.id=o.activo_id
+        JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
+        LEFT JOIN programacion.backlog_v2 b ON b.orden_mantenimiento_id=o.id
+          AND b.especialidad=:specialty
+        WHERE o.especialidad=:specialty
+          AND COALESCE(p.es_operacion,false)=false
+          AND o.numero_ot IS NOT NULL
+          AND upper(btrim(o.numero_ot))=ANY(CAST(:ots AS text[]))
+          AND (
+            o.periodo=:month_start
+            OR COALESCE(
+              b.primera_semana_origen_inicio,b.semana_origen_inicio,o.periodo
+            )<:month_start
+          )
+        ORDER BY o.id
+    """), {"specialty": specialty, "month_start": month_start,
+            "ots": list(by_ot)}).mappings()]
+
+    programmed_ids = {
+        int(value) for value in conn.execute(text("""
+            SELECT orden_mantenimiento_id
+            FROM programacion.programacion_item_v2 WHERE programacion_id=:id
+        """), {"id": programming_id}).scalars()
+    }
+    existing_ids = {
+        int(value) for value in conn.execute(text("""
+            SELECT orden_mantenimiento_id
+            FROM programacion.finalizaciones_detectadas_v2
+            WHERE especialidad=:specialty AND periodo=:month_start
+        """), {"specialty": specialty, "month_start": month_start}).scalars()
+    }
+
+    detected: dict[int, datetime] = {}
+    for item in candidates:
+        match, _ = _match_backlog_calendar_item(item, by_ot)
+        if not match or not _is_finalized(str(match.get("estado") or "")):
+            continue
+        finished_at = _finish_datetime(match.get("fecha_fin_orden"))
+        if not finished_at or not (month_start <= finished_at.date() <= week_end):
+            continue
+        order_id = int(item["orden_mantenimiento_id"])
+        detected[order_id] = finished_at
+
+    for order_id, finished_at in detected.items():
+        conn.execute(text("""
+            INSERT INTO programacion.finalizaciones_detectadas_v2(
+              orden_mantenimiento_id,periodo,especialidad,fecha_fin_orden,
+              programacion_origen_id,seguimiento_origen_id
+            ) VALUES(
+              :order_id,:month_start,:specialty,:finished_at,
+              :programming_id,:tracking_id
+            )
+            ON CONFLICT(orden_mantenimiento_id) DO UPDATE SET
+              fecha_fin_orden=COALESCE(
+                programacion.finalizaciones_detectadas_v2.fecha_fin_orden,
+                EXCLUDED.fecha_fin_orden
+              ),
+              ultima_deteccion_en=now()
+        """), {"order_id": order_id, "month_start": month_start,
+                "specialty": specialty, "finished_at": finished_at,
+                "programming_id": programming_id, "tracking_id": tracking_id})
+
+    newly_found = set(detected) - existing_ids
+    unplanned_found = set(detected) - programmed_ids
+    return {
+        "revisadas": len(candidates),
+        "finalizadas_mes": len(detected),
+        "nuevas_mes": len(newly_found),
+        "no_programadas_mes": len(unplanned_found),
+        "no_programadas_nuevas_mes": len(unplanned_found & newly_found),
+    }
+
+
 def _detect_unplanned_rows(
     conn,
     *,
@@ -593,6 +696,10 @@ def record_week_tracking(
     hh_pct = _pct(hh_finalized, hh_programmed)
     unplanned_detected = 0
     unplanned_new = 0
+    monthly_finalized = {
+        "revisadas": 0, "finalizadas_mes": 0, "nuevas_mes": 0,
+        "no_programadas_mes": 0, "no_programadas_nuevas_mes": 0,
+    }
     backlog_reconciliation = {
         "revisadas": 0,
         "encontradas": 0,
@@ -661,6 +768,15 @@ def record_week_tracking(
             specialty=str(preview["programming"].get("especialidad") or ""),
             calendar_rows=calendar_rows,
             recorded_by=recorded_by,
+        )
+
+        # Fase 1 (arriba): resultado de cada OT programada, histórico acumulativo.
+        # Fase 2: revisar el PMP/backlog del mes en TODA la Lista de Calendario.
+        monthly_finalized = _record_monthly_finalized_from_calendar(
+            conn,
+            programming=dict(preview["programming"]),
+            calendar_rows=calendar_rows,
+            tracking_id=int(tracking_id),
         )
 
         unplanned_rows = _detect_unplanned_rows(
@@ -745,6 +861,10 @@ def record_week_tracking(
         "avance_hh_pct": hh_pct,
         "no_programadas_detectadas": unplanned_detected,
         "no_programadas_nuevas": unplanned_new,
+        "pmp_backlog_finalizadas_detectadas_mes": monthly_finalized["finalizadas_mes"],
+        "pmp_backlog_finalizadas_nuevas_mes": monthly_finalized["nuevas_mes"],
+        "fuera_programacion_mes": monthly_finalized["no_programadas_mes"],
+        "fuera_programacion_nuevas_mes": monthly_finalized["no_programadas_nuevas_mes"],
         "backlog_revisadas": int(backlog_reconciliation["revisadas"]),
         "backlog_encontradas": int(backlog_reconciliation["encontradas"]),
         "backlog_finalizadas": int(backlog_reconciliation["finalizadas"]),
