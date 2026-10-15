@@ -44,53 +44,24 @@ def get_week_programming(*, date_from: date, date_to: date, specialty: str) -> d
               LEFT JOIN programacion.activo root ON root.codigo='BA-'||a.area_codigo
               JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
               LEFT JOIN programacion.backlog_v2 b ON b.orden_mantenimiento_id=o.id
-                AND b.especialidad=:specialty
-                AND COALESCE(b.primera_semana_origen_inicio,b.semana_origen_inicio,o.periodo)<:date_from
-                AND (b.finalizado_en IS NULL OR b.finalizado_en::date>=:date_from)
-                AND (
-                  b.estado_seguimiento<>'ANULADA'
-                  OR COALESCE(b.ultimo_cierre_en,b.actualizado_en)::date>=:date_from
-                )
+                AND b.especialidad=:specialty AND b.estado_seguimiento='PENDIENTE_DISPONIBLE'
               LEFT JOIN programacion.programacion_item_v2 ci
                 ON ci.orden_mantenimiento_id=o.id AND ci.programacion_id=CAST(:programming_id AS bigint)
               WHERE o.especialidad=:specialty
                 AND NOT p.es_operacion
                 AND (o.periodo=date_trunc('month',CAST(:date_from AS date))::date OR b.id IS NOT NULL OR ci.id IS NOT NULL)
-                AND (
-                  ci.id IS NOT NULL
-                  OR NOT EXISTS (
-                    SELECT 1
-                    FROM programacion.programacion_item_v2 prev_item
-                    JOIN programacion.programacion_semanal_v2 prev_program
-                      ON prev_program.id=prev_item.programacion_id
-                    WHERE prev_item.orden_mantenimiento_id=o.id
-                      AND prev_program.especialidad=:specialty
-                      AND prev_program.estado='CERRADA'
-                      AND prev_program.semana_fin<:date_from
-                      AND (
-                        COALESCE(prev_item.finalizado,false)
-                        OR COALESCE(prev_item.anulado,false)
-                      )
-                  )
-                )
+                AND (upper(COALESCE(o.estado,'')) NOT LIKE 'FINALIZ%' OR ci.id IS NOT NULL)
                 AND (
                   ci.id IS NOT NULL
                   OR NOT EXISTS (
                     SELECT 1
                     FROM programacion.seguimiento_no_programado_v2 snp
-                    JOIN programacion.programacion_semanal_v2 snp_program
-                      ON snp_program.id=snp.programacion_id
-                    WHERE snp_program.especialidad=:specialty
-                      AND snp_program.estado='CERRADA'
-                      AND snp_program.semana_fin<:date_from
-                      AND (
-                        snp.orden_mantenimiento_id=o.id
-                        OR (
-                          snp.numero_ot IS NOT NULL
-                          AND o.numero_ot IS NOT NULL
-                          AND upper(btrim(snp.numero_ot))=upper(btrim(o.numero_ot))
-                        )
-                      )
+                    WHERE snp.orden_mantenimiento_id=o.id
+                       OR (
+                         snp.numero_ot IS NOT NULL
+                         AND o.numero_ot IS NOT NULL
+                         AND upper(btrim(snp.numero_ot))=upper(btrim(o.numero_ot))
+                       )
                   )
                 )
                 AND p.numero_personas_efectivo IS NOT NULL
@@ -119,7 +90,6 @@ def get_week_programming(*, date_from: date, date_to: date, specialty: str) -> d
               JOIN programacion.programacion_semanal_v2 other_program ON other_program.id=other_item.programacion_id
               WHERE other_item.orden_mantenimiento_id=c.orden_mantenimiento_id
                 AND other_program.estado<>'CERRADA'
-                AND other_program.semana_inicio<=:date_from
                 AND (CAST(:programming_id AS bigint) IS NULL OR other_program.id<>CAST(:programming_id AS bigint))
             )
             ORDER BY c.area_codigo,c.numero_ot NULLS LAST,c.activo_codigo,c.plan_trabajo

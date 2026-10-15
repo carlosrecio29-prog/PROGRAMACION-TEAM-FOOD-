@@ -1,4 +1,4 @@
-import {useEffect,useMemo,useRef,useState} from 'react'
+import {useEffect,useMemo,useState} from 'react'
 import {monthWeeks,initialWeekIndex} from '../features/planning/monthWeeks.js'
 import {getV2WeekProgramming,saveV2WeekProgramming,downloadV2WeeklyReport} from '../api'
 import {emptyFilters,matchesFilters,updateGroupFilters} from '../features/planning/weeklyProgrammingFilters'
@@ -116,42 +116,9 @@ function SelectionSummary({rows,editing,onToggle,dashboard}){
 export default function WeeklyProgramming({year,month,dashboard}){
   const weeks=useMemo(()=>monthWeeks(year,month),[year,month])
   const [weekIndex,setWeekIndex]=useState(()=>initialWeekIndex(weeks));const [specialty,setSpecialty]=useState('MEC');const [data,setData]=useState(null);const [selected,setSelected]=useState(new Set());const [filters,setFilters]=useState(emptyFilters);const [loading,setLoading]=useState(false);const [saving,setSaving]=useState(false);const [error,setError]=useState('');const [message,setMessage]=useState('');const [dirty,setDirty]=useState(false);const [programmingId,setProgrammingId]=useState(null);const [editing,setEditing]=useState(true)
-  const loadSequence=useRef(0)
   const week=weeks[Math.min(weekIndex,weeks.length-1)]||weeks[0]
-  async function load(){
-    if(!week)return
-    const sequence=++loadSequence.current
-    const requestWeek={from:week.from,to:week.to}
-    const requestSpecialty=specialty
-    try{
-      setLoading(true)
-      setError('')
-      const result=await getV2WeekProgramming(requestWeek.from,requestWeek.to,requestSpecialty)
-      if(sequence!==loadSequence.current)return
-      setData(result)
-      setSelected(new Set((result.selected_ids||[]).map(Number)))
-      setProgrammingId(result.programming?.id||null)
-      setEditing(!result.programming)
-      setDirty(false)
-    }catch(cause){
-      if(sequence===loadSequence.current)setError(cause.message)
-    }finally{
-      if(sequence===loadSequence.current)setLoading(false)
-    }
-  }
-  useEffect(()=>{setWeekIndex(initialWeekIndex(weeks))},[month])
-  useEffect(()=>{
-    loadSequence.current+=1
-    setData(null)
-    setSelected(new Set())
-    setProgrammingId(null)
-    setFilters({
-      operating:{area:'',search:''},
-      stopped:{area:'',search:''},
-      backlog:{area:'',search:''}
-    })
-  },[week?.from,week?.to,specialty])
-  useEffect(()=>{load()},[week?.from,week?.to,specialty])
+  async function load(){if(!week)return;try{setLoading(true);setError('');const result=await getV2WeekProgramming(week.from,week.to,specialty);setData(result);setSelected(new Set((result.selected_ids||[]).map(Number)));setProgrammingId(result.programming?.id||null);setEditing(!result.programming);setDirty(false)}catch(cause){setError(cause.message)}finally{setLoading(false)}}
+  useEffect(()=>{setWeekIndex(initialWeekIndex(weeks))},[month]);useEffect(()=>{load()},[week?.from,week?.to,specialty])
   const allRows=useMemo(()=>[...(data?.operating||[]),...(data?.stopped||[]),...(data?.backlog||[])],[data])
   const rowMap=useMemo(()=>new Map(allRows.map(row=>[Number(row.orden_mantenimiento_id),row])),[allRows])
   const selectedRows=useMemo(()=>[...selected].map(id=>rowMap.get(Number(id))).filter(Boolean).sort((left,right)=>Number(left.requiere_parada)-Number(right.requiere_parada)||String(left.area_codigo||'').localeCompare(String(right.area_codigo||''))||String(left.numero_ot||'').localeCompare(String(right.numero_ot||''))),[selected,rowMap])
@@ -177,11 +144,18 @@ export default function WeeklyProgramming({year,month,dashboard}){
   const technicianRemainingHH=number(monthlyBase.technician_remaining_preventive_hh)
   const weeklyProgressPct=target>0?Math.min(100,selectedHH/target*100):0
 
-  const groupedRows=useMemo(()=>({
-    operating:[...(data?.operating||[])],
-    stopped:[...(data?.stopped||[])],
-    backlog:[...(data?.backlog||[])]
-  }),[data])
+  const groupedRows=useMemo(()=>{
+    const backlog=[]
+    const stopped=[]
+    const operating=[]
+    for(const row of allRows){
+      const isBacklog=row.origen==='BACKLOG'||row.origen_backlog===true||row.es_backlog===true
+      if(isBacklog)backlog.push(row)
+      else if(row.requiere_parada===true)stopped.push(row)
+      else operating.push(row)
+    }
+    return {operating,stopped,backlog}
+  },[allRows])
   function updateFilters(kind,patch){setFilters(current=>updateGroupFilters(current,kind,patch))}
   function toggle(row){if(!editing)return;const id=Number(row.orden_mantenimiento_id);setError('');setMessage('');setSelected(current=>{const result=toggleWeeklySelection({selected:current,id,row,rowMap,target});if(result.error){setError(`No se puede seleccionar esta actividad: llegarías a ${fmt(result.nextHH,1)} H-H y la meta máxima es ${fmt(target,1)} H-H.`);return current}if(result.changed)setDirty(true);return result.selected})}
   async function save(){if(!selected.size){setError('Selecciona al menos una orden para guardar la semana.');return}try{setSaving(true);setError('');setMessage('');const result=await saveV2WeekProgramming({date_from:week.from,date_to:week.to,specialty,order_ids:[...selected]});setProgrammingId(result.programming_id);setDirty(false);await load();setMessage(`Programación guardada: ${fmt(result.hh_programmed,1)} H-H de ${fmt(result.hh_target,1)} H-H objetivo.${result.moved_to_backlog?` ${result.moved_to_backlog} OT movida(s) a BACKLOG.`:''}`)}catch(cause){setError(cause.message)}finally{setSaving(false)}}
@@ -313,7 +287,7 @@ export default function WeeklyProgramming({year,month,dashboard}){
       </div>
     </section>}
 
-    <SelectionSummary key={week.from+'-'+specialty} rows={selectedRows} editing={editing} onToggle={toggle} dashboard={dashboard}/>
+    <SelectionSummary rows={selectedRows} editing={editing} onToggle={toggle} dashboard={dashboard}/>
 
     {(editing||!programmingId)&&<section className="tf-save-strip">
       <div><b>{selected.size} actividades · {fmt(selectedHH,1)} H-H</b><span>{dirty?'Cambios sin guardar':'Selección actual'}</span></div>

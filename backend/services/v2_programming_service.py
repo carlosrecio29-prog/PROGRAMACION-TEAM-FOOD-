@@ -545,19 +545,6 @@ def get_week_programming(*,date_from:date,date_to:date,specialty:str)->dict[str,
               LEFT JOIN programacion.backlog_v2 b
                 ON b.orden_mantenimiento_id=o.id
                AND b.especialidad=:specialty
-               AND COALESCE(
-                 b.primera_semana_origen_inicio,
-                 b.semana_origen_inicio,
-                 o.periodo
-               ) < :date_from
-               AND (
-                 b.finalizado_en IS NULL
-                 OR b.finalizado_en::date >= :date_from
-               )
-               AND (
-                 b.estado_seguimiento<>'ANULADA'
-                 OR COALESCE(b.ultimo_cierre_en,b.actualizado_en)::date >= :date_from
-               )
               LEFT JOIN programacion.programacion_item_v2 ci
                 ON ci.orden_mantenimiento_id=o.id
                AND ci.programacion_id=CAST(:programming_id AS bigint)
@@ -567,31 +554,11 @@ def get_week_programming(*,date_from:date,date_to:date,specialty:str)->dict[str,
                   OR b.id IS NOT NULL
                   OR ci.id IS NOT NULL
                 )
-                AND (
-                  ci.id IS NOT NULL
-                  OR upper(COALESCE(o.estado,'')) NOT IN ('FINALIZADO','ANULADA')
-                )
+                AND upper(COALESCE(o.estado,''))<>'FINALIZADO'
                 AND p.numero_personas_efectivo IS NOT NULL
                 AND p.tiempo_parada_efectivo_min IS NOT NULL
                 AND p.requiere_parada IS NOT NULL
                 AND COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min) IS NOT NULL
-                AND (
-                  ci.id IS NOT NULL
-                  OR NOT EXISTS (
-                    SELECT 1
-                    FROM programacion.programacion_item_v2 prev_item
-                    JOIN programacion.programacion_semanal_v2 prev_program
-                      ON prev_program.id=prev_item.programacion_id
-                    WHERE prev_item.orden_mantenimiento_id=o.id
-                      AND prev_program.especialidad=:specialty
-                      AND prev_program.estado='CERRADA'
-                      AND prev_program.semana_fin < :date_from
-                      AND (
-                        COALESCE(prev_item.finalizado,false)
-                        OR COALESCE(prev_item.anulado,false)
-                      )
-                  )
-                )
               ORDER BY o.id,b.movido_en DESC NULLS LAST
             )
             SELECT
@@ -608,8 +575,6 @@ def get_week_programming(*,date_from:date,date_to:date,specialty:str)->dict[str,
               JOIN programacion.programacion_semanal_v2 other_program ON other_program.id=other_item.programacion_id
               WHERE other_item.orden_mantenimiento_id=c.orden_mantenimiento_id
                 AND (CAST(:programming_id AS bigint) IS NULL OR other_program.id<>CAST(:programming_id AS bigint))
-                AND other_program.estado<>'CERRADA'
-                AND other_program.semana_inicio<=:date_from
             )
             ORDER BY c.area_codigo,c.numero_ot NULLS LAST,c.activo_codigo,c.plan_trabajo
         """),{"date_from":date_from,"specialty":specialty,"programming_id":programming_id}).mappings()]
