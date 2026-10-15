@@ -29,6 +29,8 @@ WHITE = (1, 1, 1)
 INK = (.160, .231, .329)
 NAMES = {"MEC": "MECÁNICA", "ELE": "ELÉCTRICA",
          "MET": "METROLOGÍA", "SER": "SERVICIOS"}
+SPECIALTY_FILENAMES = {"MEC": "mecanica", "ELE": "electrica",
+                       "MET": "metrologia", "SER": "servicios"}
 MONTHS = ("","ENERO","FEBRERO","MARZO","ABRIL","MAYO","JUNIO",
           "JULIO","AGOSTO","SEPTIEMBRE","OCTUBRE","NOVIEMBRE","DICIEMBRE")
 
@@ -512,14 +514,18 @@ def render_progress_fallback(data: dict[str,Any],year:int,month:int,
         summary={**summary,"hh_programmed":weekly_totals["hh_programmed"],
                  "hh_finalized":weekly_totals["hh_finalized"],
                  "hh_annulled":weekly_totals.get("hh_annulled",0)}
+    specialty_code = str(weeks[0]["especialidad"]).upper() if not monthly else None
+    specialty_name = NAMES.get(specialty_code, specialty_code) if not monthly else None
     name=("INFORME GENERAL DE CIERRE MENSUAL" if monthly
-          else "INFORME DE CIERRE SEMANAL")
+          else f"INFORME DE CIERRE SEMANAL - {specialty_name}")
     subtitle=(f"{MONTHS[month]} {year}  |  PLANTA BARRANQUILLA" if monthly else
               f"{weeks[0]['week_from']} AL {weeks[0]['week_to']}  |  "
-              f"{NAMES.get(weeks[0]['especialidad'], weeks[0]['especialidad'])}")
+              f"ESPECIALIDAD: {specialty_name}")
     pdf=_PDF(name,subtitle,("MENSUAL" if monthly else "SEMANAL"))
     pdf.text(31,502,"REPORTE DE MANTENIMIENTO / C.E.K",8,GRAY,True)
     pdf.y=476
+    if not monthly:
+        pdf.badge(f"ESPECIALIDAD: {specialty_name}",MINT,GREEN)
     anticipated=any(w["estado"]=="CERRADA" and w["semana_fin"]>date.today()
                     for w in weeks)
     if anticipated:pdf.badge("CIERRE ANTICIPADO / PRUEBA",CREAM,AMBER)
@@ -571,7 +577,15 @@ def render_progress_fallback(data: dict[str,Any],year:int,month:int,
                   [129,129,129,129,131,132])
         _detail_table(pdf,detail_rows or [],monthly=False)
         _unplanned_execution_table(pdf,unplanned_rows or [])
-    kind="mensual" if monthly else "semanal"
-    filename=(f"informe_{kind}_mtto_{year}_{month:02d}"
-              +(f"_{programming_id}" if programming_id is not None else "")+".pdf")
+    if monthly:
+        filename=f"informe_mensual_mtto_{year}_{month:02d}.pdf"
+    else:
+        specialty_filename=SPECIALTY_FILENAMES.get(
+            specialty_code, specialty_code.lower()
+        )
+        filename=(
+            f"informe_cierre_semanal_{specialty_filename}_"
+            f"{weeks[0]['week_from']}_al_{weeks[0]['week_to']}_"
+            f"{programming_id}.pdf"
+        )
     return pdf.finish(),filename
