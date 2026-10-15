@@ -219,16 +219,6 @@ export default function WeeklyProgramming({year,month,dashboard}){
     {kind:'stopped',rows:groupedRows.stopped},
     {kind:'backlog',rows:groupedRows.backlog}
   ]
-  const coverageText=monthly.demandBeforeWeekHH<=.01
-    ? 'PMP mensual cubierto'
-    : target>=monthly.demandBeforeWeekHH-.01
-      ? 'La capacidad de esta semana puede cubrir todo el PMP pendiente'
-      : 'Cobertura posible esta semana: '+fmt(monthly.coveragePossible,1)+'% de las H-H PMP pendientes'
-
-  const currentWeekName=week
-    ? (week.transition?'Transición':'Semana '+week.weekNumber)
-    : 'semana'
-
   const capacityChange=useMemo(()=>{
     const programming=data?.programming
     const previous=Number(programming?.hh_objetivo_anterior)
@@ -276,21 +266,6 @@ export default function WeeklyProgramming({year,month,dashboard}){
         {programmingId&&<button type="button" disabled={dirty} onClick={()=>report('pdf')}>PDF</button>}
       </div>
     </section>
-
-    <section className="tf-key-kpis">
-      <article><span>PMP del mes + Backlog</span><b>{monthly.pmpPlusBacklogCount}</b><small>{monthly.pmpCount} PMP + {monthly.backlogCount} Backlog</small></article>
-      <article><span>H-H PMP + Backlog</span><b>{fmt(monthly.pmpPlusBacklogHH,1)}</b><small>{fmt(monthly.pmpHH,1)} H-H PMP + {fmt(monthly.backlogHH,1)} H-H Backlog</small></article>
-      <article className="pending"><span>H-H pendientes mes</span><b>{fmt(monthly.pendingHH,1)}</b><small>{monthly.pendingCount} PMP pendientes</small></article>
-      <article className="workload"><span>Carga al iniciar {currentWeekName}</span><b>{fmt(monthly.startPendingHH,1)}</b><small>{monthly.startPendingCount} OT únicas · {fmt(monthly.startPmpPendingHH,1)} H-H PMP pend. + {fmt(monthly.backlogHH,1)} H-H Backlog{monthly.overlapHH>.01?` · ${fmt(monthly.overlapHH,1)} H-H coinciden y no se duplican`:``}</small></article>
-      <article className="target"><span>Meta preventiva semana</span><b>{fmt(target,1)}</b><small>capacidad máxima</small></article>
-      <article className="selected"><span>H-H seleccionadas</span><b>{fmt(selectedHH,1)}</b><small>{selected.size} actividades</small></article>
-      <article className={remaining<=.01?'complete':'remaining'}><span>Disponible semana</span><b>{fmt(remaining,1)}</b><small>H-H por programar</small></article>
-    </section>
-
-    <div className={'tf-coverage-note '+(target>=monthly.demandBeforeWeekHH-.01?'enough':'partial')}>
-      <span>{coverageText}</span>
-      {monthly.missingHH>0&&<small>{monthly.missingHH} PMP sin H-H calculables</small>}
-    </div>
 
     {capacityChange&&<section className={'tf-capacity-change '+capacityChange.tone}>
       <div className="tf-capacity-change-copy">
