@@ -104,6 +104,7 @@ def get_week_programming(*, date_from: date, date_to: date, specialty: str) -> d
               JOIN programacion.programacion_semanal_v2 other_program ON other_program.id=other_item.programacion_id
               WHERE other_item.orden_mantenimiento_id=c.orden_mantenimiento_id
                 AND other_program.estado<>'CERRADA'
+                AND other_program.semana_inicio<=:date_from
                 AND (CAST(:programming_id AS bigint) IS NULL OR other_program.id<>CAST(:programming_id AS bigint))
             )
             ORDER BY c.area_codigo,c.numero_ot NULLS LAST,c.activo_codigo,c.plan_trabajo
