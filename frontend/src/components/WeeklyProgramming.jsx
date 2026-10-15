@@ -134,11 +134,19 @@ export default function WeeklyProgramming({year,month,dashboard}){
   const isFirstWeek=week?.weekNumber===1
   const remainingMissingHH=number(isFirstWeek?monthlyBase.workload_base_missing_hh:monthlyBase.remaining_for_week_missing_hh)
   const closedWeek=data?.programming?.estado==='CERRADA'
-  // En una semana cerrada, las OT guardadas solo se muestran en Programadas.
-  // La consulta historica conserva el universo base, sin duplicar OT en las otras tablas.
-  const listedRows=useMemo(()=>closedWeek
-    ? allRows.filter(row=>!selected.has(Number(row.orden_mantenimiento_id)))
-    : allRows,[allRows,selected,closedWeek])
+  // El seguimiento puede detectar OT finalizadas fuera del programa antes
+  // del cierre. No volver a ofrecerlas para programar, pero tampoco restarlas
+  // del balance oficial de PMP hasta que ese cierre sea confirmado.
+  const executedPendingClose=useMemo(()=>allRows.filter(row=>
+    row.ejecutada_pendiente_cierre===true
+    && !selected.has(Number(row.orden_mantenimiento_id))
+  ),[allRows,selected])
+  // En semanas cerradas las programadas se muestran solo en Programadas;
+  // las detectadas como ejecutadas se identifican en el aviso de seguimiento.
+  const listedRows=useMemo(()=>allRows.filter(row=>
+    (!closedWeek||!selected.has(Number(row.orden_mantenimiento_id)))
+    && row.ejecutada_pendiente_cierre!==true
+  ),[allRows,selected,closedWeek])
   // El indicador muestra la carga al COMIENZO del corte: nunca resta
   // las OT seleccionadas en la misma semana antes de su cierre.
   const availableWorkMetrics=useMemo(()=>allRows.reduce((totals,row)=>{
@@ -303,6 +311,14 @@ export default function WeeklyProgramming({year,month,dashboard}){
           {' '}{fmt(reconciliation.finalized_unplanned_count,0)} del PMP/backlog descontadas del saldo y {fmt(reconciliation.external_executed_count,0)} emergentes ajenas a la base inicial contabilizadas solo como ejecución adicional.
         </div>}
       </section>}
+
+      {executedPendingClose.length>0&&<div className="tf-program-executed-warning" role="status">
+        <strong>{executedPendingClose.length} OT detectadas como finalizadas fuera de programación, pendientes de cierre.</strong>
+        <span>Se apartan de Equipo operando, Equipo detenido y Backlog para evitar programarlas otra vez.
+        El saldo de OT al inicio de la semana todavía las incluye hasta confirmar el cierre correspondiente.</span>
+        <small>{executedPendingClose.slice(0,8).map(row=>row.numero_ot||'SIN ASIGNAR').join(' · ')}
+          {executedPendingClose.length>8?` · +${executedPendingClose.length-8} más`:''}</small>
+      </div>}
 
       {remainingMissingHH>0&&(
         <div className="tf-program-data-warning">{remainingMissingHH} actividad(es) sin H-H calculables: {isFirstWeek
