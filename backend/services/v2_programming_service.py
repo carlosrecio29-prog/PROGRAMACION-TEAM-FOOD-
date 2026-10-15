@@ -249,6 +249,7 @@ def _monthly_demand(conn, month_date: date, specialty: str, exclude_programming_
         WITH month_pmp AS (
           SELECT
             o.id AS orden_mantenimiento_id,
+            o.numero_ot,
             CASE
               WHEN p.numero_personas_efectivo IS NOT NULL
                AND COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min) IS NOT NULL
@@ -259,7 +260,8 @@ def _monthly_demand(conn, month_date: date, specialty: str, exclude_programming_
               )
               ELSE NULL
             END AS hh,
-            'PMP_MES'::text AS origen
+            true AS es_pmp_mes,
+            false AS es_backlog_inicial
           FROM programacion.orden_mantenimiento o
           JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
           WHERE o.especialidad=:specialty
@@ -269,6 +271,7 @@ def _monthly_demand(conn, month_date: date, specialty: str, exclude_programming_
         initial_backlog AS (
           SELECT
             o.id AS orden_mantenimiento_id,
+            o.numero_ot,
             CASE
               WHEN p.numero_personas_efectivo IS NOT NULL
                AND COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min) IS NOT NULL
@@ -279,7 +282,8 @@ def _monthly_demand(conn, month_date: date, specialty: str, exclude_programming_
               )
               ELSE NULL
             END AS hh,
-            'BACKLOG'::text AS origen
+            false AS es_pmp_mes,
+            true AS es_backlog_inicial
           FROM programacion.backlog_v2 b
           JOIN programacion.orden_mantenimiento o ON o.id=b.orden_mantenimiento_id
           JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
@@ -306,9 +310,10 @@ def _monthly_demand(conn, month_date: date, specialty: str, exclude_programming_
         base_universe AS (
           SELECT
             orden_mantenimiento_id,
+            max(numero_ot) AS numero_ot,
             max(hh) AS hh,
-            bool_or(origen='PMP_MES') AS es_pmp_mes,
-            bool_or(origen='BACKLOG') AS es_backlog
+            bool_or(es_pmp_mes) AS es_pmp_mes,
+            bool_or(es_backlog_inicial) AS es_backlog_inicial
           FROM (
             SELECT * FROM month_pmp
             UNION ALL
@@ -328,68 +333,67 @@ def _monthly_demand(conn, month_date: date, specialty: str, exclude_programming_
               COALESCE(pi.finalizado,false)=true
               OR COALESCE(pi.anulado,false)=true
             )
+
+          UNION
+
+          SELECT DISTINCT COALESCE(snp.orden_mantenimiento_id,o.id)
+          FROM programacion.seguimiento_no_programado_v2 snp
+          JOIN programacion.programacion_semanal_v2 ps ON ps.id=snp.programacion_id
+          LEFT JOIN programacion.orden_mantenimiento o
+            ON snp.orden_mantenimiento_id IS NULL
+           AND snp.numero_ot IS NOT NULL
+           AND o.numero_ot IS NOT NULL
+           AND upper(btrim(o.numero_ot))=upper(btrim(snp.numero_ot))
+          WHERE ps.especialidad=:specialty
+            AND ps.semana_fin < :week_start
+            AND ps.semana_fin >= :period
+            AND COALESCE(snp.orden_mantenimiento_id,o.id) IS NOT NULL
+        ),
+        moved_to_backlog_before_week AS (
+          SELECT DISTINCT pi.orden_mantenimiento_id
+          FROM programacion.programacion_item_v2 pi
+          JOIN programacion.programacion_semanal_v2 ps ON ps.id=pi.programacion_id
+          WHERE ps.especialidad=:specialty
+            AND ps.estado='CERRADA'
+            AND ps.semana_fin < :week_start
+            AND ps.semana_fin >= :period
+            AND COALESCE(pi.finalizado,false)=false
+            AND COALESCE(pi.anulado,false)=false
+        ),
+        pending_classified AS (
+          SELECT
+            bu.*,
+            (
+              bu.es_backlog_inicial
+              OR EXISTS (
+                SELECT 1
+                FROM moved_to_backlog_before_week mb
+                WHERE mb.orden_mantenimiento_id=bu.orden_mantenimiento_id
+              )
+            ) AS es_backlog_semana
+          FROM base_universe bu
+          WHERE NOT EXISTS (
+            SELECT 1
+            FROM resolved_before_week r
+            WHERE r.orden_mantenimiento_id=bu.orden_mantenimiento_id
+          )
         )
         SELECT
-          count(*)::int AS base_total_count,
-          round(COALESCE(sum(bu.hh),0),2) AS base_total_hh,
-          count(*) FILTER (WHERE bu.hh IS NULL)::int AS base_missing_hh,
-          count(*) FILTER (WHERE bu.es_pmp_mes)::int AS pmp_month_count,
-          round(COALESCE(sum(bu.hh) FILTER (WHERE bu.es_pmp_mes),0),2) AS pmp_month_hh,
-          count(*) FILTER (WHERE bu.es_backlog AND NOT bu.es_pmp_mes)::int AS initial_backlog_count,
-          round(COALESCE(sum(bu.hh) FILTER (WHERE bu.es_backlog AND NOT bu.es_pmp_mes),0),2) AS initial_backlog_hh,
-          count(*) FILTER (
-            WHERE NOT EXISTS (
-              SELECT 1
-              FROM resolved_before_week r
-              WHERE r.orden_mantenimiento_id=bu.orden_mantenimiento_id
-            )
-          )::int AS remaining_count,
-          round(COALESCE(sum(bu.hh) FILTER (
-            WHERE NOT EXISTS (
-              SELECT 1
-              FROM resolved_before_week r
-              WHERE r.orden_mantenimiento_id=bu.orden_mantenimiento_id
-            )
-          ),0),2) AS remaining_hh,
-          count(*) FILTER (
-            WHERE bu.hh IS NULL
-              AND NOT EXISTS (
-                SELECT 1
-                FROM resolved_before_week r
-                WHERE r.orden_mantenimiento_id=bu.orden_mantenimiento_id
-              )
-          )::int AS remaining_missing_hh,
-          count(*) FILTER (
-            WHERE bu.es_pmp_mes
-              AND NOT EXISTS (
-                SELECT 1 FROM resolved_before_week r
-                WHERE r.orden_mantenimiento_id=bu.orden_mantenimiento_id
-              )
-          )::int AS remaining_pmp_count,
-          round(COALESCE(sum(bu.hh) FILTER (
-            WHERE bu.es_pmp_mes
-              AND NOT EXISTS (
-                SELECT 1 FROM resolved_before_week r
-                WHERE r.orden_mantenimiento_id=bu.orden_mantenimiento_id
-              )
-          ),0),2) AS remaining_pmp_hh,
-          count(*) FILTER (
-            WHERE bu.es_backlog
-              AND NOT bu.es_pmp_mes
-              AND NOT EXISTS (
-                SELECT 1 FROM resolved_before_week r
-                WHERE r.orden_mantenimiento_id=bu.orden_mantenimiento_id
-              )
-          )::int AS remaining_backlog_count,
-          round(COALESCE(sum(bu.hh) FILTER (
-            WHERE bu.es_backlog
-              AND NOT bu.es_pmp_mes
-              AND NOT EXISTS (
-                SELECT 1 FROM resolved_before_week r
-                WHERE r.orden_mantenimiento_id=bu.orden_mantenimiento_id
-              )
-          ),0),2) AS remaining_backlog_hh
-        FROM base_universe bu
+          (SELECT count(*) FROM base_universe)::int AS base_total_count,
+          round(COALESCE((SELECT sum(hh) FROM base_universe),0),2) AS base_total_hh,
+          (SELECT count(*) FROM base_universe WHERE hh IS NULL)::int AS base_missing_hh,
+          (SELECT count(*) FROM base_universe WHERE es_pmp_mes)::int AS pmp_month_count,
+          round(COALESCE((SELECT sum(hh) FROM base_universe WHERE es_pmp_mes),0),2) AS pmp_month_hh,
+          (SELECT count(*) FROM base_universe WHERE es_backlog_inicial AND NOT es_pmp_mes)::int AS initial_backlog_count,
+          round(COALESCE((SELECT sum(hh) FROM base_universe WHERE es_backlog_inicial AND NOT es_pmp_mes),0),2) AS initial_backlog_hh,
+          count(*)::int AS remaining_count,
+          round(COALESCE(sum(hh),0),2) AS remaining_hh,
+          count(*) FILTER (WHERE hh IS NULL)::int AS remaining_missing_hh,
+          count(*) FILTER (WHERE es_pmp_mes AND NOT es_backlog_semana)::int AS remaining_pmp_count,
+          round(COALESCE(sum(hh) FILTER (WHERE es_pmp_mes AND NOT es_backlog_semana),0),2) AS remaining_pmp_hh,
+          count(*) FILTER (WHERE es_backlog_semana)::int AS remaining_backlog_count,
+          round(COALESCE(sum(hh) FILTER (WHERE es_backlog_semana),0),2) AS remaining_backlog_hh
+        FROM pending_classified
     """), {
         "period": period,
         "specialty": specialty,

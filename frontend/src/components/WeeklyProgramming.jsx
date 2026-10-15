@@ -230,7 +230,7 @@ export default function WeeklyProgramming({year,month,dashboard}){
             <div>
               <b>{fmt(remainingWorkHH,1)}</b>
               <span>H-H pendientes</span>
-              <small className="tf-program-hh-breakdown">PMP del mes: {fmt(remainingPmpHH,1)} H-H · Backlog: {fmt(remainingBacklogHH,1)} H-H</small>
+              <small className="tf-program-hh-breakdown">PMP pendientes: {fmt(remainingPmpHH,1)} H-H · Backlog pendiente: {fmt(remainingBacklogHH,1)} H-H</small>
             </div>
           </div>
         </article>
