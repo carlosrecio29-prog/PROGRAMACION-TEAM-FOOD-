@@ -80,6 +80,12 @@ def test_pdf_monthly_and_weekly_are_real_pdf_bytes(monkeypatch):
     assert weekly.startswith(b"%PDF-")
     assert len(weekly) > 1000
     assert "42.pdf" in weekly_name
+    assert "electrica" in weekly_name
+    assert "2026-09-10_al_2026-09-16" in weekly_name
+    # El encabezado y el distintivo indican explícitamente la especialidad,
+    # no solo el pie de página.
+    assert b"INFORME DE CIERRE SEMANAL - EL" in weekly
+    assert b"ESPECIALIDAD: EL" in weekly
 
 
 def test_pdf_unknown_week_rejected(monkeypatch):
