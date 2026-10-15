@@ -224,9 +224,12 @@ def _record_monthly_finalized_from_calendar(
           AND upper(btrim(o.numero_ot))=ANY(CAST(:ots AS text[]))
           AND (
             o.periodo=:month_start
-            OR COALESCE(
-              b.primera_semana_origen_inicio,b.semana_origen_inicio,o.periodo
-            )<:month_start
+            OR (
+              b.id IS NOT NULL
+              AND COALESCE(
+                b.primera_semana_origen_inicio,b.semana_origen_inicio,o.periodo
+              )<:month_start
+            )
           )
         ORDER BY o.id
     """), {"specialty": specialty, "month_start": month_start,
