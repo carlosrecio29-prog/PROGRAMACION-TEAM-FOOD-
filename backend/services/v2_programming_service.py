@@ -345,6 +345,7 @@ def _monthly_demand(conn, month_date: date, specialty: str, exclude_programming_
            AND o.numero_ot IS NOT NULL
            AND upper(btrim(o.numero_ot))=upper(btrim(snp.numero_ot))
           WHERE ps.especialidad=:specialty
+            AND ps.estado='CERRADA'
             AND ps.semana_fin < :week_start
             AND ps.semana_fin >= :period
             AND COALESCE(snp.orden_mantenimiento_id,o.id) IS NOT NULL
