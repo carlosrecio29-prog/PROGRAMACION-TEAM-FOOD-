@@ -13,7 +13,7 @@ function number(value,fallback=0){const parsed=Number(value);return Number.isFin
 function fmt(value,decimals=1){return number(value).toLocaleString('es-CO',{minimumFractionDigits:decimals,maximumFractionDigits:decimals})}
 function round2(value){return Math.round((number(value)+Number.EPSILON)*100)/100}
 
-function ActivityGroup({kind,rows,dashboard,editing,selected,filters,onFiltersChange,onToggle}){
+function ActivityGroup({kind,rows,dashboard,editing,selected,closedWeek,filters,onFiltersChange,onToggle}){
   const config={
     operating:{title:'Equipo operando',description:'Actividades que no requieren detener el equipo.',tone:'ok'},
     stopped:{title:'Equipo detenido',description:'Actividades que requieren coordinación de parada.',tone:'stop'},
@@ -24,7 +24,7 @@ function ActivityGroup({kind,rows,dashboard,editing,selected,filters,onFiltersCh
   return <section className={'v2-activity-section tf-program-table-section '+kind} aria-label={config.title}>
     <div className="tf-program-table-head">
       <div><h3>{config.title}</h3><p>{config.description}</p></div>
-      <Badge tone={config.tone}>{selectedVisible} seleccionadas · {visible.length} total</Badge>
+      <Badge tone={config.tone}>{closedWeek?`${visible.length} no programadas`:`${selectedVisible} seleccionadas · ${visible.length} total`}</Badge>
     </div>
     <div className="tf-table-filterbar" aria-label={'Filtros de '+config.title}>
       <label><span>Área</span><select aria-label={'Área en '+config.title} value={filters.area} onChange={event=>onFiltersChange({area:event.target.value})}><option value="">Todas</option>{(dashboard?.areas||[]).map(area=><option key={area.codigo} value={area.codigo}>{area.codigo} · {area.nombre||area.codigo}</option>)}</select></label>
@@ -132,7 +132,13 @@ export default function WeeklyProgramming({year,month,dashboard}){
   const workloadBaseCount=number(monthlyBase.workload_base_count,monthPmpCount+initialBacklogCount)
   const workloadBaseHH=number(monthlyBase.workload_base_hh,monthPmpHH+initialBacklogHH)
   const remainingMissingHH=number(monthlyBase.remaining_for_week_missing_hh)
-  const availableWorkMetrics=useMemo(()=>allRows.reduce((totals,row)=>{
+  const closedWeek=data?.programming?.estado==='CERRADA'
+  // En una semana cerrada, las OT guardadas solo se muestran en Programadas.
+  // La consulta historica conserva el universo base, sin duplicar OT en las otras tablas.
+  const listedRows=useMemo(()=>closedWeek
+    ? allRows.filter(row=>!selected.has(Number(row.orden_mantenimiento_id)))
+    : allRows,[allRows,selected,closedWeek])
+  const availableWorkMetrics=useMemo(()=>listedRows.reduce((totals,row)=>{
     const hh=number(row.hh)
     const isBacklog=row.origen==='BACKLOG'||row.origen_backlog===true||row.es_backlog===true
     totals.count+=1
@@ -140,7 +146,7 @@ export default function WeeklyProgramming({year,month,dashboard}){
     if(isBacklog)totals.backlogHH+=hh
     else totals.pmpHH+=hh
     return totals
-  },{count:0,hh:0,pmpHH:0,backlogHH:0}),[allRows])
+  },{count:0,hh:0,pmpHH:0,backlogHH:0}),[listedRows])
   const remainingWorkCount=availableWorkMetrics.count
   const remainingWorkHH=round2(availableWorkMetrics.hh)
   const remainingPmpHH=round2(availableWorkMetrics.pmpHH)
@@ -153,14 +159,14 @@ export default function WeeklyProgramming({year,month,dashboard}){
     const backlog=[]
     const stopped=[]
     const operating=[]
-    for(const row of allRows){
+    for(const row of listedRows){
       const isBacklog=row.origen==='BACKLOG'||row.origen_backlog===true||row.es_backlog===true
       if(isBacklog)backlog.push(row)
       else if(row.requiere_parada===true)stopped.push(row)
       else operating.push(row)
     }
     return {operating,stopped,backlog}
-  },[allRows])
+  },[listedRows])
   function updateFilters(kind,patch){setFilters(current=>updateGroupFilters(current,kind,patch))}
   function toggle(row){if(!editing)return;const id=Number(row.orden_mantenimiento_id);setError('');setMessage('');setSelected(current=>{const result=toggleWeeklySelection({selected:current,id,row,rowMap,target});if(result.error){setError(`No se puede seleccionar esta actividad: llegarías a ${fmt(result.nextHH,1)} H-H y la meta máxima es ${fmt(target,1)} H-H.`);return current}if(result.changed)setDirty(true);return result.selected})}
   async function save(){if(!selected.size){setError('Selecciona al menos una orden para guardar la semana.');return}try{setSaving(true);setError('');setMessage('');const result=await saveV2WeekProgramming({date_from:week.from,date_to:week.to,specialty,order_ids:[...selected]});setProgrammingId(result.programming_id);setDirty(false);await load();setMessage(`Programación guardada: ${fmt(result.hh_programmed,1)} H-H de ${fmt(result.hh_target,1)} H-H objetivo.${result.moved_to_backlog?` ${result.moved_to_backlog} OT movida(s) a BACKLOG.`:''}`)}catch(cause){setError(cause.message)}finally{setSaving(false)}}
@@ -231,8 +237,8 @@ export default function WeeklyProgramming({year,month,dashboard}){
       <div className="tf-program-status-row">
         <article className="tf-program-remaining-card">
           <div>
-            <span>PENDIENTE A LA FECHA</span>
-            <small>Actividades disponibles en Equipo operando + Equipo detenido + Backlog</small>
+            <span>{closedWeek?'NO PROGRAMADAS EN ESTA SEMANA':'PENDIENTE A LA FECHA'}</span>
+            <small>{closedWeek?'OT del universo original que no se seleccionaron en esta semana':'Actividades disponibles en Equipo operando + Equipo detenido + Backlog'}</small>
           </div>
           <div className="tf-program-remaining-values">
             <div><b>{remainingWorkCount}</b><span>OT pendientes</span></div>
@@ -306,7 +312,7 @@ export default function WeeklyProgramming({year,month,dashboard}){
     {message&&<div className="v2-success">{message}</div>}
 
     <section className="v2-panel tf-three-program-tables">
-      {groups.map(group=><ActivityGroup key={group.kind} {...group} dashboard={dashboard} editing={editing} selected={selected} filters={filters[group.kind]} onFiltersChange={patch=>updateFilters(group.kind,patch)} onToggle={toggle}/>)}
+      {groups.map(group=><ActivityGroup key={group.kind} {...group} dashboard={dashboard} editing={editing} selected={selected} closedWeek={closedWeek} filters={filters[group.kind]} onFiltersChange={patch=>updateFilters(group.kind,patch)} onToggle={toggle}/>)}
     </section>
   </div>
 }
