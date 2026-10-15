@@ -366,6 +366,26 @@ def _monthly_demand(conn, month_date: date, specialty: str, exclude_programming_
         "week_start": month_date,
     }).mappings().one()
 
+    technician_capacity = conn.execute(text("""
+        SELECT
+          round(COALESCE(sum(pt.horas_disponibles),0),2) AS gross_month_hh,
+          round(COALESCE(sum(pt.horas_disponibles) FILTER (
+            WHERE pt.fecha >= :week_start
+          ),0),2) AS gross_remaining_hh
+        FROM programacion.programacion_tecnico pt
+        JOIN programacion.tecnico t ON t.id=pt.tecnico_id
+        WHERE t.especialidad_efectiva=:specialty
+          AND pt.fecha BETWEEN :period
+            AND (date_trunc('month',CAST(:period AS date))+interval '1 month - 1 day')::date
+    """), {
+        "period": period,
+        "specialty": specialty,
+        "week_start": month_date,
+    }).mappings().one()
+
+    technician_month_split = capacity_split(float(technician_capacity["gross_month_hh"] or 0))
+    technician_remaining_split = capacity_split(float(technician_capacity["gross_remaining_hh"] or 0))
+
     return {
         "period": period.isoformat(),
         "pmp_count": total_count,
@@ -390,6 +410,10 @@ def _monthly_demand(conn, month_date: date, specialty: str, exclude_programming_
         "remaining_for_week_count": int(workload_for_week["remaining_count"] or 0),
         "remaining_for_week_hh": round(float(workload_for_week["remaining_hh"] or 0),2),
         "remaining_for_week_missing_hh": int(workload_for_week["remaining_missing_hh"] or 0),
+        "technician_month_gross_hh": round(float(technician_capacity["gross_month_hh"] or 0),2),
+        "technician_month_preventive_hh": round(float(technician_month_split["preventive"] or 0),2),
+        "technician_remaining_gross_hh": round(float(technician_capacity["gross_remaining_hh"] or 0),2),
+        "technician_remaining_preventive_hh": round(float(technician_remaining_split["preventive"] or 0),2),
     }
 
 

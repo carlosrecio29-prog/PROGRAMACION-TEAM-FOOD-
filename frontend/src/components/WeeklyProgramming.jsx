@@ -134,6 +134,8 @@ export default function WeeklyProgramming({year,month,dashboard}){
   const remainingWorkCount=number(monthlyBase.remaining_for_week_count)
   const remainingWorkHH=number(monthlyBase.remaining_for_week_hh)
   const remainingMissingHH=number(monthlyBase.remaining_for_week_missing_hh)
+  const technicianMonthHH=number(monthlyBase.technician_month_preventive_hh)
+  const technicianRemainingHH=number(monthlyBase.technician_remaining_preventive_hh)
   const weeklyProgressPct=target>0?Math.min(100,selectedHH/target*100):0
 
   const groupedRows=useMemo(()=>{
@@ -215,16 +217,27 @@ export default function WeeklyProgramming({year,month,dashboard}){
         <small>{monthPmpCount} PMP del mes + {initialBacklogCount} Backlog heredado · dato fijo</small>
       </div>
 
-      <article className="tf-program-remaining-card">
-        <div>
-          <span>PENDIENTE A LA FECHA</span>
-          <small>Saldo real del PMP del mes + Backlog después de los cierres anteriores a esta semana</small>
-        </div>
-        <div className="tf-program-remaining-values">
-          <div><b>{remainingWorkCount}</b><span>OT pendientes</span></div>
-          <div><b>{fmt(remainingWorkHH,1)}</b><span>H-H pendientes</span></div>
-        </div>
-      </article>
+      <div className="tf-program-status-row">
+        <article className="tf-program-remaining-card">
+          <div>
+            <span>PENDIENTE A LA FECHA</span>
+            <small>Saldo real del PMP del mes + Backlog después de los cierres anteriores a esta semana</small>
+          </div>
+          <div className="tf-program-remaining-values">
+            <div><b>{remainingWorkCount}</b><span>OT pendientes</span></div>
+            <div><b>{fmt(remainingWorkHH,1)}</b><span>H-H pendientes</span></div>
+          </div>
+        </article>
+
+        <article className="tf-program-tech-card">
+          <div>
+            <span>H-H TÉCNICOS DISPONIBLES</span>
+            <small>Capacidad preventiva restante desde la semana seleccionada</small>
+          </div>
+          <b>{fmt(technicianRemainingHH,1)} H-H</b>
+          <small>Total mensual: {fmt(technicianMonthHH,1)} H-H</small>
+        </article>
+      </div>
 
       {remainingMissingHH>0&&(
         <div className="tf-program-data-warning">{remainingMissingHH} actividad(es) pendientes no tienen H-H calculables y no están incluidas en la comparación de horas.</div>

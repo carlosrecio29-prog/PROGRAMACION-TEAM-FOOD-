@@ -3625,3 +3625,53 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
   font-size:6.6px;
   font-weight:800;
 }
+
+
+/* === PROGRAMACIÓN SEMANAL · H-H TÉCNICOS RESTANTES === */
+.tf-program-status-row{
+  display:grid;
+  grid-template-columns:minmax(0,1.45fr) minmax(240px,.55fr);
+  gap:9px;
+}
+.tf-program-status-row .tf-program-remaining-card{
+  height:100%;
+}
+.tf-program-tech-card{
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  padding:13px 14px;
+  border:1px solid #d7e5dd;
+  border-radius:10px;
+  background:#f5fbf7;
+}
+.tf-program-tech-card>div>span{
+  display:block;
+  color:#375a4b;
+  font-size:8px;
+  font-weight:950;
+  letter-spacing:.38px;
+}
+.tf-program-tech-card>div>small{
+  display:block;
+  margin-top:4px;
+  color:#809087;
+  font-size:7px;
+  line-height:1.35;
+}
+.tf-program-tech-card>b{
+  display:block;
+  margin-top:10px;
+  color:#147047;
+  font-size:24px;
+  line-height:1;
+}
+.tf-program-tech-card>small{
+  display:block;
+  margin-top:6px;
+  color:#789086;
+  font-size:7px;
+}
+@media(max-width:860px){
+  .tf-program-status-row{grid-template-columns:1fr}
+}
