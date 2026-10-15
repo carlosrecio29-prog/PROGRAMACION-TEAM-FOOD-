@@ -575,6 +575,8 @@ def get_week_programming(*,date_from:date,date_to:date,specialty:str)->dict[str,
               JOIN programacion.programacion_semanal_v2 other_program ON other_program.id=other_item.programacion_id
               WHERE other_item.orden_mantenimiento_id=c.orden_mantenimiento_id
                 AND (CAST(:programming_id AS bigint) IS NULL OR other_program.id<>CAST(:programming_id AS bigint))
+                AND other_program.estado<>'CERRADA'
+                AND other_program.semana_inicio<=:date_from
             )
             ORDER BY c.area_codigo,c.numero_ot NULLS LAST,c.activo_codigo,c.plan_trabajo
         """),{"date_from":date_from,"specialty":specialty,"programming_id":programming_id}).mappings()]
