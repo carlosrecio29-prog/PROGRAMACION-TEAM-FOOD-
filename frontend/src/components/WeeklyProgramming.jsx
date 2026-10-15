@@ -1,6 +1,6 @@
 import {useEffect,useMemo,useState} from 'react'
 import {monthWeeks,initialWeekIndex} from '../features/planning/monthWeeks.js'
-import {getV2WeekProgramming,saveV2WeekProgramming,downloadV2WeeklyReport} from '../api'
+import {getV2WeekProgramming,getV2WeekTracking,saveV2WeekProgramming,downloadV2WeeklyReport} from '../api'
 import {emptyFilters,matchesFilters,updateGroupFilters} from '../features/planning/weeklyProgrammingFilters'
 import {toggleWeeklySelection} from '../features/planning/weeklyProgrammingSelection'
 import Badge from '../shared/Badge'
@@ -56,7 +56,19 @@ function ActivityGroup({kind,rows,dashboard,editing,selected,closedWeek,filters,
   </section>
 }
 
-function SelectionSummary({rows,editing,onToggle,dashboard}){
+function SelectionSummary({rows,editing,onToggle,dashboard,trackingByOrder,closedWeek}){
+  function executionState(row){
+    // El cierre histórico es la fuente de verdad cuando la semana está cerrada.
+    if(closedWeek){
+      if(String(row.estado_cierre||'').toUpperCase()==='ANULADA')return 'annulled'
+      if(row.finalizado===true)return 'done'
+      if(row.finalizado===false)return 'pending'
+    }
+    const snapshot=trackingByOrder.get(Number(row.orden_mantenimiento_id))
+    if(snapshot?.finalizado===true)return 'done'
+    if(snapshot?.finalizado===false)return 'pending'
+    return 'unchecked'
+  }
   const [area,setArea]=useState('')
   const [search,setSearch]=useState('')
   const term=search.trim().toLowerCase()
@@ -76,7 +88,7 @@ function SelectionSummary({rows,editing,onToggle,dashboard}){
       <div>
         <span className="v2-kicker">{editing?'PROGRAMACIÓN EN EDICIÓN':'PROGRAMACIÓN GUARDADA'}</span>
         <h3>{editing?'Selección actual':'Programación actual de la semana'}</h3>
-        <p>{editing?'Aquí ves únicamente las actividades que estás programando.':'Estas son las actividades guardadas para la semana.'}</p>
+        <p>{editing?'Aquí ves únicamente las actividades que estás programando.':'Estas son las actividades guardadas. Verde = finalizada, amarillo = pendiente y gris = sin validar; la selección no implica ejecución.'}</p>
       </div>
       <div className="v2-selected-totals">
         <span><b>{rows.length}</b> actividades</span>
@@ -91,12 +103,16 @@ function SelectionSummary({rows,editing,onToggle,dashboard}){
       <small>{visibleRows.length} de {rows.length}</small>
     </div>
     <div className="v2-table-wrap v2-selected-table"><table>
-      <thead><tr><th>Condición</th><th>Origen</th><th>OT</th><th>Área</th><th>Equipo</th><th>Plan de trabajo</th><th>Personas</th><th>Tiempo</th><th>H-H</th>{editing&&<th>Acción</th>}</tr></thead>
+      <thead><tr><th>Condición</th><th>Origen</th><th>OT</th><th>Estado de ejecución</th><th>Área</th><th>Equipo</th><th>Plan de trabajo</th><th>Personas</th><th>Tiempo</th><th>H-H</th>{editing&&<th>Acción</th>}</tr></thead>
       <tbody>
-        {visibleRows.map(row=><tr className="tf-selected-summary-row" key={row.orden_mantenimiento_id}>
+        {visibleRows.map(row=>{
+          const state=executionState(row)
+          const statusLabel={done:'FINALIZADA ✓',pending:'PENDIENTE',annulled:'ANULADA',unchecked:'SIN VALIDAR'}[state]
+          return <tr className={'tf-selected-summary-row tf-summary-'+state} key={row.orden_mantenimiento_id}>
           <td>{row.requiere_parada?<Badge tone="stop">Equipo detenido</Badge>:<Badge tone="ok">Equipo funcionando</Badge>}</td>
           <td>{row.origen==='BACKLOG'||row.origen_backlog?<Badge tone="backlog">BACKLOG</Badge>:<Badge>PMP DEL MES</Badge>}</td>
-          <td><b className="tf-ot-programmed-underline">{row.numero_ot||'SIN ASIGNAR'}</b><small className="tf-programmed-note">✓ Programada en esta semana</small></td>
+          <td><b>{row.numero_ot||'SIN ASIGNAR'}</b><small className="tf-summary-programmed-note">Seleccionada para esta semana</small></td>
+          <td><span className={'tf-execution-state tf-execution-'+state}>{statusLabel}</span></td>
           <td><Badge>{row.area_codigo||'—'}</Badge><small>{row.area_nombre||''}</small></td>
           <td><b>{row.activo_codigo}</b><small>{row.activo_descripcion}</small></td>
           <td><span className="v2-plan">{row.plan_trabajo}</span><small>{row.descripcion_grupo||''}</small></td>
@@ -104,8 +120,8 @@ function SelectionSummary({rows,editing,onToggle,dashboard}){
           <td>{fmt(row.tiempo_min,0)} min</td>
           <td><b>{fmt(row.hh,1)}</b></td>
           {editing&&<td><button type="button" className="v2-unselect" onClick={()=>onToggle(row)}>Quitar</button></td>}
-        </tr>)}
-        {!visibleRows.length&&<tr><td colSpan={editing?10:9} className="v2-empty">{rows.length?'No hay actividades con estos filtros.':'Todavía no has seleccionado actividades para esta semana.'}</td></tr>}
+        </tr>})}
+        {!visibleRows.length&&<tr><td colSpan={editing?11:10} className="v2-empty">{rows.length?'No hay actividades con estos filtros.':'Todavía no has seleccionado actividades para esta semana.'}</td></tr>}
       </tbody>
     </table></div>
   </section>
@@ -113,10 +129,26 @@ function SelectionSummary({rows,editing,onToggle,dashboard}){
 
 export default function WeeklyProgramming({year,month,dashboard}){
   const weeks=useMemo(()=>monthWeeks(year,month),[year,month])
-  const [weekIndex,setWeekIndex]=useState(()=>initialWeekIndex(weeks));const [specialty,setSpecialty]=useState('MEC');const [data,setData]=useState(null);const [selected,setSelected]=useState(new Set());const [filters,setFilters]=useState(emptyFilters);const [loading,setLoading]=useState(false);const [saving,setSaving]=useState(false);const [error,setError]=useState('');const [message,setMessage]=useState('');const [dirty,setDirty]=useState(false);const [programmingId,setProgrammingId]=useState(null);const [editing,setEditing]=useState(true)
+  const [weekIndex,setWeekIndex]=useState(()=>initialWeekIndex(weeks));const [specialty,setSpecialty]=useState('MEC');const [data,setData]=useState(null);const [tracking,setTracking]=useState(null);const [selected,setSelected]=useState(new Set());const [filters,setFilters]=useState(emptyFilters);const [loading,setLoading]=useState(false);const [saving,setSaving]=useState(false);const [error,setError]=useState('');const [message,setMessage]=useState('');const [dirty,setDirty]=useState(false);const [programmingId,setProgrammingId]=useState(null);const [editing,setEditing]=useState(true)
   const week=weeks[Math.min(weekIndex,weeks.length-1)]||weeks[0]
   async function load(){if(!week)return;try{setLoading(true);setError('');const result=await getV2WeekProgramming(week.from,week.to,specialty);setData(result);setSelected(new Set((result.selected_ids||[]).map(Number)));setProgrammingId(result.programming?.id||null);setEditing(!result.programming);setDirty(false)}catch(cause){setError(cause.message)}finally{setLoading(false)}}
   useEffect(()=>{setWeekIndex(initialWeekIndex(weeks))},[month]);useEffect(()=>{load()},[week?.from,week?.to,specialty])
+  // Lectura del último seguimiento. No escribe ni altera programación/cierres.
+  useEffect(()=>{
+    const programmingId=data?.programming?.id
+    let active=true
+    setTracking(null)
+    if(programmingId){
+      getV2WeekTracking(programmingId)
+        .then(result=>{if(active)setTracking({programmingId,...result})})
+        .catch(()=>{if(active)setTracking(null)})
+    }
+    return ()=>{active=false}
+  },[data?.programming?.id,data?.programming?.actualizado_en])
+  const trackingByOrder=useMemo(()=>new Map(
+    (tracking?.programmingId===data?.programming?.id?tracking?.rows||[]:[])
+      .map(row=>[Number(row.orden_mantenimiento_id),row])
+  ),[tracking,data?.programming?.id])
   const allRows=useMemo(()=>[...(data?.operating||[]),...(data?.stopped||[]),...(data?.backlog||[])],[data])
   const rowMap=useMemo(()=>new Map(allRows.map(row=>[Number(row.orden_mantenimiento_id),row])),[allRows])
   const selectedRows=useMemo(()=>[...selected].map(id=>rowMap.get(Number(id))).filter(Boolean).sort((left,right)=>Number(left.requiere_parada)-Number(right.requiere_parada)||String(left.area_codigo||'').localeCompare(String(right.area_codigo||''))||String(left.numero_ot||'').localeCompare(String(right.numero_ot||''))),[selected,rowMap])
@@ -316,12 +348,20 @@ export default function WeeklyProgramming({year,month,dashboard}){
       </section>}
 
       {executedPendingClose.length>0&&<div className="tf-program-executed-warning" role="status">
-        <strong>{executedPendingClose.length} OT detectadas como finalizadas fuera de programación, pendientes de cierre.</strong>
-        <span>Se apartan de Equipo operando, Equipo detenido y Backlog para evitar programarlas otra vez.
-        <b>{listedRows.length} OT siguen visibles en las tablas</b>; las {executedPendingClose.length} detectadas se descuentan del saldo oficial
-        únicamente cuando se confirme el cierre de su semana.</span>
-        <small>{executedPendingClose.slice(0,15).map(row=>row.numero_ot||'SIN ASIGNAR').join(' · ')}
-          {executedPendingClose.length>15?` · +${executedPendingClose.length-15} más`:''}</small>
+        <strong>{executedPendingClose.length} OT ejecutadas fuera de la selección semanal</strong>
+        <span>La Lista de Calendario las registra como finalizadas, pero no estaban seleccionadas
+          en la programación de este corte. Por eso se apartan de las tres tablas para que no vuelvas a programarlas.</span>
+        <div className="tf-executed-reconciliation">
+          <span><b>{remainingWorkCount}</b> OT al iniciar la semana</span>
+          <span className="tf-executed-reconciliation-minus">− {executedPendingClose.length} ya ejecutadas</span>
+          <span><b>{listedRows.length}</b> OT visibles, incluidas las ya seleccionadas</span>
+        </div>
+        <span>El seguimiento detecta su ejecución de inmediato. El cierre semanal sigue pendiente de confirmación
+          y es el que actualiza el saldo oficial para la semana siguiente.</span>
+        <details className="tf-executed-details">
+          <summary>Ver las {executedPendingClose.length} OT identificadas</summary>
+          <small>{executedPendingClose.map(row=>row.numero_ot||'SIN ASIGNAR').join(' · ')}</small>
+        </details>
       </div>}
 
       {remainingMissingHH>0&&(
@@ -364,7 +404,7 @@ export default function WeeklyProgramming({year,month,dashboard}){
       </div>
     </section>}
 
-    <SelectionSummary rows={selectedRows} editing={editing} onToggle={toggle} dashboard={dashboard}/>
+    <SelectionSummary rows={selectedRows} editing={editing} onToggle={toggle} dashboard={dashboard} trackingByOrder={trackingByOrder} closedWeek={closedWeek}/>
 
     {(editing||!programmingId)&&<section className="tf-save-strip">
       <div><b>{selected.size} actividades · {fmt(selectedHH,1)} H-H</b><span>{dirty?'Cambios sin guardar':'Selección actual'}</span></div>
