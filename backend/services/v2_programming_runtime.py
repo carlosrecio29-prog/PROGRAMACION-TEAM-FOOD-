@@ -268,11 +268,19 @@ def save_week_programming(*, date_from: date, date_to: date, specialty: str, ord
             previous_ids = [int(x["orden_mantenimiento_id"]) for x in previous]
             previous_origins = {int(x["orden_mantenimiento_id"]) for x in previous if x["origen_backlog"]}
 
+        # El seguimiento provisional no confirma un cierre ni cambia el origen
+        # backlog de una OT que sigue disponible para este corte.
         backlog_ids = {int(x) for x in conn.execute(text("""
-            SELECT orden_mantenimiento_id FROM programacion.backlog_v2
-            WHERE orden_mantenimiento_id=ANY(CAST(:ids AS bigint[]))
-              AND estado_seguimiento<>'FINALIZADA'
-        """), {"ids": unique_ids}).scalars().all()}
+            SELECT b.orden_mantenimiento_id
+            FROM programacion.backlog_v2 b
+            JOIN programacion.orden_mantenimiento o ON o.id=b.orden_mantenimiento_id
+            WHERE b.orden_mantenimiento_id=ANY(CAST(:ids AS bigint[]))
+              AND b.especialidad=:specialty
+              AND COALESCE(
+                b.primera_semana_origen_inicio,b.semana_origen_inicio,o.periodo
+              )<:date_from
+        """), {"ids": unique_ids, "specialty": specialty,
+                "date_from": date_from}).scalars().all()}
 
         executed_outside = conn.execute(text("""
             SELECT DISTINCT o.numero_ot
@@ -281,15 +289,23 @@ def save_week_programming(*, date_from: date, date_to: date, specialty: str, ord
               AND EXISTS (
                 SELECT 1
                 FROM programacion.seguimiento_no_programado_v2 snp
-                WHERE snp.orden_mantenimiento_id=o.id
-                   OR (
-                     snp.numero_ot IS NOT NULL
-                     AND o.numero_ot IS NOT NULL
-                     AND upper(btrim(snp.numero_ot))=upper(btrim(o.numero_ot))
-                   )
+                JOIN programacion.programacion_semanal_v2 closed_week
+                  ON closed_week.id=snp.programacion_id
+                WHERE closed_week.estado='CERRADA'
+                  AND closed_week.especialidad=:specialty
+                  AND closed_week.semana_fin<:date_from
+                  AND (
+                    snp.orden_mantenimiento_id=o.id
+                    OR (
+                      snp.numero_ot IS NOT NULL
+                      AND o.numero_ot IS NOT NULL
+                      AND upper(btrim(snp.numero_ot))=upper(btrim(o.numero_ot))
+                    )
+                  )
               )
             LIMIT 10
-        """), {"ids": unique_ids}).scalars().all()
+        """), {"ids": unique_ids,"specialty": specialty,
+                "date_from": date_from}).scalars().all()
         if executed_outside:
             first_ot = executed_outside[0] or "SIN ASIGNAR"
             raise V2ProgrammingError(
@@ -304,10 +320,21 @@ def save_week_programming(*, date_from: date, date_to: date, specialty: str, ord
             JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
             WHERE o.id=ANY(CAST(:ids AS bigint[])) AND o.especialidad=:specialty
               AND NOT p.es_operacion
-              AND upper(COALESCE(o.estado,'')) NOT LIKE 'FINALIZ%'
+              AND NOT EXISTS (
+                SELECT 1
+                FROM programacion.programacion_item_v2 previous_item
+                JOIN programacion.programacion_semanal_v2 closed_week
+                  ON closed_week.id=previous_item.programacion_id
+                WHERE previous_item.orden_mantenimiento_id=o.id
+                  AND closed_week.especialidad=:specialty
+                  AND closed_week.estado='CERRADA'
+                  AND closed_week.semana_fin<:date_from
+                  AND (COALESCE(previous_item.finalizado,false) OR COALESCE(previous_item.anulado,false))
+              )
               AND p.numero_personas_efectivo IS NOT NULL AND p.tiempo_parada_efectivo_min IS NOT NULL
               AND p.requiere_parada IS NOT NULL AND COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min) IS NOT NULL
-        """), {"ids": unique_ids, "specialty": specialty}).mappings()]
+        """), {"ids": unique_ids, "specialty": specialty,
+                 "date_from": date_from}).mappings()]
         if len(rows) != len(unique_ids):
             raise V2ProgrammingError("Una o más órdenes ya no están disponibles o tienen datos incompletos")
 
