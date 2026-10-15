@@ -122,7 +122,7 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
       await onChanged?.();
       const saved = result.saved || {};
       setMessage(
-        `Avance registrado sin cerrar la semana: ${number(saved.finalizadas)} finalizadas programadas · ${number(saved.no_programadas_nuevas)} no programadas nuevas · ${number(saved.backlog_finalizadas)} OT del backlog finalizadas · ${fmt(saved.avance_ot_pct)}% por OT · ${fmt(saved.avance_hh_pct)}% por H-H.`,
+        `Seguimiento actualizado sin cerrar la semana: ${number(saved.finalizadas)} OT programadas finalizadas · ${number(saved.no_programadas_nuevas)} nuevas fuera de la programación del corte · ${number(saved.pmp_backlog_finalizadas_detectadas_mes)} PMP/backlog verificados como finalizados en la Lista de Calendario, de los cuales ${number(saved.fuera_programacion_mes)} no estaban seleccionados en esta semana. Estas OT se apartan de próximas programaciones; el cierre semanal sigue siendo independiente.`,
       );
     } catch (cause) {
       setError(cause.message || "No se pudo registrar el avance semanal.");
@@ -143,6 +143,7 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
   const liveRows = tracking?.rows || [];
   const unplanned = tracking?.unplanned || {};
   const unplannedSummary = unplanned.summary || {};
+  const monthlyVerified = tracking?.monthly_verified || {};
   const unplannedRows = unplanned.rows || [];
   const areaProgressRows = tracking?.by_area || [];
   const selectedAreaProgress = (
@@ -192,9 +193,11 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
             <span className="v2-kicker">SEGUIMIENTO DURANTE LA SEMANA</span>
             <h3>Avance de la programación sin realizar el cierre</h3>
             <p>
-              Puedes cargar la Lista de Calendario varias veces. Cada carga queda guardada
-              como una fotografía del avance, concilia las OT finalizadas del Backlog de la especialidad
-              seleccionada y no cierra la programación.
+              Puedes cargar la Lista de Calendario varias veces. Primero comprobamos
+              cuáles OT de la programación semanal están finalizadas. Después buscamos las OT
+              del PMP mensual y del backlog finalizadas aunque no estuvieran programadas.
+              Cada carga actualiza su disponibilidad sin cerrar la programación ni modificar
+              la selección guardada.
             </p>
           </div>
           <Badge tone={closed ? "ok" : latest ? "warn" : undefined}>
@@ -251,11 +254,14 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
                 <span className="v2-kicker">NUEVA FOTOGRAFÍA DE AVANCE</span>
                 <h3>Cargar Lista de Calendario actualizada</h3>
                 <p>
-                  Validaremos las OT programadas y, sin modificar la línea base, también
-                  identificaremos las OT finalizadas dentro de este corte que no estaban programadas.
-                  Además, buscaremos en todo el archivo las OT del Backlog de esta especialidad y
-                  marcaremos como FINALIZADAS las que el calendario reporte finalizadas, sin filtrar por fecha.
-                  Este proceso no mueve OT a Backlog y no realiza el cierre.
+                  Paso 1: actualizar finalizadas, pendientes y sin coincidencia de las OT
+                  que seleccionaste en esta semana. Paso 2: comparar TODA la Lista de
+                  Calendario con el PMP del mes y su backlog; las órdenes finalizadas que no
+                  fueron programadas dejarán de ofrecerse en próximas semanas a partir de
+                  esta carga, aunque aún no hayas realizado el cierre. Una OT repetida en
+                  distintos archivos se registra una sola vez. El indicador de ejecución
+                  fuera de programación de ESTA semana conserva su propio filtro por fecha.
+                  Este proceso no elimina la selección semanal ni confirma el cierre.
                 </p>
               </div>
               <div className="weekly-tracking-upload-actions">
@@ -286,6 +292,7 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
             <article className={unmatched ? "warn" : "ok"}><span>Sin coincidencia</span><b>{unmatched}</b><small>revisar antes del cierre</small></article>
             <article><span>Avance por H-H</span><b>{fmt(hhPct)}%</b><small>{fmt(latest?.hh_finalizadas)} / {fmt(latest?.hh_programadas)} H-H</small></article>
             <article><span>Última actualización</span><b className="tracking-date">{latest ? when(latest.registrado_en) : "—"}</b><small>{latest?.archivo_nombre || "Aún sin carga"}</small></article>
+            <article className="ok"><span>PMP + backlog finalizados detectados</span><b>{number(monthlyVerified.finalizadas_base_mes)}</b><small>Acumulado identificado en seguimientos del mes</small></article>
           </section>
 
           <section className="v2-panel weekly-tracking-board">
