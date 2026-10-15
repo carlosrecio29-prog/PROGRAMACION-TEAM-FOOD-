@@ -3861,3 +3861,12 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
 .tf-weekly-compact .v2-program-table tr.tf-unselected-activity td{
   background:#fff;
 }
+
+.tf-weekly-compact .tf-program-color-legend{
+  display:block;
+  max-width:680px;
+  margin-top:5px;
+  font-size:9px;
+  line-height:1.45;
+  color:#658273;
+}
