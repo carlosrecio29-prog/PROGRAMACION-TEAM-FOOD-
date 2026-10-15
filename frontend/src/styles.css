@@ -3816,3 +3816,48 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
   line-height:1.5;
   overflow-wrap:anywhere;
 }
+
+
+/* Identificación histórica de las órdenes realmente programadas.
+   Sólo presentación: no altera programación, cierre ni saldo semanal. */
+.tf-weekly-compact .v2-program-table tr.tf-programmed-highlight td{
+  background:#e8f7ed!important;
+}
+.tf-weekly-compact .v2-program-table tr.tf-programmed-highlight td:first-child{
+  box-shadow:inset 4px 0 0 #188348;
+}
+.tf-weekly-compact .v2-selected-table tr.tf-selected-summary-row td{
+  background:#f0faf3!important;
+}
+.tf-weekly-compact .v2-selected-table tr.tf-selected-summary-row td:first-child{
+  box-shadow:inset 3px 0 0 #31965a;
+}
+.tf-weekly-compact .tf-ot-programmed-underline{
+  color:#176940!important;
+  text-decoration:underline;
+  text-underline-offset:3px;
+  text-decoration-thickness:1.5px;
+}
+.tf-weekly-compact .tf-programmed-note{
+  display:block;
+  margin-top:5px;
+  color:#24814c;
+  font-size:8px;
+  font-weight:750;
+}
+.tf-weekly-compact .tf-not-programmed-tag{
+  display:inline-flex;
+  align-items:center;
+  min-height:26px;
+  border:1px solid #dfe6e1;
+  border-radius:7px;
+  background:#f7faf8;
+  color:#718476;
+  padding:0 7px;
+  font-size:8px;
+  font-weight:700;
+  white-space:nowrap;
+}
+.tf-weekly-compact .v2-program-table tr.tf-unselected-activity td{
+  background:#fff;
+}
