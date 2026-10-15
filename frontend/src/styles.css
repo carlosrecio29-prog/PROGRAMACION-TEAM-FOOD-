@@ -3683,3 +3683,106 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
   font-size:6.5px!important;
   line-height:1.25!important;
 }
+
+
+/* Conciliación dinámica PMP + backlog entre cortes semanales. */
+.tf-week-reconciliation{
+  border:1px solid #d7e5db;
+  border-radius:11px;
+  background:#f9fcfa;
+  padding:12px 14px;
+}
+.tf-week-reconciliation-title{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom:11px;
+}
+.tf-week-reconciliation-title strong{
+  display:block;
+  color:#274a39;
+  font-weight:850;
+  font-size:12px;
+}
+.tf-week-reconciliation-title small{
+  display:block;
+  color:#6d8074;
+  font-size:10px;
+  margin-top:3px;
+}
+.tf-week-reconciliation-title>span{
+  flex-shrink:0;
+  color:#537866;
+  font-weight:800;
+  font-size:9px;
+  letter-spacing:.35px;
+}
+.tf-week-reconciliation-flow{
+  display:flex;
+  align-items:stretch;
+  gap:5px;
+  flex-wrap:wrap;
+}
+.tf-week-reconciliation-cell{
+  flex:1 1 124px;
+  min-width:105px;
+  padding:10px 8px;
+  border:1px solid #e3ebe5;
+  border-radius:8px;
+  background:#fff;
+  display:flex;
+  flex-direction:column;
+  justify-content:space-between;
+  gap:4px;
+}
+.tf-week-reconciliation-cell small{
+  font-size:10px;
+  line-height:1.25;
+  color:#627a6b;
+}
+.tf-week-reconciliation-cell strong{
+  font-size:21px;
+  font-weight:850;
+  line-height:1.1;
+  color:#324a3a;
+  font-variant-numeric:tabular-nums;
+}
+.tf-week-reconciliation-cell span{
+  font-size:9px;
+  color:#7e9385;
+}
+.tf-week-reconciliation-cell.start{
+  background:#f0f6f1;
+  border-color:#d2e1d6;
+}
+.tf-week-reconciliation-cell.total{
+  background:#eaf5ee;
+  border-color:#afd4bb;
+}
+.tf-week-reconciliation-cell.total strong{color:#136d3e}
+.tf-week-reconciliation-operator{
+  flex:0 0 auto;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:#6e8c75;
+  font-size:18px;
+  font-weight:850;
+}
+.tf-week-reconciliation-extra{
+  margin-top:10px;
+  padding:9px 11px;
+  background:#f1f5f3;
+  border-radius:7px;
+  color:#577064;
+  line-height:1.5;
+  font-size:10px;
+}
+.tf-week-reconciliation-extra b{color:#365742}
+@media(max-width:650px){
+  .tf-week-reconciliation-title{align-items:flex-start;flex-direction:column}
+  .tf-week-reconciliation-flow{gap:5px}
+  .tf-week-reconciliation-operator{font-size:13px}
+  .tf-week-reconciliation-cell{flex:1 1 120px}
+}
