@@ -231,11 +231,11 @@ export default function WeeklyProgramming({year,month,dashboard}){
 
         <article className="tf-program-tech-card">
           <div>
-            <span>H-H TÉCNICOS DISPONIBLES</span>
-            <small>Capacidad preventiva restante desde la semana seleccionada</small>
+            <span>H-H TÉCNICOS PROGRAMABLES</span>
+            <small>Capacidad preventiva restante · 80% efectivo × 80% preventivo</small>
           </div>
           <b>{fmt(technicianRemainingHH,1)} H-H</b>
-          <small>Total mensual: {fmt(technicianMonthHH,1)} H-H</small>
+          <small>Total mensual programable: {fmt(technicianMonthHH,1)} H-H · 20% del efectivo reservado para correctivo</small>
         </article>
       </div>
 
