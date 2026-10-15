@@ -156,6 +156,8 @@ export default function WeeklyProgramming({year,month,dashboard}){
   const remainingWorkHH=isFirstWeek?workloadBaseHH:round2(availableWorkMetrics.hh)
   const remainingPmpHH=isFirstWeek?monthPmpHH:round2(availableWorkMetrics.pmpHH)
   const remainingBacklogHH=isFirstWeek?initialBacklogHH:round2(availableWorkMetrics.backlogHH)
+  const reconciliation=data?.weekly_reconciliation||null
+  const showReconciliation=!!(week?.weekNumber>1&&reconciliation)
   const technicianMonthHH=number(monthlyBase.technician_month_preventive_hh)
   const technicianRemainingHH=number(monthlyBase.technician_remaining_preventive_hh)
   const weeklyProgressPct=target>0?Math.min(100,selectedHH/target*100):0
@@ -266,6 +268,41 @@ export default function WeeklyProgramming({year,month,dashboard}){
           <small>Total mensual programable: {fmt(technicianMonthHH,1)} H-H · 20% del efectivo reservado para correctivo</small>
         </article>
       </div>
+
+      {showReconciliation&&<section className="tf-week-reconciliation" aria-label="Conciliación de órdenes pendientes">
+        <div className="tf-week-reconciliation-title">
+          <div>
+            <strong>¿Cómo se calcula el pendiente de esta semana?</strong>
+            <small>Se descuentan únicamente los resultados de cierres semanales anteriores confirmados.</small>
+          </div>
+          <span>CONCILIACIÓN DEL CORTE</span>
+        </div>
+        <div className="tf-week-reconciliation-flow">
+          <div className="tf-week-reconciliation-cell start">
+            <small>PMP + backlog inicial</small><strong>{fmt(reconciliation.initial_count,0)}</strong><span>OT</span>
+          </div>
+          <b className="tf-week-reconciliation-operator">−</b>
+          <div className="tf-week-reconciliation-cell">
+            <small>Programadas finalizadas</small><strong>{fmt(reconciliation.finalized_programmed_count,0)}</strong><span>OT</span>
+          </div>
+          <b className="tf-week-reconciliation-operator">−</b>
+          <div className="tf-week-reconciliation-cell">
+            <small>Finalizadas fuera del programa</small><strong>{fmt(reconciliation.finalized_unplanned_count,0)}</strong><span>OT del PMP/backlog</span>
+          </div>
+          <b className="tf-week-reconciliation-operator">−</b>
+          <div className="tf-week-reconciliation-cell">
+            <small>Anuladas en cierre</small><strong>{fmt(reconciliation.annulled_count,0)}</strong><span>OT</span>
+          </div>
+          <b className="tf-week-reconciliation-operator">=</b>
+          <div className="tf-week-reconciliation-cell total">
+            <small>Saldo tras los cierres</small><strong>{fmt(reconciliation.remaining_count,0)}</strong><span>OT pendientes</span>
+          </div>
+        </div>
+        {number(reconciliation.external_executed_count)>0&&<div className="tf-week-reconciliation-extra">
+          <b>{fmt(number(reconciliation.finalized_unplanned_count)+number(reconciliation.external_executed_count),0)} OT finalizadas fuera de programación:</b>
+          {' '}{fmt(reconciliation.finalized_unplanned_count,0)} del PMP/backlog descontadas del saldo y {fmt(reconciliation.external_executed_count,0)} emergentes ajenas a la base inicial contabilizadas solo como ejecución adicional.
+        </div>}
+      </section>}
 
       {remainingMissingHH>0&&(
         <div className="tf-program-data-warning">{remainingMissingHH} actividad(es) sin H-H calculables: {isFirstWeek
