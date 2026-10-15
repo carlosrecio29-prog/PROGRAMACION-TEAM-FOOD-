@@ -588,6 +588,30 @@ def get_week_tracking(programming_id: int) -> dict[str, Any]:
                      n.primera_deteccion_en DESC,n.numero_ot
         """), {"id": programming_id, "latest_id": latest_id}).mappings()]
 
+        # Estado acumulado de OT del mes verificadas como finalizadas al
+        # actualizar seguimientos; no implica cierre semanal.
+        monthly_verified = conn.execute(text("""
+            SELECT
+              count(*)::int AS finalizadas_base_mes,
+              count(*) FILTER (
+                WHERE NOT EXISTS (
+                  SELECT 1 FROM programacion.programacion_item_v2 pi
+                  WHERE pi.programacion_id=:id
+                    AND pi.orden_mantenimiento_id=fd.orden_mantenimiento_id
+                )
+              )::int AS finalizadas_no_programadas_en_semana
+            FROM programacion.finalizaciones_detectadas_v2 fd
+            JOIN programacion.programacion_semanal_v2 seen
+              ON seen.id=fd.programacion_origen_id
+            WHERE fd.periodo=date_trunc('month',CAST(:month_start AS date))::date
+              AND fd.especialidad=:specialty
+              AND seen.semana_inicio<=:month_start
+        """), {
+            "id": programming_id,
+            "month_start": programming["semana_inicio"],
+            "specialty": programming["especialidad"],
+        }).mappings().one()
+
         unplanned_new_by_tracking = {
             int(row["tracking_id"]): {
                 "cantidad": int(row["cantidad"] or 0),
@@ -630,6 +654,12 @@ def get_week_tracking(programming_id: int) -> dict[str, Any]:
         "programming": dict(programming),
         "latest": history[0] if history else None,
         "history": history,
+        "monthly_verified": {
+            "finalizadas_base_mes": int(monthly_verified["finalizadas_base_mes"] or 0),
+            "finalizadas_no_programadas_en_semana": int(
+                monthly_verified["finalizadas_no_programadas_en_semana"] or 0
+            ),
+        },
         "by_area": _area_summary(latest_rows),
         "rows": latest_rows,
         "unplanned": {
