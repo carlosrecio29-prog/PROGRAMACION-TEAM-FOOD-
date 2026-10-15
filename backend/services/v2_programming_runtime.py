@@ -16,6 +16,104 @@ from backend.services.v2_programming_service import (
 )
 
 
+
+def _reconcile_weekly_pending(conn, date_from: date, specialty: str) -> dict[str, int]:
+    """Concilia PMP+backlog inicial exclusivamente con cierres anteriores confirmados."""
+    record = conn.execute(text("""
+        WITH month_pmp AS (
+          SELECT o.id
+          FROM programacion.orden_mantenimiento o
+          JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
+          WHERE o.especialidad=:specialty
+            AND o.periodo=date_trunc('month',CAST(:week_start AS date))::date
+            AND NOT COALESCE(p.es_operacion,false)
+        ),
+        initial_backlog AS (
+          SELECT o.id
+          FROM programacion.backlog_v2 b
+          JOIN programacion.orden_mantenimiento o ON o.id=b.orden_mantenimiento_id
+          JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
+          WHERE b.especialidad=:specialty
+            AND NOT COALESCE(p.es_operacion,false)
+            AND COALESCE(
+              b.primera_semana_origen_inicio,b.semana_origen_inicio,o.periodo
+            ) < date_trunc('month',CAST(:week_start AS date))::date
+            AND (
+              b.estado_seguimiento IN ('PENDIENTE_DISPONIBLE','PENDIENTE_PROGRAMADA')
+              OR (
+                b.estado_seguimiento='FINALIZADA'
+                AND b.finalizado_en IS NOT NULL
+                AND b.finalizado_en::date >= date_trunc('month',CAST(:week_start AS date))::date
+              )
+              OR (
+                b.estado_seguimiento='ANULADA'
+                AND COALESCE(b.ultimo_cierre_en,b.actualizado_en)::date
+                    >= date_trunc('month',CAST(:week_start AS date))::date
+              )
+            )
+        ),
+        base_universe AS (
+          SELECT id FROM month_pmp UNION SELECT id FROM initial_backlog
+        ),
+        prior_programmed AS (
+          SELECT
+            pi.orden_mantenimiento_id,
+            bool_or(COALESCE(pi.finalizado,false)) AS completed,
+            bool_or(COALESCE(pi.anulado,false)) AS annulled
+          FROM programacion.programacion_item_v2 pi
+          JOIN programacion.programacion_semanal_v2 ps ON ps.id=pi.programacion_id
+          WHERE ps.especialidad=:specialty
+            AND ps.estado='CERRADA'
+            AND ps.semana_fin < :week_start
+            AND ps.semana_fin >= date_trunc('month',CAST(:week_start AS date))::date
+          GROUP BY pi.orden_mantenimiento_id
+        ),
+        prior_unplanned AS (
+          SELECT DISTINCT
+            COALESCE(snp.orden_mantenimiento_id,matched.id) AS order_id,
+            upper(btrim(snp.numero_ot)) AS numero_ot
+          FROM programacion.seguimiento_no_programado_v2 snp
+          JOIN programacion.programacion_semanal_v2 ps ON ps.id=snp.programacion_id
+          LEFT JOIN programacion.orden_mantenimiento matched
+            ON snp.orden_mantenimiento_id IS NULL
+           AND snp.numero_ot IS NOT NULL
+           AND matched.numero_ot IS NOT NULL
+           AND upper(btrim(matched.numero_ot))=upper(btrim(snp.numero_ot))
+          WHERE ps.especialidad=:specialty
+            AND ps.estado='CERRADA'
+            AND ps.semana_fin < :week_start
+            AND ps.semana_fin >= date_trunc('month',CAST(:week_start AS date))::date
+        ),
+        flags AS (
+          SELECT
+            b.id,
+            COALESCE(pp.completed,false) AS completed,
+            COALESCE(pp.annulled,false) AS annulled,
+            EXISTS (
+              SELECT 1 FROM prior_unplanned pu WHERE pu.order_id=b.id
+            ) AS outside_completed
+          FROM base_universe b
+          LEFT JOIN prior_programmed pp ON pp.orden_mantenimiento_id=b.id
+        )
+        SELECT
+          (SELECT count(*) FROM base_universe)::int AS initial_count,
+          count(*) FILTER (WHERE completed)::int AS finalized_programmed_count,
+          count(*) FILTER (WHERE NOT completed AND annulled)::int AS annulled_count,
+          count(*) FILTER (
+            WHERE NOT completed AND NOT annulled AND outside_completed
+          )::int AS finalized_unplanned_count,
+          count(*) FILTER (
+            WHERE NOT completed AND NOT annulled AND NOT outside_completed
+          )::int AS remaining_count,
+          (SELECT count(*) FROM prior_unplanned pu
+            WHERE pu.order_id IS NULL
+               OR NOT EXISTS (SELECT 1 FROM base_universe u WHERE u.id=pu.order_id)
+          )::int AS external_executed_count
+        FROM flags
+    """), {"week_start": date_from, "specialty": specialty}).mappings().one()
+    return {key: int(value or 0) for key, value in record.items()}
+
+
 def get_week_programming(*, date_from: date, date_to: date, specialty: str) -> dict[str, Any]:
     specialty = _validate_week(date_from, date_to, specialty)
     with get_engine().connect() as conn:
@@ -224,6 +322,7 @@ def get_week_programming(*, date_from: date, date_to: date, specialty: str) -> d
         }).mappings()]
         selected_hh = round(sum(float(r["hh"] or 0) for r in rows if r["seleccionado"]), 2)
         monthly_demand = _monthly_demand(conn, date_from, specialty, programming_id)
+        weekly_reconciliation = _reconcile_weekly_pending(conn, date_from, specialty)
 
     backlog = [r for r in rows if r["es_backlog"]]
     regular = [r for r in rows if not r["es_backlog"]]
@@ -233,6 +332,7 @@ def get_week_programming(*, date_from: date, date_to: date, specialty: str) -> d
         "date_from": str(date_from), "date_to": str(date_to), "specialty": specialty,
         "capacity": capacity, "programming": dict(programming) if programming else None,
         "monthly_demand": monthly_demand,
+        "weekly_reconciliation": weekly_reconciliation,
         "selected_hh": selected_hh,
         "selected_ids": [int(r["orden_mantenimiento_id"]) for r in rows if r["seleccionado"]],
         "operating": operating, "stopped": stopped, "backlog": backlog, "backlog_count": len(backlog),
