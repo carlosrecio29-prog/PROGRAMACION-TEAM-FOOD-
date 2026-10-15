@@ -131,25 +131,14 @@ export default function WeeklyProgramming({year,month,dashboard}){
   const initialBacklogHH=number(monthlyBase.workload_initial_backlog_hh)
   const workloadBaseCount=number(monthlyBase.workload_base_count,monthPmpCount+initialBacklogCount)
   const workloadBaseHH=number(monthlyBase.workload_base_hh,monthPmpHH+initialBacklogHH)
-  const isFirstWeek=week?.weekNumber===1
-  const remainingMissingHH=number(isFirstWeek?monthlyBase.workload_base_missing_hh:monthlyBase.remaining_for_week_missing_hh)
+  const remainingMissingHH=number(monthlyBase.remaining_for_week_missing_hh)
   const closedWeek=data?.programming?.estado==='CERRADA'
-  // El seguimiento puede detectar OT finalizadas fuera del programa antes
-  // del cierre. No volver a ofrecerlas para programar, pero tampoco restarlas
-  // del balance oficial de PMP hasta que ese cierre sea confirmado.
-  const executedPendingClose=useMemo(()=>allRows.filter(row=>
-    row.ejecutada_pendiente_cierre===true
-    && !selected.has(Number(row.orden_mantenimiento_id))
-  ),[allRows,selected])
-  // En semanas cerradas las programadas se muestran solo en Programadas;
-  // las detectadas como ejecutadas se identifican en el aviso de seguimiento.
-  const listedRows=useMemo(()=>allRows.filter(row=>
-    (!closedWeek||!selected.has(Number(row.orden_mantenimiento_id)))
-    && row.ejecutada_pendiente_cierre!==true
-  ),[allRows,selected,closedWeek])
-  // El indicador muestra la carga al COMIENZO del corte: nunca resta
-  // las OT seleccionadas en la misma semana antes de su cierre.
-  const availableWorkMetrics=useMemo(()=>allRows.reduce((totals,row)=>{
+  // En una semana cerrada, las OT guardadas solo se muestran en Programadas.
+  // La consulta historica conserva el universo base, sin duplicar OT en las otras tablas.
+  const listedRows=useMemo(()=>closedWeek
+    ? allRows.filter(row=>!selected.has(Number(row.orden_mantenimiento_id)))
+    : allRows,[allRows,selected,closedWeek])
+  const availableWorkMetrics=useMemo(()=>listedRows.reduce((totals,row)=>{
     const hh=number(row.hh)
     const isBacklog=row.origen==='BACKLOG'||row.origen_backlog===true||row.es_backlog===true
     totals.count+=1
@@ -157,15 +146,11 @@ export default function WeeklyProgramming({year,month,dashboard}){
     if(isBacklog)totals.backlogHH+=hh
     else totals.pmpHH+=hh
     return totals
-  },{count:0,hh:0,pmpHH:0,backlogHH:0}),[allRows])
-  // Primer corte = PMP del mes + backlog inicial completo (incluso OT sin HH).
-  // Cortes siguientes = suma exacta de las 3 tablas, ya descontados los cierres previos.
-  const remainingWorkCount=isFirstWeek?workloadBaseCount:availableWorkMetrics.count
-  const remainingWorkHH=isFirstWeek?workloadBaseHH:round2(availableWorkMetrics.hh)
-  const remainingPmpHH=isFirstWeek?monthPmpHH:round2(availableWorkMetrics.pmpHH)
-  const remainingBacklogHH=isFirstWeek?initialBacklogHH:round2(availableWorkMetrics.backlogHH)
-  const reconciliation=data?.weekly_reconciliation||null
-  const showReconciliation=!!(week?.weekNumber>1&&reconciliation)
+  },{count:0,hh:0,pmpHH:0,backlogHH:0}),[listedRows])
+  const remainingWorkCount=availableWorkMetrics.count
+  const remainingWorkHH=round2(availableWorkMetrics.hh)
+  const remainingPmpHH=round2(availableWorkMetrics.pmpHH)
+  const remainingBacklogHH=round2(availableWorkMetrics.backlogHH)
   const technicianMonthHH=number(monthlyBase.technician_month_preventive_hh)
   const technicianRemainingHH=number(monthlyBase.technician_remaining_preventive_hh)
   const weeklyProgressPct=target>0?Math.min(100,selectedHH/target*100):0
@@ -252,10 +237,8 @@ export default function WeeklyProgramming({year,month,dashboard}){
       <div className="tf-program-status-row">
         <article className="tf-program-remaining-card">
           <div>
-            <span>OT PENDIENTES AL INICIO DE LA SEMANA</span>
-            <small>{isFirstWeek
-              ? 'PMP total del mes + backlog heredado, antes de descontar cualquier cierre'
-              : 'Equipo operando + Equipo detenido + Backlog; solo descuentan cierres anteriores confirmados'}</small>
+            <span>{closedWeek?'NO PROGRAMADAS EN ESTA SEMANA':'PENDIENTE A LA FECHA'}</span>
+            <small>{closedWeek?'OT del universo original que no se seleccionaron en esta semana':'Actividades disponibles en Equipo operando + Equipo detenido + Backlog'}</small>
           </div>
           <div className="tf-program-remaining-values">
             <div><b>{remainingWorkCount}</b><span>OT pendientes</span></div>
@@ -277,54 +260,8 @@ export default function WeeklyProgramming({year,month,dashboard}){
         </article>
       </div>
 
-      {showReconciliation&&<section className="tf-week-reconciliation" aria-label="Conciliación de órdenes pendientes">
-        <div className="tf-week-reconciliation-title">
-          <div>
-            <strong>¿Cómo se calcula el pendiente de esta semana?</strong>
-            <small>Se descuentan únicamente los resultados de cierres semanales anteriores confirmados.</small>
-          </div>
-          <span>CONCILIACIÓN DEL CORTE</span>
-        </div>
-        <div className="tf-week-reconciliation-flow">
-          <div className="tf-week-reconciliation-cell start">
-            <small>PMP + backlog inicial</small><strong>{fmt(reconciliation.initial_count,0)}</strong><span>OT</span>
-          </div>
-          <b className="tf-week-reconciliation-operator">−</b>
-          <div className="tf-week-reconciliation-cell">
-            <small>Programadas finalizadas</small><strong>{fmt(reconciliation.finalized_programmed_count,0)}</strong><span>OT</span>
-          </div>
-          <b className="tf-week-reconciliation-operator">−</b>
-          <div className="tf-week-reconciliation-cell">
-            <small>Finalizadas fuera del programa</small><strong>{fmt(reconciliation.finalized_unplanned_count,0)}</strong><span>OT del PMP/backlog</span>
-          </div>
-          <b className="tf-week-reconciliation-operator">−</b>
-          <div className="tf-week-reconciliation-cell">
-            <small>Anuladas en cierre</small><strong>{fmt(reconciliation.annulled_count,0)}</strong><span>OT</span>
-          </div>
-          <b className="tf-week-reconciliation-operator">=</b>
-          <div className="tf-week-reconciliation-cell total">
-            <small>Saldo tras los cierres</small><strong>{fmt(reconciliation.remaining_count,0)}</strong><span>OT pendientes</span>
-          </div>
-        </div>
-        {number(reconciliation.external_executed_count)>0&&<div className="tf-week-reconciliation-extra">
-          <b>{fmt(number(reconciliation.finalized_unplanned_count)+number(reconciliation.external_executed_count),0)} OT finalizadas fuera de programación:</b>
-          {' '}{fmt(reconciliation.finalized_unplanned_count,0)} del PMP/backlog descontadas del saldo y {fmt(reconciliation.external_executed_count,0)} emergentes ajenas a la base inicial contabilizadas solo como ejecución adicional.
-        </div>}
-      </section>}
-
-      {executedPendingClose.length>0&&<div className="tf-program-executed-warning" role="status">
-        <strong>{executedPendingClose.length} OT detectadas como finalizadas fuera de programación, pendientes de cierre.</strong>
-        <span>Se apartan de Equipo operando, Equipo detenido y Backlog para evitar programarlas otra vez.
-        <b>{listedRows.length} OT siguen visibles en las tablas</b>; las {executedPendingClose.length} detectadas se descuentan del saldo oficial
-        únicamente cuando se confirme el cierre de su semana.</span>
-        <small>{executedPendingClose.slice(0,15).map(row=>row.numero_ot||'SIN ASIGNAR').join(' · ')}
-          {executedPendingClose.length>15?` · +${executedPendingClose.length-15} más`:''}</small>
-      </div>}
-
       {remainingMissingHH>0&&(
-        <div className="tf-program-data-warning">{remainingMissingHH} actividad(es) sin H-H calculables: {isFirstWeek
-          ? 'se incluyen en las OT iniciales, pero no en las H-H ni en las tablas programables.'
-          : 'requieren completar datos y no se incluyen en el total de las tres tablas ni en sus H-H.'}</div>
+        <div className="tf-program-data-warning">{remainingMissingHH} actividad(es) pendientes no tienen H-H calculables y no están incluidas en la comparación de horas.</div>
       )}
 
       <div className="tf-week-progress-card">
