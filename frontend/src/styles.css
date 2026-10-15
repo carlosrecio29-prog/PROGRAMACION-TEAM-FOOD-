@@ -3786,3 +3786,33 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
   .tf-week-reconciliation-operator{font-size:13px}
   .tf-week-reconciliation-cell{flex:1 1 120px}
 }
+
+
+/* Seguimiento no programado: ejecutadas detectadas, aun sin cierre confirmado */
+.tf-program-executed-warning{
+  display:flex;
+  flex-direction:column;
+  gap:5px;
+  border:1px solid #e3d7b3;
+  border-left:4px solid #bf9744;
+  border-radius:9px;
+  background:#fffdf6;
+  padding:10px 13px;
+  color:#594e37;
+}
+.tf-program-executed-warning strong{
+  font-size:11px;
+  font-weight:850;
+}
+.tf-program-executed-warning span{
+  color:#73684c;
+  font-size:10px;
+  line-height:1.5;
+}
+.tf-program-executed-warning small{
+  color:#876e40;
+  font-size:9px;
+  font-weight:700;
+  line-height:1.5;
+  overflow-wrap:anywhere;
+}
