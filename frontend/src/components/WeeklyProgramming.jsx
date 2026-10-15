@@ -131,11 +131,20 @@ export default function WeeklyProgramming({year,month,dashboard}){
   const initialBacklogHH=number(monthlyBase.workload_initial_backlog_hh)
   const workloadBaseCount=number(monthlyBase.workload_base_count,monthPmpCount+initialBacklogCount)
   const workloadBaseHH=number(monthlyBase.workload_base_hh,monthPmpHH+initialBacklogHH)
-  const remainingWorkCount=number(monthlyBase.remaining_for_week_count)
-  const remainingWorkHH=number(monthlyBase.remaining_for_week_hh)
   const remainingMissingHH=number(monthlyBase.remaining_for_week_missing_hh)
-  const remainingPmpHH=number(monthlyBase.remaining_pmp_hh)
-  const remainingBacklogHH=number(monthlyBase.remaining_backlog_hh)
+  const availableWorkMetrics=useMemo(()=>allRows.reduce((totals,row)=>{
+    const hh=number(row.hh)
+    const isBacklog=row.origen==='BACKLOG'||row.origen_backlog===true||row.es_backlog===true
+    totals.count+=1
+    totals.hh+=hh
+    if(isBacklog)totals.backlogHH+=hh
+    else totals.pmpHH+=hh
+    return totals
+  },{count:0,hh:0,pmpHH:0,backlogHH:0}),[allRows])
+  const remainingWorkCount=availableWorkMetrics.count
+  const remainingWorkHH=round2(availableWorkMetrics.hh)
+  const remainingPmpHH=round2(availableWorkMetrics.pmpHH)
+  const remainingBacklogHH=round2(availableWorkMetrics.backlogHH)
   const technicianMonthHH=number(monthlyBase.technician_month_preventive_hh)
   const technicianRemainingHH=number(monthlyBase.technician_remaining_preventive_hh)
   const weeklyProgressPct=target>0?Math.min(100,selectedHH/target*100):0
@@ -223,7 +232,7 @@ export default function WeeklyProgramming({year,month,dashboard}){
         <article className="tf-program-remaining-card">
           <div>
             <span>PENDIENTE A LA FECHA</span>
-            <small>Saldo real del PMP del mes + Backlog después de los cierres anteriores a esta semana</small>
+            <small>Actividades disponibles en Equipo operando + Equipo detenido + Backlog</small>
           </div>
           <div className="tf-program-remaining-values">
             <div><b>{remainingWorkCount}</b><span>OT pendientes</span></div>
