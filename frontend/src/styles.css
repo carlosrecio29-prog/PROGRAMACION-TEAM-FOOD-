@@ -3618,3 +3618,10 @@ td b{font-size:9px}td small{display:block;margin-top:2px;color:var(--muted);font
     padding-left:0;
   }
 }
+
+.tf-program-month-ref>small{
+  margin-left:5px;
+  color:#9aa8a1;
+  font-size:6.6px;
+  font-weight:800;
+}

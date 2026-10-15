@@ -204,19 +204,20 @@ export default function WeeklyProgramming({year,month,dashboard}){
 
     <section className="tf-program-indicator-board" aria-label="Indicadores de programación semanal">
       <div className="tf-program-month-ref">
-        <span>REFERENCIA DEL MES · {SPEC_NAMES[specialty]}</span>
+        <span>TOTAL DEL MES · {SPEC_NAMES[specialty]}</span>
         <b>{monthPmpCount} PMP</b>
         <i>·</i>
         <b>{fmt(monthPmpHH,1)} H-H</b>
+        <small>Dato fijo del mes</small>
       </div>
 
       <article className="tf-program-remaining-card">
         <div>
-          <span>PMP + H-H QUE QUEDAN</span>
-          <small>Resultado acumulado de los cierres anteriores a la semana seleccionada</small>
+          <span>PENDIENTE A LA FECHA</span>
+          <small>Parte del PMP mensual que aún no ha quedado finalizada o anulada en los cierres anteriores</small>
         </div>
         <div className="tf-program-remaining-values">
-          <div><b>{remainingWorkCount}</b><span>PMP + Backlog pendientes</span></div>
+          <div><b>{remainingWorkCount}</b><span>PMP pendientes</span></div>
           <div><b>{fmt(remainingWorkHH,1)}</b><span>H-H pendientes</span></div>
         </div>
       </article>

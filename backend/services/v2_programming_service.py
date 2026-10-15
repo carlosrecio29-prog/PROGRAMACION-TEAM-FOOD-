@@ -265,68 +265,28 @@ def _monthly_demand(conn, month_date: date, specialty: str, exclude_programming_
             AND o.periodo=:period
             AND NOT COALESCE(p.es_operacion,false)
         ),
-        prior_closed_items AS (
-          SELECT
-            pi.orden_mantenimiento_id,
-            max(pi.hh_programadas) AS hh_programadas,
-            bool_or(COALESCE(pi.finalizado,false) OR COALESCE(pi.anulado,false)) AS resuelta
+        resolved_before_week AS (
+          SELECT DISTINCT pi.orden_mantenimiento_id
           FROM programacion.programacion_item_v2 pi
           JOIN programacion.programacion_semanal_v2 ps ON ps.id=pi.programacion_id
           WHERE ps.especialidad=:specialty
             AND ps.estado='CERRADA'
             AND ps.semana_fin < :week_start
             AND ps.semana_fin >= :period
-          GROUP BY pi.orden_mantenimiento_id
-        ),
-        prior_unplanned_finished AS (
-          SELECT DISTINCT snp.orden_mantenimiento_id
-          FROM programacion.seguimiento_no_programado_v2 snp
-          JOIN programacion.programacion_semanal_v2 ps ON ps.id=snp.programacion_id
-          WHERE snp.orden_mantenimiento_id IS NOT NULL
-            AND ps.especialidad=:specialty
-            AND ps.semana_fin < :week_start
-            AND ps.semana_fin >= :period
-        ),
-        prior_pending_backlog AS (
-          SELECT
-            pci.orden_mantenimiento_id,
-            CASE
-              WHEN p.numero_personas_efectivo IS NOT NULL
-               AND COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min) IS NOT NULL
-              THEN round(
-                COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min)/60.0
-                * p.numero_personas_efectivo,
-                2
-              )
-              ELSE pci.hh_programadas
-            END AS hh
-          FROM prior_closed_items pci
-          JOIN programacion.orden_mantenimiento o ON o.id=pci.orden_mantenimiento_id
-          LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
-          WHERE pci.resuelta=false
-        ),
-        universe AS (
-          SELECT orden_mantenimiento_id,hh FROM month_pmp
-          UNION
-          SELECT orden_mantenimiento_id,hh FROM prior_pending_backlog
-        ),
-        dedup AS (
-          SELECT orden_mantenimiento_id,max(hh) AS hh
-          FROM universe
-          GROUP BY orden_mantenimiento_id
-        ),
-        resolved AS (
-          SELECT orden_mantenimiento_id FROM prior_closed_items WHERE resuelta=true
-          UNION
-          SELECT orden_mantenimiento_id FROM prior_unplanned_finished
+            AND (
+              COALESCE(pi.finalizado,false)=true
+              OR COALESCE(pi.anulado,false)=true
+            )
         )
         SELECT
           count(*)::int AS remaining_count,
-          round(COALESCE(sum(d.hh),0),2) AS remaining_hh,
-          count(*) FILTER (WHERE d.hh IS NULL)::int AS missing_hh
-        FROM dedup d
+          round(COALESCE(sum(mp.hh),0),2) AS remaining_hh,
+          count(*) FILTER (WHERE mp.hh IS NULL)::int AS missing_hh
+        FROM month_pmp mp
         WHERE NOT EXISTS (
-          SELECT 1 FROM resolved r WHERE r.orden_mantenimiento_id=d.orden_mantenimiento_id
+          SELECT 1
+          FROM resolved_before_week r
+          WHERE r.orden_mantenimiento_id=mp.orden_mantenimiento_id
         )
     """), {
         "period": period,
