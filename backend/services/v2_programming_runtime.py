@@ -271,7 +271,31 @@ def get_week_programming(*, date_from: date, date_to: date, specialty: str) -> d
               END AS origen,
               current_item.estado_cierre,
               current_item.finalizado,
-              current_item.verificado_en
+              current_item.verificado_en,
+              -- Detectada como ejecutada en el seguimiento abierto, pero
+              -- aun NO descontada por cierre (respetar el saldo historico).
+              (
+                current_item.id IS NULL
+                AND EXISTS (
+                  SELECT 1
+                  FROM programacion.seguimiento_no_programado_v2 snp
+                  JOIN programacion.programacion_semanal_v2 tracking_week
+                    ON tracking_week.id=snp.programacion_id
+                  WHERE tracking_week.especialidad=:specialty
+                    AND tracking_week.estado<>'CERRADA'
+                    AND tracking_week.semana_inicio<=:date_from
+                    AND tracking_week.semana_inicio>=date_trunc('month',CAST(:date_from AS date))::date
+                    AND upper(COALESCE(snp.estado_calendario,'')) LIKE 'FINALIZ%'
+                    AND (
+                      snp.orden_mantenimiento_id=o.id
+                      OR (
+                        snp.numero_ot IS NOT NULL
+                        AND o.numero_ot IS NOT NULL
+                        AND upper(btrim(snp.numero_ot))=upper(btrim(o.numero_ot))
+                      )
+                    )
+                )
+              ) AS ejecutada_pendiente_cierre
             FROM base_universe bu
             JOIN programacion.orden_mantenimiento o ON o.id=bu.orden_mantenimiento_id
             JOIN programacion.activo a ON a.id=o.activo_id
@@ -391,9 +415,10 @@ def save_week_programming(*, date_from: date, date_to: date, specialty: str, ord
                 FROM programacion.seguimiento_no_programado_v2 snp
                 JOIN programacion.programacion_semanal_v2 closed_week
                   ON closed_week.id=snp.programacion_id
-                WHERE closed_week.estado='CERRADA'
-                  AND closed_week.especialidad=:specialty
-                  AND closed_week.semana_fin<:date_from
+                WHERE closed_week.especialidad=:specialty
+                  AND closed_week.semana_inicio<=:date_from
+                  AND closed_week.semana_inicio>=date_trunc('month',CAST(:date_from AS date))::date
+                  AND upper(COALESCE(snp.estado_calendario,'')) LIKE 'FINALIZ%'
                   AND (
                     snp.orden_mantenimiento_id=o.id
                     OR (
@@ -409,8 +434,9 @@ def save_week_programming(*, date_from: date, date_to: date, specialty: str, ord
         if executed_outside:
             first_ot = executed_outside[0] or "SIN ASIGNAR"
             raise V2ProgrammingError(
-                f"La OT {first_ot} ya fue detectada como FINALIZADA fuera de programación "
-                "y no puede volver a programarse."
+                f"La OT {first_ot} está registrada como FINALIZADA fuera de programación "
+                "en un seguimiento anterior o actual. No se puede programar de nuevo; "
+                "debe confirmarse el cierre correspondiente."
             )
 
         rows = [dict(r) for r in conn.execute(text("""
