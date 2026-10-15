@@ -23,7 +23,9 @@ function ActivityGroup({kind,rows,dashboard,editing,selected,closedWeek,filters,
   const selectedVisible=visible.filter(row=>selected.has(Number(row.orden_mantenimiento_id))).length
   return <section className={'v2-activity-section tf-program-table-section '+kind} aria-label={config.title}>
     <div className="tf-program-table-head">
-      <div><h3>{config.title}</h3><p>{config.description}</p></div>
+      <div><h3>{config.title}</h3><p>{config.description}</p>
+        {!editing&&<small className="tf-program-color-legend">Verde y subrayado: programadas en esta semana. Las no seleccionadas siguen al próximo corte sólo si el cierre confirma que continúan pendientes.</small>}
+      </div>
       <Badge tone={config.tone}>{editing?`${selectedVisible} seleccionadas · ${visible.length} total`:`${selectedVisible} programadas ✓ · ${visible.length-selectedVisible} no seleccionadas`}</Badge>
     </div>
     <div className="tf-table-filterbar" aria-label={'Filtros de '+config.title}>
