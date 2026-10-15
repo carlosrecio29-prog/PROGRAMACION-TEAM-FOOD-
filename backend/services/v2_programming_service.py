@@ -245,7 +245,7 @@ def _monthly_demand(conn, month_date: date, specialty: str, exclude_programming_
         "exclude_programming_id": exclude_programming_id,
     }).mappings().one()
 
-    remaining_for_week = conn.execute(text("""
+    workload_for_week = conn.execute(text("""
         WITH month_pmp AS (
           SELECT
             o.id AS orden_mantenimiento_id,
@@ -258,12 +258,63 @@ def _monthly_demand(conn, month_date: date, specialty: str, exclude_programming_
                 2
               )
               ELSE NULL
-            END AS hh
+            END AS hh,
+            'PMP_MES'::text AS origen
           FROM programacion.orden_mantenimiento o
           JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
           WHERE o.especialidad=:specialty
             AND o.periodo=:period
             AND NOT COALESCE(p.es_operacion,false)
+        ),
+        initial_backlog AS (
+          SELECT
+            o.id AS orden_mantenimiento_id,
+            CASE
+              WHEN p.numero_personas_efectivo IS NOT NULL
+               AND COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min) IS NOT NULL
+              THEN round(
+                COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min)/60.0
+                * p.numero_personas_efectivo,
+                2
+              )
+              ELSE NULL
+            END AS hh,
+            'BACKLOG'::text AS origen
+          FROM programacion.backlog_v2 b
+          JOIN programacion.orden_mantenimiento o ON o.id=b.orden_mantenimiento_id
+          JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
+          WHERE b.especialidad=:specialty
+            AND NOT COALESCE(p.es_operacion,false)
+            AND COALESCE(
+              b.primera_semana_origen_inicio,
+              b.semana_origen_inicio,
+              o.periodo
+            ) < :period
+            AND (
+              b.estado_seguimiento IN ('PENDIENTE_DISPONIBLE','PENDIENTE_PROGRAMADA')
+              OR (
+                b.estado_seguimiento='FINALIZADA'
+                AND b.finalizado_en IS NOT NULL
+                AND b.finalizado_en::date >= :period
+              )
+              OR (
+                b.estado_seguimiento='ANULADA'
+                AND COALESCE(b.ultimo_cierre_en,b.actualizado_en)::date >= :period
+              )
+            )
+        ),
+        base_universe AS (
+          SELECT
+            orden_mantenimiento_id,
+            max(hh) AS hh,
+            bool_or(origen='PMP_MES') AS es_pmp_mes,
+            bool_or(origen='BACKLOG') AS es_backlog
+          FROM (
+            SELECT * FROM month_pmp
+            UNION ALL
+            SELECT * FROM initial_backlog
+          ) u
+          GROUP BY orden_mantenimiento_id
         ),
         resolved_before_week AS (
           SELECT DISTINCT pi.orden_mantenimiento_id
@@ -279,15 +330,36 @@ def _monthly_demand(conn, month_date: date, specialty: str, exclude_programming_
             )
         )
         SELECT
-          count(*)::int AS remaining_count,
-          round(COALESCE(sum(mp.hh),0),2) AS remaining_hh,
-          count(*) FILTER (WHERE mp.hh IS NULL)::int AS missing_hh
-        FROM month_pmp mp
-        WHERE NOT EXISTS (
-          SELECT 1
-          FROM resolved_before_week r
-          WHERE r.orden_mantenimiento_id=mp.orden_mantenimiento_id
-        )
+          count(*)::int AS base_total_count,
+          round(COALESCE(sum(bu.hh),0),2) AS base_total_hh,
+          count(*) FILTER (WHERE bu.hh IS NULL)::int AS base_missing_hh,
+          count(*) FILTER (WHERE bu.es_pmp_mes)::int AS pmp_month_count,
+          round(COALESCE(sum(bu.hh) FILTER (WHERE bu.es_pmp_mes),0),2) AS pmp_month_hh,
+          count(*) FILTER (WHERE bu.es_backlog AND NOT bu.es_pmp_mes)::int AS initial_backlog_count,
+          round(COALESCE(sum(bu.hh) FILTER (WHERE bu.es_backlog AND NOT bu.es_pmp_mes),0),2) AS initial_backlog_hh,
+          count(*) FILTER (
+            WHERE NOT EXISTS (
+              SELECT 1
+              FROM resolved_before_week r
+              WHERE r.orden_mantenimiento_id=bu.orden_mantenimiento_id
+            )
+          )::int AS remaining_count,
+          round(COALESCE(sum(bu.hh) FILTER (
+            WHERE NOT EXISTS (
+              SELECT 1
+              FROM resolved_before_week r
+              WHERE r.orden_mantenimiento_id=bu.orden_mantenimiento_id
+            )
+          ),0),2) AS remaining_hh,
+          count(*) FILTER (
+            WHERE bu.hh IS NULL
+              AND NOT EXISTS (
+                SELECT 1
+                FROM resolved_before_week r
+                WHERE r.orden_mantenimiento_id=bu.orden_mantenimiento_id
+              )
+          )::int AS remaining_missing_hh
+        FROM base_universe bu
     """), {
         "period": period,
         "specialty": specialty,
@@ -308,9 +380,16 @@ def _monthly_demand(conn, month_date: date, specialty: str, exclude_programming_
         "total_pending_count_base": int(workload["total_pending_count_base"] or 0),
         "total_pending_hh_base": round(float(workload["total_pending_hh_base"] or 0),2),
         "total_missing_hh_count": int(workload["total_missing_hh_count"] or 0),
-        "remaining_for_week_count": int(remaining_for_week["remaining_count"] or 0),
-        "remaining_for_week_hh": round(float(remaining_for_week["remaining_hh"] or 0),2),
-        "remaining_for_week_missing_hh": int(remaining_for_week["missing_hh"] or 0),
+        "workload_base_count": int(workload_for_week["base_total_count"] or 0),
+        "workload_base_hh": round(float(workload_for_week["base_total_hh"] or 0),2),
+        "workload_base_missing_hh": int(workload_for_week["base_missing_hh"] or 0),
+        "workload_pmp_month_count": int(workload_for_week["pmp_month_count"] or 0),
+        "workload_pmp_month_hh": round(float(workload_for_week["pmp_month_hh"] or 0),2),
+        "workload_initial_backlog_count": int(workload_for_week["initial_backlog_count"] or 0),
+        "workload_initial_backlog_hh": round(float(workload_for_week["initial_backlog_hh"] or 0),2),
+        "remaining_for_week_count": int(workload_for_week["remaining_count"] or 0),
+        "remaining_for_week_hh": round(float(workload_for_week["remaining_hh"] or 0),2),
+        "remaining_for_week_missing_hh": int(workload_for_week["remaining_missing_hh"] or 0),
     }
 
 

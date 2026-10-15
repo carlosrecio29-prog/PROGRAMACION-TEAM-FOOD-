@@ -125,8 +125,12 @@ export default function WeeklyProgramming({year,month,dashboard}){
   const remaining=Math.max(0,target-selectedHH)
 
   const monthlyBase=data?.monthly_demand||{}
-  const monthPmpCount=number(monthlyBase.pmp_count)
-  const monthPmpHH=number(monthlyBase.pmp_hh)
+  const monthPmpCount=number(monthlyBase.workload_pmp_month_count,monthlyBase.pmp_count)
+  const monthPmpHH=number(monthlyBase.workload_pmp_month_hh,monthlyBase.pmp_hh)
+  const initialBacklogCount=number(monthlyBase.workload_initial_backlog_count)
+  const initialBacklogHH=number(monthlyBase.workload_initial_backlog_hh)
+  const workloadBaseCount=number(monthlyBase.workload_base_count,monthPmpCount+initialBacklogCount)
+  const workloadBaseHH=number(monthlyBase.workload_base_hh,monthPmpHH+initialBacklogHH)
   const remainingWorkCount=number(monthlyBase.remaining_for_week_count)
   const remainingWorkHH=number(monthlyBase.remaining_for_week_hh)
   const remainingMissingHH=number(monthlyBase.remaining_for_week_missing_hh)
@@ -204,20 +208,20 @@ export default function WeeklyProgramming({year,month,dashboard}){
 
     <section className="tf-program-indicator-board" aria-label="Indicadores de programación semanal">
       <div className="tf-program-month-ref">
-        <span>TOTAL DEL MES · {SPEC_NAMES[specialty]}</span>
-        <b>{monthPmpCount} PMP</b>
+        <span>TOTAL PMP + BACKLOG · {SPEC_NAMES[specialty]}</span>
+        <b>{workloadBaseCount} OT</b>
         <i>·</i>
-        <b>{fmt(monthPmpHH,1)} H-H</b>
-        <small>Dato fijo del mes</small>
+        <b>{fmt(workloadBaseHH,1)} H-H</b>
+        <small>{monthPmpCount} PMP del mes + {initialBacklogCount} Backlog heredado · dato fijo</small>
       </div>
 
       <article className="tf-program-remaining-card">
         <div>
           <span>PENDIENTE A LA FECHA</span>
-          <small>Parte del PMP mensual que aún no ha quedado finalizada o anulada en los cierres anteriores</small>
+          <small>Saldo real del PMP del mes + Backlog después de los cierres anteriores a esta semana</small>
         </div>
         <div className="tf-program-remaining-values">
-          <div><b>{remainingWorkCount}</b><span>PMP pendientes</span></div>
+          <div><b>{remainingWorkCount}</b><span>OT pendientes</span></div>
           <div><b>{fmt(remainingWorkHH,1)}</b><span>H-H pendientes</span></div>
         </div>
       </article>
