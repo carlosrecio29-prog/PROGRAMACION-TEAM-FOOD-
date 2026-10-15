@@ -64,6 +64,20 @@ def get_week_programming(*, date_from: date, date_to: date, specialty: str) -> d
                        )
                   )
                 )
+                AND (
+                  ci.id IS NOT NULL
+                  OR NOT EXISTS (
+                    SELECT 1
+                    FROM programacion.programacion_item_v2 prev_item
+                    JOIN programacion.programacion_semanal_v2 prev_program
+                      ON prev_program.id=prev_item.programacion_id
+                    WHERE prev_item.orden_mantenimiento_id=o.id
+                      AND prev_program.especialidad=:specialty
+                      AND prev_program.estado='CERRADA'
+                      AND prev_program.semana_fin<:date_from
+                      AND COALESCE(prev_item.anulado,false)=true
+                  )
+                )
                 AND p.numero_personas_efectivo IS NOT NULL
                 AND p.tiempo_parada_efectivo_min IS NOT NULL
                 AND p.requiere_parada IS NOT NULL
