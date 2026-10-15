@@ -315,9 +315,10 @@ export default function WeeklyProgramming({year,month,dashboard}){
       {executedPendingClose.length>0&&<div className="tf-program-executed-warning" role="status">
         <strong>{executedPendingClose.length} OT detectadas como finalizadas fuera de programación, pendientes de cierre.</strong>
         <span>Se apartan de Equipo operando, Equipo detenido y Backlog para evitar programarlas otra vez.
-        El saldo de OT al inicio de la semana todavía las incluye hasta confirmar el cierre correspondiente.</span>
-        <small>{executedPendingClose.slice(0,8).map(row=>row.numero_ot||'SIN ASIGNAR').join(' · ')}
-          {executedPendingClose.length>8?` · +${executedPendingClose.length-8} más`:''}</small>
+        <b>{listedRows.length} OT siguen visibles en las tablas</b>; las {executedPendingClose.length} detectadas se descuentan del saldo oficial
+        únicamente cuando se confirme el cierre de su semana.</span>
+        <small>{executedPendingClose.slice(0,15).map(row=>row.numero_ot||'SIN ASIGNAR').join(' · ')}
+          {executedPendingClose.length>15?` · +${executedPendingClose.length-15} más`:''}</small>
       </div>}
 
       {remainingMissingHH>0&&(
