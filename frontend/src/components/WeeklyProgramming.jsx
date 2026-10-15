@@ -131,14 +131,17 @@ export default function WeeklyProgramming({year,month,dashboard}){
   const initialBacklogHH=number(monthlyBase.workload_initial_backlog_hh)
   const workloadBaseCount=number(monthlyBase.workload_base_count,monthPmpCount+initialBacklogCount)
   const workloadBaseHH=number(monthlyBase.workload_base_hh,monthPmpHH+initialBacklogHH)
-  const remainingMissingHH=number(monthlyBase.remaining_for_week_missing_hh)
+  const isFirstWeek=week?.weekNumber===1
+  const remainingMissingHH=number(isFirstWeek?monthlyBase.workload_base_missing_hh:monthlyBase.remaining_for_week_missing_hh)
   const closedWeek=data?.programming?.estado==='CERRADA'
   // En una semana cerrada, las OT guardadas solo se muestran en Programadas.
   // La consulta historica conserva el universo base, sin duplicar OT en las otras tablas.
   const listedRows=useMemo(()=>closedWeek
     ? allRows.filter(row=>!selected.has(Number(row.orden_mantenimiento_id)))
     : allRows,[allRows,selected,closedWeek])
-  const availableWorkMetrics=useMemo(()=>listedRows.reduce((totals,row)=>{
+  // El indicador muestra la carga al COMIENZO del corte: nunca resta
+  // las OT seleccionadas en la misma semana antes de su cierre.
+  const availableWorkMetrics=useMemo(()=>allRows.reduce((totals,row)=>{
     const hh=number(row.hh)
     const isBacklog=row.origen==='BACKLOG'||row.origen_backlog===true||row.es_backlog===true
     totals.count+=1
@@ -146,11 +149,13 @@ export default function WeeklyProgramming({year,month,dashboard}){
     if(isBacklog)totals.backlogHH+=hh
     else totals.pmpHH+=hh
     return totals
-  },{count:0,hh:0,pmpHH:0,backlogHH:0}),[listedRows])
-  const remainingWorkCount=availableWorkMetrics.count
-  const remainingWorkHH=round2(availableWorkMetrics.hh)
-  const remainingPmpHH=round2(availableWorkMetrics.pmpHH)
-  const remainingBacklogHH=round2(availableWorkMetrics.backlogHH)
+  },{count:0,hh:0,pmpHH:0,backlogHH:0}),[allRows])
+  // Primer corte = PMP del mes + backlog inicial completo (incluso OT sin HH).
+  // Cortes siguientes = suma exacta de las 3 tablas, ya descontados los cierres previos.
+  const remainingWorkCount=isFirstWeek?workloadBaseCount:availableWorkMetrics.count
+  const remainingWorkHH=isFirstWeek?workloadBaseHH:round2(availableWorkMetrics.hh)
+  const remainingPmpHH=isFirstWeek?monthPmpHH:round2(availableWorkMetrics.pmpHH)
+  const remainingBacklogHH=isFirstWeek?initialBacklogHH:round2(availableWorkMetrics.backlogHH)
   const technicianMonthHH=number(monthlyBase.technician_month_preventive_hh)
   const technicianRemainingHH=number(monthlyBase.technician_remaining_preventive_hh)
   const weeklyProgressPct=target>0?Math.min(100,selectedHH/target*100):0
@@ -237,8 +242,10 @@ export default function WeeklyProgramming({year,month,dashboard}){
       <div className="tf-program-status-row">
         <article className="tf-program-remaining-card">
           <div>
-            <span>{closedWeek?'NO PROGRAMADAS EN ESTA SEMANA':'PENDIENTE A LA FECHA'}</span>
-            <small>{closedWeek?'OT del universo original que no se seleccionaron en esta semana':'Actividades disponibles en Equipo operando + Equipo detenido + Backlog'}</small>
+            <span>OT PENDIENTES AL INICIO DE LA SEMANA</span>
+            <small>{isFirstWeek
+              ? 'PMP total del mes + backlog heredado, antes de descontar cualquier cierre'
+              : 'Equipo operando + Equipo detenido + Backlog; solo descuentan cierres anteriores confirmados'}</small>
           </div>
           <div className="tf-program-remaining-values">
             <div><b>{remainingWorkCount}</b><span>OT pendientes</span></div>
@@ -261,7 +268,9 @@ export default function WeeklyProgramming({year,month,dashboard}){
       </div>
 
       {remainingMissingHH>0&&(
-        <div className="tf-program-data-warning">{remainingMissingHH} actividad(es) pendientes no tienen H-H calculables y no están incluidas en la comparación de horas.</div>
+        <div className="tf-program-data-warning">{remainingMissingHH} actividad(es) sin H-H calculables: {isFirstWeek
+          ? 'se incluyen en las OT iniciales, pero no en las H-H ni en las tablas programables.'
+          : 'requieren completar datos y no se incluyen en el total de las tres tablas ni en sus H-H.'}</div>
       )}
 
       <div className="tf-week-progress-card">
