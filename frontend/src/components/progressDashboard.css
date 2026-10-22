@@ -533,3 +533,86 @@
   .v2-progress-official-label{align-items:flex-start;flex-direction:column;gap:2px}
 }
 
+
+
+/* ---------- Cumplimiento mensual por especialidad ---------- */
+.v2-progress-specialty-summary{
+  margin-top:13px;
+  padding:13px 14px;
+  border:1px solid #d7e3ec;
+  border-radius:13px;
+  background:#f8fbfd;
+}
+.v2-progress-specialty-head{
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap:14px;
+}
+.v2-progress-specialty-head h4{
+  margin:4px 0 0;
+  color:#1f405c;
+  font-size:14px;
+}
+.v2-progress-specialty-head>small{
+  max-width:430px;
+  color:#7b8d9d;
+  font-size:7.2px;
+  line-height:1.35;
+  text-align:right;
+}
+.v2-progress-specialty-grid{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:8px;
+  margin-top:11px;
+}
+.v2-progress-specialty-grid article{
+  min-height:104px;
+  padding:11px 12px;
+  border:1px solid #dde7ee;
+  border-radius:10px;
+  background:#fff;
+}
+.v2-progress-specialty-grid article>span{
+  display:block;
+  color:#6d8193;
+  font-size:7px;
+  font-weight:950;
+  text-transform:uppercase;
+  letter-spacing:.25px;
+}
+.v2-progress-specialty-grid strong{
+  display:block;
+  margin-top:8px;
+  color:#173d5a;
+  font-size:23px;
+  line-height:1;
+}
+.v2-progress-specialty-grid strong em{
+  font-size:9px;
+  font-style:normal;
+  font-weight:900;
+  color:#708496;
+}
+.v2-progress-specialty-grid b{
+  display:block;
+  margin-top:6px;
+  color:#287052;
+  font-size:11px;
+}
+.v2-progress-specialty-grid small{
+  display:block;
+  margin-top:7px;
+  color:#8493a0;
+  font-size:6.8px;
+  line-height:1.3;
+}
+@media(max-width:900px){
+  .v2-progress-specialty-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:650px){
+  .v2-progress-specialty-head{align-items:flex-start;flex-direction:column}
+  .v2-progress-specialty-head>small{text-align:left}
+  .v2-progress-specialty-grid{grid-template-columns:1fr}
+}

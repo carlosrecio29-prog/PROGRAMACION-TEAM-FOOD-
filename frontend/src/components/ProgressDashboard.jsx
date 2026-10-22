@@ -40,6 +40,7 @@ export default function ProgressDashboard({year,month,full=false,onOpenMonthly})
   const top=data?.monthly||{};
   const totals=data?.weekly_totals||{};
   const operational=data?.operational||{};
+  const completedBySpecialty=data?.completed_by_specialty||[];
   const overallProgress=Math.max(0,Math.min(100,number(top.progress_ot_pct||0)));
   const showReport=async(programmingId=null)=>{
     const key=programmingId===null?"month":String(programmingId);
@@ -125,6 +126,24 @@ export default function ProgressDashboard({year,month,full=false,onOpenMonthly})
         <div className="v2-progress-live-note">
           <b>Lectura operativa:</b> estos valores pueden cambiar con cada nueva Lista de Calendario.
           El resultado definitivo continúa siendo el Cierre semanal.
+        </div>
+      </div>
+
+      <div className="v2-progress-specialty-summary">
+        <div className="v2-progress-specialty-head">
+          <div>
+            <span className="v2-kicker">CUMPLIMIENTO DEL MES POR ESPECIALIDAD</span>
+            <h4>OT cumplidas y H-H acumuladas</h4>
+          </div>
+          <small>OT únicas finalizadas · incluye ejecuciones fuera de programación · excluye anuladas</small>
+        </div>
+        <div className="v2-progress-specialty-grid">
+          {completedBySpecialty.map(row=><article key={row.especialidad}>
+            <span>{row.name||NAMES[row.especialidad]||row.especialidad}</span>
+            <strong>{count(row.ot_completed)} <em>OT</em></strong>
+            <b>{hh(row.hh_completed)} H-H</b>
+            <small>{count(row.scheduled_completed)} programadas · {count(row.unplanned_completed)} fuera de programación</small>
+          </article>)}
         </div>
       </div>
 

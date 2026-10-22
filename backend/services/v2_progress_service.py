@@ -299,10 +299,132 @@ def get_progress(year: int, month: int) -> dict[str, Any]:
         """), {"begin": begin, "end": end}).mappings()]
         tracking = {int(row["programacion_id"]): row for row in tracking_rows}
 
+        completed_rows = [dict(r) for r in conn.execute(text("""
+            WITH month_programs AS (
+              SELECT id,especialidad,estado
+              FROM programacion.programacion_semanal_v2
+              WHERE semana_inicio >= :begin AND semana_inicio < :end
+            ),
+            latest_tracking AS (
+              SELECT DISTINCT ON (t.programacion_id)
+                     t.programacion_id,t.id AS seguimiento_id
+              FROM programacion.seguimiento_semanal_v2 t
+              JOIN month_programs mp ON mp.id=t.programacion_id
+              ORDER BY t.programacion_id,t.registrado_en DESC,t.id DESC
+            ),
+            scheduled_completed AS (
+              SELECT
+                mp.especialidad,
+                i.orden_mantenimiento_id,
+                o.numero_ot,
+                i.hh_programadas::numeric AS hh,
+                'PROGRAMADA'::text AS fuente,
+                1 AS prioridad,
+                NULL::bigint AS source_id
+              FROM month_programs mp
+              JOIN programacion.programacion_item_v2 i ON i.programacion_id=mp.id
+              JOIN programacion.orden_mantenimiento o ON o.id=i.orden_mantenimiento_id
+              WHERE mp.estado='CERRADA'
+                AND COALESCE(i.finalizado,false)=true
+                AND COALESCE(i.anulado,false)=false
+
+              UNION ALL
+
+              SELECT
+                mp.especialidad,
+                si.orden_mantenimiento_id,
+                si.numero_ot,
+                si.hh_programadas::numeric AS hh,
+                'PROGRAMADA'::text AS fuente,
+                2 AS prioridad,
+                NULL::bigint AS source_id
+              FROM month_programs mp
+              JOIN latest_tracking lt ON lt.programacion_id=mp.id
+              JOIN programacion.seguimiento_semanal_item_v2 si
+                ON si.seguimiento_id=lt.seguimiento_id
+              WHERE mp.estado<>'CERRADA'
+                AND COALESCE(si.finalizado,false)=true
+            ),
+            unplanned_completed AS (
+              SELECT
+                COALESCE(NULLIF(btrim(snp.especialidad),''),mp.especialidad) AS especialidad,
+                snp.orden_mantenimiento_id,
+                snp.numero_ot,
+                snp.hh_estimada::numeric AS hh,
+                'NO_PROGRAMADA'::text AS fuente,
+                3 AS prioridad,
+                snp.id AS source_id
+              FROM programacion.seguimiento_no_programado_v2 snp
+              JOIN month_programs mp ON mp.id=snp.programacion_id
+              WHERE snp.fecha_fin_orden IS NULL
+                 OR (
+                   snp.fecha_fin_orden::date >= :begin
+                   AND snp.fecha_fin_orden::date < :end
+                 )
+            ),
+            completed_union AS (
+              SELECT * FROM scheduled_completed
+              UNION ALL
+              SELECT * FROM unplanned_completed
+            ),
+            normalized AS (
+              SELECT *,
+                CASE
+                  WHEN orden_mantenimiento_id IS NOT NULL
+                    THEN 'ID:'||orden_mantenimiento_id::text
+                  WHEN NULLIF(btrim(numero_ot),'') IS NOT NULL
+                    THEN 'OT:'||upper(btrim(numero_ot))
+                  ELSE 'ROW:'||COALESCE(source_id,0)::text
+                END AS ot_key
+              FROM completed_union
+            ),
+            dedup AS (
+              SELECT DISTINCT ON (especialidad,ot_key)
+                     especialidad,ot_key,hh,fuente
+              FROM normalized
+              WHERE especialidad IN ('MEC','ELE','MET','SER')
+              ORDER BY especialidad,ot_key,prioridad
+            )
+            SELECT
+              especialidad,
+              count(*)::int AS ot_completed,
+              round(COALESCE(sum(hh),0),2) AS hh_completed,
+              count(*) FILTER (WHERE fuente='PROGRAMADA')::int AS scheduled_completed,
+              count(*) FILTER (WHERE fuente='NO_PROGRAMADA')::int AS unplanned_completed
+            FROM dedup
+            GROUP BY especialidad
+            ORDER BY especialidad
+        """), {"begin": begin, "end": end}).mappings()]
+
+    completed_by_specialty = {
+        code: {
+            "especialidad": code,
+            "name": name,
+            "ot_completed": 0,
+            "hh_completed": 0.0,
+            "scheduled_completed": 0,
+            "unplanned_completed": 0,
+        }
+        for code, name in SPECS.items()
+    }
+    for row in completed_rows:
+        code = row["especialidad"]
+        if code not in completed_by_specialty:
+            continue
+        completed_by_specialty[code].update({
+            "ot_completed": int(row["ot_completed"] or 0),
+            "hh_completed": round(float(row["hh_completed"] or 0), 2),
+            "scheduled_completed": int(row["scheduled_completed"] or 0),
+            "unplanned_completed": int(row["unplanned_completed"] or 0),
+        })
+
     return {
         "year": year,
         "month": month,
         **aggregate_progress(headers, items, pmp_count, begin, tracking),
+        "completed_by_specialty": [
+            completed_by_specialty[code] for code in ("MEC","ELE","MET","SER")
+        ],
     }
 
 
