@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { monthWeeks, initialWeekIndex } from "../features/planning/monthWeeks.js";
 import {
   downloadV2WeekTrackingExcel,
+  getV2Progress,
   getV2WeekProgramming,
   getV2WeekTracking,
   uploadV2WeekTracking,
@@ -69,8 +70,18 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
   const [search, setSearch] = useState("");
   const [downloading, setDownloading] = useState(false);
   const [showUnplanned, setShowUnplanned] = useState(false);
+  const [monthlyProgress, setMonthlyProgress] = useState([]);
 
   const week = weeks[Math.min(weekIndex, weeks.length - 1)] || weeks[0];
+
+  async function loadMonthlyProgress() {
+    try {
+      const progress = await getV2Progress(year, month);
+      setMonthlyProgress(progress?.monthly_progress_by_specialty || []);
+    } catch {
+      setMonthlyProgress([]);
+    }
+  }
 
   async function load() {
     if (!week) return;
@@ -95,7 +106,8 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
 
   useEffect(() => {
     setWeekIndex(initialWeekIndex(weeks));
-  }, [month]);
+    loadMonthlyProgress();
+  }, [year, month]);
   useEffect(() => {
     setFile(null);
     setMessage("");
@@ -119,7 +131,10 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
       const result = await uploadV2WeekTracking(programmingId, file);
       setTracking(result);
       setFile(null);
-      await onChanged?.();
+      await Promise.all([
+        loadMonthlyProgress(),
+        onChanged?.(),
+      ]);
       const saved = result.saved || {};
       setMessage(
         `Seguimiento actualizado sin cerrar la semana: ${number(saved.finalizadas)} OT programadas finalizadas · ${number(saved.no_programadas_nuevas)} nuevas fuera de la programación del corte · ${number(saved.pmp_backlog_finalizadas_detectadas_mes)} PMP/backlog verificados como finalizados en la Lista de Calendario, de los cuales ${number(saved.fuera_programacion_mes)} no estaban seleccionados en esta semana. Estas OT se apartan de próximas programaciones; el cierre semanal sigue siendo independiente.`,
@@ -235,6 +250,47 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
             <b>{id ? `#${id}` : "No creada"}</b>
             <small>{week?.label || ""}</small>
           </div>
+        </div>
+      </section>
+
+      <section className="v2-panel weekly-tracking-month-progress">
+        <div className="v2-section-head">
+          <div>
+            <span className="v2-kicker">AVANCE MENSUAL POR ESPECIALIDAD</span>
+            <h3>Estado acumulado del mes mientras haces seguimiento semanal</h3>
+            <p>
+              Estos círculos no esperan el cierre. Cada Lista de Calendario registrada en Seguimiento
+              suma inmediatamente las OT que aparezcan FINALIZADAS.
+            </p>
+          </div>
+        </div>
+        <div className="weekly-tracking-month-progress-grid">
+          {monthlyProgress.map((row) => {
+            const progress = Math.max(0, Math.min(100, number(row.progress_ot_pct)));
+            return (
+              <article className="weekly-tracking-month-progress-card" key={row.especialidad}>
+                <div className="weekly-tracking-month-ring" style={{ "--progress": progress + "%" }}>
+                  <div>
+                    <strong>{fmt(row.progress_ot_pct)}%</strong>
+                    <span>cumplimiento OT</span>
+                  </div>
+                </div>
+                <div className="weekly-tracking-month-copy">
+                  <span>{row.name || SPEC_NAMES[row.especialidad] || row.especialidad}</span>
+                  <h4><b>{number(row.completed_ot)}</b> de {number(row.total_ot)} OT</h4>
+                  <p><b>{fmt(row.completed_hh)}</b> de {fmt(row.total_hh)} H-H</p>
+                  <small>
+                    {number(row.scheduled_completed)} finalizadas programadas · {number(row.unplanned_completed)} fuera de programación
+                  </small>
+                </div>
+              </article>
+            );
+          })}
+          {!monthlyProgress.length && (
+            <div className="v2-empty weekly-tracking-month-progress-empty">
+              Aún no hay datos mensuales disponibles para mostrar.
+            </div>
+          )}
         </div>
       </section>
 
