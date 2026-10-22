@@ -535,10 +535,10 @@
 
 
 
-/* ---------- Cumplimiento mensual por especialidad ---------- */
+/* ---------- Avance mensual en círculos por especialidad ---------- */
 .v2-progress-specialty-summary{
   margin-top:13px;
-  padding:13px 14px;
+  padding:14px;
   border:1px solid #d7e3ec;
   border-radius:13px;
   background:#f8fbfd;
@@ -555,7 +555,7 @@
   font-size:14px;
 }
 .v2-progress-specialty-head>small{
-  max-width:430px;
+  max-width:440px;
   color:#7b8d9d;
   font-size:7.2px;
   line-height:1.35;
@@ -563,56 +563,68 @@
 }
 .v2-progress-specialty-grid{
   display:grid;
-  grid-template-columns:repeat(4,minmax(0,1fr));
-  gap:8px;
-  margin-top:11px;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:9px;
+  margin-top:12px;
 }
-.v2-progress-specialty-grid article{
-  min-height:104px;
-  padding:11px 12px;
-  border:1px solid #dde7ee;
-  border-radius:10px;
+.v2-progress-specialty-card{
+  display:grid;
+  grid-template-columns:116px minmax(0,1fr);
+  align-items:center;
+  gap:15px;
+  min-height:142px;
+  padding:13px;
+  border:1px solid #dce6ed;
+  border-radius:12px;
   background:#fff;
 }
-.v2-progress-specialty-grid article>span{
+.v2-progress-specialty-ring{
+  width:108px;
+  height:108px;
+}
+.v2-progress-specialty-ring::before{inset:10px}
+.v2-progress-specialty-ring strong{font-size:19px}
+.v2-progress-specialty-ring span{font-size:6.8px}
+.v2-progress-specialty-copy>span{
   display:block;
-  color:#6d8193;
-  font-size:7px;
+  color:#657d91;
+  font-size:7.5px;
   font-weight:950;
   text-transform:uppercase;
-  letter-spacing:.25px;
+  letter-spacing:.35px;
 }
-.v2-progress-specialty-grid strong{
-  display:block;
-  margin-top:8px;
+.v2-progress-specialty-copy h5{
+  margin:7px 0 5px;
+  color:#29455e;
+  font-size:12px;
+  line-height:1.25;
+}
+.v2-progress-specialty-copy h5 b{
   color:#173d5a;
-  font-size:23px;
-  line-height:1;
+  font-size:22px;
 }
-.v2-progress-specialty-grid strong em{
+.v2-progress-specialty-copy p{
+  margin:0;
+  color:#587085;
   font-size:9px;
-  font-style:normal;
-  font-weight:900;
-  color:#708496;
 }
-.v2-progress-specialty-grid b{
-  display:block;
-  margin-top:6px;
-  color:#287052;
-  font-size:11px;
+.v2-progress-specialty-copy p b{
+  color:#267152;
+  font-size:12px;
 }
-.v2-progress-specialty-grid small{
+.v2-progress-specialty-copy small{
   display:block;
   margin-top:7px;
   color:#8493a0;
   font-size:6.8px;
-  line-height:1.3;
+  line-height:1.35;
 }
 @media(max-width:900px){
-  .v2-progress-specialty-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .v2-progress-specialty-grid{grid-template-columns:1fr}
 }
 @media(max-width:650px){
   .v2-progress-specialty-head{align-items:flex-start;flex-direction:column}
   .v2-progress-specialty-head>small{text-align:left}
-  .v2-progress-specialty-grid{grid-template-columns:1fr}
+  .v2-progress-specialty-card{grid-template-columns:1fr;text-align:center}
+  .v2-progress-specialty-ring{margin:auto}
 }

@@ -40,7 +40,7 @@ export default function ProgressDashboard({year,month,full=false,onOpenMonthly})
   const top=data?.monthly||{};
   const totals=data?.weekly_totals||{};
   const operational=data?.operational||{};
-  const completedBySpecialty=data?.completed_by_specialty||[];
+  const monthlyProgressBySpecialty=data?.monthly_progress_by_specialty||[];
   const overallProgress=Math.max(0,Math.min(100,number(top.progress_ot_pct||0)));
   const showReport=async(programmingId=null)=>{
     const key=programmingId===null?"month":String(programmingId);
@@ -132,18 +132,29 @@ export default function ProgressDashboard({year,month,full=false,onOpenMonthly})
       <div className="v2-progress-specialty-summary">
         <div className="v2-progress-specialty-head">
           <div>
-            <span className="v2-kicker">CUMPLIMIENTO DEL MES POR ESPECIALIDAD</span>
-            <h4>OT cumplidas y H-H acumuladas</h4>
+            <span className="v2-kicker">AVANCE DEL MES POR ESPECIALIDAD</span>
+            <h4>OT y H-H cumplidas en tiempo real</h4>
           </div>
-          <small>OT únicas finalizadas · incluye ejecuciones fuera de programación · excluye anuladas</small>
+          <small>Se actualiza con cada Seguimiento semanal; no necesita esperar el cierre de la semana.</small>
         </div>
         <div className="v2-progress-specialty-grid">
-          {completedBySpecialty.map(row=><article key={row.especialidad}>
-            <span>{row.name||NAMES[row.especialidad]||row.especialidad}</span>
-            <strong>{count(row.ot_completed)} <em>OT</em></strong>
-            <b>{hh(row.hh_completed)} H-H</b>
-            <small>{count(row.scheduled_completed)} programadas · {count(row.unplanned_completed)} fuera de programación</small>
-          </article>)}
+          {monthlyProgressBySpecialty.map(row=>{
+            const progress=Math.max(0,Math.min(100,number(row.progress_ot_pct)));
+            return <article className="v2-progress-specialty-card" key={row.especialidad}>
+              <div className="v2-progress-specialty-ring v2-progress-ring" style={{"--progress":progress+"%"}}>
+                <div>
+                  <strong>{pct(row.progress_ot_pct)}</strong>
+                  <span>cumplimiento OT</span>
+                </div>
+              </div>
+              <div className="v2-progress-specialty-copy">
+                <span>{row.name||NAMES[row.especialidad]||row.especialidad}</span>
+                <h5><b>{count(row.completed_ot)}</b> de {count(row.total_ot)} OT</h5>
+                <p><b>{hh(row.completed_hh)}</b> de {hh(row.total_hh)} H-H</p>
+                <small>{count(row.scheduled_completed)} finalizadas programadas · {count(row.unplanned_completed)} fuera de programación</small>
+              </div>
+            </article>;
+          })}
         </div>
       </div>
 
