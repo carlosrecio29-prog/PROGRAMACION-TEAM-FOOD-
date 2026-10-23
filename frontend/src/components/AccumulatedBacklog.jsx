@@ -33,6 +33,9 @@ function originMonth(row) {
 
 function backlogReason(row) {
   const reason = String(row.motivo || "").toUpperCase();
+  if (reason.includes("CONCILIACI") || reason.includes("RECONCILIACI") || reason.includes("EXCEL")) {
+    return {label: "CONCILIACIÓN DE FUENTE", detail: "Incorporada al contrastar órdenes con el archivo de mantenimiento", tone: "backlog"};
+  }
   if (reason.includes("ARRASTRE INICIAL")) {
     return {
       label: "BACKLOG INICIAL",
@@ -64,8 +67,8 @@ function backlogReason(row) {
     };
   }
   return {
-    label: reason || "PENDIENTE",
-    detail: "Pendiente de seguimiento",
+    label: "SEGUIMIENTO",
+    detail: "Registro conservado en la cola de mantenimiento",
     tone: "backlog",
   };
 }
@@ -120,33 +123,23 @@ export default function AccumulatedBacklog({
 
   const rows = data.rows || [];
   const summary = data.summary || {};
+  const filtered = data.filtered_summary;
   function update(name, value) {
     setFilters((current) => ({ ...current, [name]: value }));
   }
 
   return (
     <div className="v2-stack v2-backlog-workspace">
-      <section className="v2-hero v2-backlog-hero">
-        <div>
-          <span className="v2-kicker">SEGUIMIENTO ACUMULADO</span>
-          <h2>Backlog activo hasta finalizar</h2>
-          <p>
-            Cada OT conserva el motivo por el que entró al backlog para separar
-            el arrastre inicial, los cambios de programación y los pendientes de cierres semanales.
-          </p>
-        </div>
-      </section>
-
       <section className="v2-backlog-indicators" aria-label="Indicadores de backlog">
         <div>
           <span>OT movidas a Backlog</span>
           <b>{number(summary.movidas)}</b>
-          <small>histórico total de la cola</small>
+          <small>histórico global · sin filtros</small>
         </div>
         <div className="september">
-          <span>Pendientes de septiembre</span>
+          <span>Arrastre inicial</span>
           <b>{number(summary.carga_inicial)}</b>
-          <small>arrastre inicial · septiembre 2026</small>
+          <small>carga inicial conservada en historial</small>
         </div>
         <div className="finalized">
           <span>Finalizadas por ingeniero</span>
@@ -172,8 +165,8 @@ export default function AccumulatedBacklog({
         <div className="v2-section-head">
           <div>
             <span className="v2-kicker">COLA OPERATIVA</span>
-            <h3>OT pendientes no finalizadas</h3>
-            <p>Filtra la cola sin depender de una semana.</p>
+            <h3>{filters.state === "FINALIZADA" ? "Historial de finalizadas" : filters.state === "ANULADA" ? "Historial de anuladas" : "Órdenes pendientes"}</h3>
+            <p>Acumulado de todos los períodos. Los contadores superiores son globales; la tabla aplica los filtros seleccionados.</p>
           </div>
           <Badge tone="backlog">{loading ? "Consultando..." : `${rows.length} visibles`}</Badge>
         </div>
@@ -183,6 +176,7 @@ export default function AccumulatedBacklog({
             <option value="PENDIENTE_DISPONIBLE">Pendiente disponible</option>
             <option value="PENDIENTE_PROGRAMADA">Pendiente programada</option>
             <option value="FINALIZADA">Finalizadas</option>
+            <option value="ANULADA">Anuladas · historial</option>
           </select>
           <select aria-label="Area de backlog" value={filters.area} onChange={(e) => update("area", e.target.value)}>
             <option value="">Todas las areas</option>
@@ -196,14 +190,20 @@ export default function AccumulatedBacklog({
           <input type="number" min="0" aria-label="Antigüedad mínima en días" placeholder="Edad mín. (días)" value={filters.age_min} onChange={(e) => update("age_min", e.target.value)} />
           <input type="number" min="0" aria-label="Antigüedad máxima en días" placeholder="Edad máx. (días)" value={filters.age_max} onChange={(e) => update("age_max", e.target.value)} />
         </div>
+        <div className="tf-backlog-filter-summary" aria-live="polite">
+          <span><b>{loading ? "Consultando…" : rows.length}</b> órdenes visibles</span>
+          {filtered && <><span><b>{number(filtered.pendientes_activas)}</b> pendientes activas con estos filtros</span><span><b>{fmt(filtered.hh_backlog_activo)}</b> H-H activas filtradas</span></>}
+          <button type="button" onClick={() => {setFilters({state:"", area:"", specialty:"", search:"", age_min:"", age_max:"", order_id:""}); onClearOrder?.();}}>Limpiar filtros</button>
+          <button type="button" disabled={loading} onClick={() => setRevision(value => value + 1)}>Actualizar</button>
+        </div>
         {filters.order_id && (
           <div className="v2-filter-context">
             Mostrando la OT seleccionada desde Cierre{" "}
             <button type="button" onClick={() => { update("order_id", ""); onClearOrder?.(); }}>Ver toda la cola</button>
           </div>
         )}
-        {error && <div className="v2-error">{error}</div>}
-        <div className="v2-table-wrap">
+        {error && <div className="v2-error" role="alert">{error}<button type="button" onClick={() => setRevision(value => value + 1)}>Reintentar</button></div>}
+        <div className="v2-table-wrap" role="region" aria-label="Órdenes de backlog" tabIndex={0} aria-busy={loading}>
           <table>
             <thead>
               <tr>
@@ -216,10 +216,10 @@ export default function AccumulatedBacklog({
                 return (
                   <tr key={r.id}>
                     <td>
-                      <Badge tone={r.estado_seguimiento === "PENDIENTE_PROGRAMADA" ? "warn" : r.estado_seguimiento === "FINALIZADA" ? "ok" : "backlog"}>
-                        {r.estado_seguimiento.replaceAll("_", " ")}
+                      <Badge tone={r.estado_seguimiento === "ANULADA" ? "neutral" : r.estado_seguimiento === "PENDIENTE_PROGRAMADA" ? "warn" : r.estado_seguimiento === "FINALIZADA" ? "ok" : "backlog"}>
+                        {String(r.estado_seguimiento || "SIN ESTADO").replaceAll("_", " ")}
                       </Badge>
-                      <small>{r.ultimo_resultado_cierre || "PENDIENTE"}</small>
+                      <small>{r.ultimo_resultado_cierre || "Sin cierre registrado"}</small>
                     </td>
                     <td>
                       <div className={String(r.motivo || "").toUpperCase().includes("SEPTIEMBRE 2026") ? "v2-backlog-month september" : "v2-backlog-month"}>
@@ -239,7 +239,8 @@ export default function AccumulatedBacklog({
                   </tr>
                 );
               })}
-              {!rows.length && !loading && <tr><td colSpan="11" className="v2-empty">No hay OT de Backlog con estos filtros.</td></tr>}
+              {loading && <tr><td colSpan="11" className="v2-empty" role="status">Consultando órdenes…</td></tr>}
+              {!rows.length && !loading && !error && <tr><td colSpan="11" className="v2-empty">No hay OT de Backlog con estos filtros.</td></tr>}
             </tbody>
           </table>
         </div>

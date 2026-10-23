@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   getHealth,
   getV2Dashboard,
@@ -7,7 +7,6 @@ import {
   getV2Technicians,
   uploadV2TechnicianSchedule,
   saveV2TechnicianComplement,
-  getV2Pmp,
   getV2WeekProgramming,
   saveV2WeekProgramming,
   downloadV2WeeklyReport,
@@ -23,11 +22,15 @@ import AccumulatedBacklog from "./components/AccumulatedBacklog";
 import OperationExclusions from "./components/OperationExclusions";
 import MonthlyClose from "./components/MonthlyClose";
 import AppShell from "./app/AppShell";
+import Summary from "./features/dashboard/Summary";
+import Pmp from "./features/planning/Pmp";
+import ExecutiveIndicators from "./features/dashboard/ExecutiveIndicators";
 import { navigationIds } from "./app/navigation";
 import Badge from "./shared/Badge";
 import "./styles.css";
 import "./backlog.css";
 import "./components/weeklyTracking.css";
+import "./app/workspace.css";
 
 const MONTHS = [
   "Enero",
@@ -61,320 +64,55 @@ function fmt(v, d = 1) {
     maximumFractionDigits: d,
   });
 }
-function ControlIcon({ type }) {
-  const common = {
-    viewBox: "0 0 48 48",
-    "aria-hidden": "true",
-    focusable: "false",
-  };
-  if (type === "calendar") {
-    return <svg {...common}><path d="M10 8h28a4 4 0 0 1 4 4v26a4 4 0 0 1-4 4H10a4 4 0 0 1-4-4V12a4 4 0 0 1 4-4Zm0 12v18h28V20H10Zm5-16v9m18-9v9M15 26h7v7h-7Zm11 0h7v7h-7Z" /></svg>;
-  }
-  if (type === "clock") {
-    return <svg {...common}><path d="M24 5a19 19 0 1 1 0 38 19 19 0 0 1 0-38Zm0 6a13 13 0 1 0 0 26 13 13 0 0 0 0-26Zm3 3v9.8l7 4-3 5-10-6V14h6Z" /></svg>;
-  }
-  if (type === "team") {
-    return <svg {...common}><path d="M18 23a8 8 0 1 1 0-16 8 8 0 0 1 0 16Zm17-2a6 6 0 1 1 0-12 6 6 0 0 1 0 12ZM4 42v-6c0-6.1 5-11 11-11h6c6 0 11 4.9 11 11v6H4Zm27 0v-6c0-3.2-1-6.1-2.9-8.4A10.8 10.8 0 0 1 33 26h4c4.9 0 9 4 9 9v7H31Z" /></svg>;
-  }
-  if (type === "check") {
-    return <svg {...common}><path d="M10 7h28a4 4 0 0 1 4 4v26a4 4 0 0 1-4 4H10a4 4 0 0 1-4-4V11a4 4 0 0 1 4-4Zm6 17-4 4 8 8 17-17-4-4-13 13-4-4Z" /></svg>;
-  }
-  if (type === "alert") {
-    return <svg {...common}><path d="M24 5 45 42H3L24 5Zm-3 13v12h6V18h-6Zm0 15v6h6v-6h-6Z" /></svg>;
-  }
-  if (type === "tools") {
-    return <svg {...common}><path d="M35.5 6a11 11 0 0 0-13.7 13.7L7 34.5A5.3 5.3 0 1 0 14.5 42l14.8-14.8A11 11 0 0 0 43 13.5l-7 7-8.5-8.5 8-6Z" /></svg>;
-  }
-  if (type === "report") {
-    return <svg {...common}><path d="M10 5h20l9 9v29H10V5Zm19 4v7h7l-7-7ZM16 24h17v5H16v-5Zm0 9h17v5H16v-5Zm0-18h8v5h-8v-5Z" /></svg>;
-  }
-  if (type === "bars") {
-    return <svg {...common}><path d="M7 39h35v4H3V6h4v33Zm6-4h6V23h-6v12Zm11 0h6V14h-6v21Zm11 0h6V8h-6v27Z" /></svg>;
-  }
-  return <svg {...common}><path d="M8 8h32v32H8z" /></svg>;
-}
-
-function Summary({ data, onNavigate, year, month }) {
-  const s = data?.summary || {};
-  const workload = data?.workload || {};
-  const progress = data?.tracking_progress || {};
-  const pmpPending = number(workload.pmp_pending_count);
-  const backlogAvailable = number(workload.backlog_available_count);
-  const totalToProgram = number(workload.total_pending_count);
-  const progressPct = Math.max(0, Math.min(100, number(progress.progress_pct)));
-  const finalizedOrders = number(progress.finalized_orders);
-  const scheduledFinalizedOrders = number(progress.scheduled_finalized_orders);
-  const unplannedFinalizedOrders = number(progress.unplanned_finalized_orders);
-  const totalOrders = number(progress.total_orders);
-  const pendingOrders = Math.max(0, number(progress.pending_orders));
-  const pmpOrders = number(progress.pmp_orders);
-  const backlogOrders = number(progress.backlog_orders);
-  const totalWorkloadHh = number(progress.total_workload_hh);
-  const finalizedWorkloadHh = Math.min(totalWorkloadHh, number(progress.finalized_workload_hh));
-  const pendingWorkloadHh = Math.max(0, totalWorkloadHh - finalizedWorkloadHh);
-  const progressHhPct = Math.max(0, Math.min(100, number(progress.progress_hh_pct)));
-
-  const quickActions = [
-    {
-      id: "advanceStops",
-      title: "Preparar paradas",
-      text: "Identificar y preparar actividades con equipo detenido",
-      icon: "calendar",
-    },
-    {
-      id: "technicians",
-      title: "Programación de técnicos",
-      text: "Turnos, especialidades y H-H disponibles",
-      icon: "team",
-    },
-    {
-      id: "programming",
-      title: "Programación semanal",
-      text: "Seleccionar PMP y Backlog según capacidad",
-      icon: "tools",
-    },
-    {
-      id: "tracking",
-      title: "Seguimiento de programación",
-      text: "Actualizar avance y detectar órdenes finalizadas",
-      icon: "report",
-    },
-  ];
-
-  return (
-    <div className="v2-stack v2-control-dashboard">
-      <div className="v2-control-counter-heading">
-        <span>CONTADORES DINÁMICOS</span>
-        <small>Los dos primeros disminuyen a medida que avanzas la programación. Técnicos muestra la capacidad mensual disponible para preventivo.</small>
-      </div>
-
-      <section className="v2-control-primary v2-control-primary-3">
-        <article>
-          <div className="v2-control-icon"><ControlIcon type="report" /></div>
-          <div>
-            <span>PMP PARA PROGRAMAR</span>
-            <strong>{totalToProgram}</strong>
-            <small>{pmpPending} PMP + {backlogAvailable} Backlog disponibles</small>
-            <small className="v2-control-total-ref">Total de referencia: {totalOrders} actividades</small>
-          </div>
-        </article>
-
-        <article className="workload">
-          <div className="v2-control-icon"><ControlIcon type="clock" /></div>
-          <div>
-            <span>H-H PMP + BACKLOG</span>
-            <strong>{fmt(workload.total_pending_hh, 1)}</strong>
-            <small>PMP pendiente + Backlog disponible</small>
-            <small className="v2-control-total-ref">Total de referencia: {fmt(totalWorkloadHh, 1)} H-H</small>
-          </div>
-        </article>
-
-        <article>
-          <div className="v2-control-icon"><ControlIcon type="team" /></div>
-          <div>
-            <span>H-H TÉCNICOS PROGRAMACIÓN</span>
-            <strong>{fmt(s.hh_tecnicos_preventivo_mes, 1)}</strong>
-            <small>H-H disponibles para preventivo (80% efectivo × 80% preventivo)</small>
-            <small className="v2-control-total-ref">H-H brutas del mes: {fmt(s.hh_tecnicos_mes, 1)}</small>
-          </div>
-        </article>
-      </section>
-
-      <section className="v2-control-body v2-control-body-main">
-        <div className="v2-control-shortcuts v2-control-shortcuts-main">
-          <div className="v2-control-panel-head">
-            <div>
-              <span className="v2-kicker">FLUJO DE TRABAJO</span>
-              <h3>Procesos principales</h3>
-            </div>
-          </div>
-
-          <div className="v2-control-action-list v2-control-action-list-main">
-            {quickActions.map((action, index) => (
-              <button
-                type="button"
-                key={action.id}
-                className="v2-control-action-button"
-                onClick={() => onNavigate(action.id)}
-              >
-                <span className="v2-control-action-step">{String(index + 1).padStart(2, "0")}</span>
-                <span className="v2-control-action-icon"><ControlIcon type={action.icon} /></span>
-                <span className="v2-control-action-copy">
-                  <b>{action.title}</b>
-                  <small>{action.text}</small>
-                </span>
-                <span className="v2-control-arrow">→</span>
-              </button>
-            ))}
-
-            <article className="v2-control-action-card v2-control-action-close v2-control-action-close-wide">
-              <div className="v2-control-action-main">
-                <span className="v2-control-action-step">05</span>
-                <span className="v2-control-action-icon"><ControlIcon type="check" /></span>
-                <span className="v2-control-action-copy">
-                  <b>Cierre de programa</b>
-                  <small>Formalizar el resultado semanal o consolidar el período completo</small>
-                </span>
-              </div>
-              <div className="v2-control-close-options">
-                <button type="button" onClick={() => onNavigate("closure")}>
-                  <span>Cierre semanal</span>
-                  <b>→</b>
-                </button>
-                <button type="button" onClick={() => onNavigate("monthly")}>
-                  <span>Cierre mensual</span>
-                  <b>→</b>
-                </button>
-              </div>
-            </article>
-          </div>
-        </div>
-
-        <button
-          type="button"
-          className="v2-dashboard-progress-card"
-          onClick={() => onNavigate("indicators")}
-          aria-label="Abrir Indicadores y seguimiento"
-        >
-          <div className="v2-dashboard-progress-head">
-            <div>
-              <span className="v2-kicker">AVANCE GENERAL</span>
-              <h3>Indicadores y seguimiento</h3>
-            </div>
-            <span className="v2-dashboard-progress-arrow">→</span>
-          </div>
-
-          <div className="v2-dashboard-progress-dual">
-            <div className="v2-dashboard-progress-unit">
-              <div
-                className="v2-dashboard-progress-ring"
-                style={{ "--progress-angle": `${progressPct * 3.6}deg` }}
-              >
-                <div>
-                  <strong>{fmt(progressPct, 1)}%</strong>
-                  <span>avance OT</span>
-                </div>
-              </div>
-              <div className="v2-dashboard-progress-unit-copy">
-                <strong>{finalizedOrders} de {totalOrders}</strong>
-                <small>órdenes finalizadas</small>
-              </div>
-            </div>
-
-            <div className="v2-dashboard-progress-unit">
-              <div
-                className="v2-dashboard-progress-ring v2-dashboard-progress-ring-hh"
-                style={{ "--progress-angle": `${progressHhPct * 3.6}deg` }}
-              >
-                <div>
-                  <strong>{fmt(progressHhPct, 1)}%</strong>
-                  <span>avance H-H</span>
-                </div>
-              </div>
-              <div className="v2-dashboard-progress-unit-copy">
-                <strong>{fmt(finalizedWorkloadHh, 1)} de {fmt(totalWorkloadHh, 1)}</strong>
-                <small>H-H finalizadas del mes</small>
-              </div>
-            </div>
-          </div>
-
-          <div className="v2-dashboard-progress-stats">
-            <span><b>{finalizedOrders}</b><small>OT finalizadas</small></span>
-            <span><b>{pendingOrders}</b><small>OT pendientes</small></span>
-            <span><b>{totalOrders}</b><small>Total OT</small></span>
-          </div>
-
-          <div className="v2-dashboard-progress-stats v2-dashboard-progress-stats-hh">
-            <span><b>{fmt(finalizedWorkloadHh, 1)}</b><small>H-H finalizadas</small></span>
-            <span><b>{fmt(pendingWorkloadHh, 1)}</b><small>H-H pendientes</small></span>
-            <span><b>{fmt(totalWorkloadHh, 1)}</b><small>Total H-H mes</small></span>
-          </div>
-
-          <div className="v2-dashboard-progress-source">
-            <span><b>{pmpOrders}</b> PMP del mes</span>
-            <span><b>{backlogOrders}</b> Backlog</span>
-            <span><b>{unplannedFinalizedOrders}</b> finalizadas fuera de programación</span>
-          </div>
-        </button>
-      </section>
-    </div>
-  );
-}
-
-function IndicatorsTracking({ data, year, month, onGoMonthly, onGoClosure, onTrackingChanged }) {
-  const [section, setSection] = useState("period");
+function IndicatorsTracking({ data, year, month, onGoMonthly, onGoClosure, onTrackingChanged, onNavigate }) {
+  const [section, setSection] = useState("executive");
   const s = data?.summary || {};
   const specialties = data?.specialties || [];
-  const totalHh = specialties.reduce((sum, row) => sum + Number(row.hh_calculables || 0), 0);
-  const totalRecords = Number(s.registros_listos || 0)
-    + Number(s.registros_sin_personas || 0)
-    + Number(s.registros_sin_tiempo_parada || 0)
-    + Number(s.registros_sin_plan_maestro || 0);
-  const readyPct = totalRecords
-    ? Math.round((Number(s.registros_listos || 0) / totalRecords) * 100)
-    : 100;
+  const totalHh = number(s.hh_calculables);
 
   const sections = [
+    {id: "executive", title: "Cartera del mes", text: "Actividades, calidad y prioridades.", meta: "Resumen ejecutivo"},
     {
       id: "period",
-      title: "Avance del período",
-      text: "Programación, cierres, tendencia semanal y reportes.",
-      meta: `${number(s.registros_pmp)} PMP`,
+      title: "Cumplimiento semanal",
+      text: "Ejecuciones programadas y avance observado.",
+      meta: "Seguimiento operativo",
     },
     {
-      id: "tracking",
-      title: "Seguimiento semanal",
-      text: "Avance diario de la programación sin realizar el cierre.",
-      meta: "OT en seguimiento",
+      id: "closed",
+      title: "Cierre confirmado",
+      text: "Resultado respaldado por cierres semanales.",
+      meta: "Consolidado del período",
     },
     {
       id: "quality",
       title: "PMP y calidad",
       text: "Carga por especialidad y preparación de la información.",
-      meta: `${readyPct}% listo`,
+      meta: `${number(s.registros_listos)} registros listos`,
     },
   ];
 
   return (
     <div className="v2-stack v2-indicators-view">
       <section className="v2-indicator-hub">
-        <div className="v2-indicator-hub-copy">
-          <span className="v2-kicker">CENTRO DE ANÁLISIS</span>
-          <h2>Indicadores y seguimiento</h2>
-          <p>
-            Consulta el estado del período, actualiza el avance semanal y revisa
-            la calidad del PMP desde un solo lugar.
-          </p>
-        </div>
-        <div className="v2-indicator-hub-tabs" role="tablist" aria-label="Secciones de indicadores">
+        <div className="tf-analysis-tabs" aria-label="Alcance de los indicadores">
           {sections.map((item) => (
             <button
               type="button"
-              role="tab"
-              aria-selected={section === item.id}
+              aria-current={section === item.id ? "true" : undefined}
               className={section === item.id ? "is-active" : ""}
               key={item.id}
               onClick={() => setSection(item.id)}
             >
               <span>{item.title}</span>
-              <small>{item.text}</small>
-              <b>{item.meta}</b>
             </button>
           ))}
         </div>
       </section>
 
-      {section === "period" && (
-        <ProgressDashboard year={year} month={month} onOpenMonthly={onGoMonthly} />
-      )}
-
-      {section === "tracking" && (
-        <WeeklyTracking
-          year={year}
-          month={month}
-          onOpenClosure={onGoClosure}
-          onChanged={onTrackingChanged}
-        />
+      {section === "executive" && <ExecutiveIndicators data={data} onNavigate={onNavigate} />}
+      {(section === "period" || section === "closed") && (
+        <ProgressDashboard year={year} month={month} scope={section === "closed" ? "closed" : "weekly"} onOpenMonthly={onGoMonthly} />
       )}
 
       {section === "quality" && (
@@ -429,14 +167,12 @@ function IndicatorsTracking({ data, year, month, onGoMonthly, onGoClosure, onTra
                 <p>Validación de los datos mínimos requeridos antes de programar.</p>
               </div>
               <div className="v2-quality-score">
-                <strong>{readyPct}%</strong>
-                <span>preparación</span>
+                <strong>{number(s.registros_listos)}</strong>
+                <span>registros listos de {number(s.registros_pmp)}</span>
               </div>
             </div>
 
-            <div className="v2-quality-progress">
-              <i style={{ width: `${Math.max(0, Math.min(100, readyPct))}%` }} />
-            </div>
+            <p className="tf-scope-note">Un registro puede tener más de un dato faltante. Los contadores de incidencias no se suman para obtener un total de órdenes.</p>
 
             <div className="v2-quality-grid v2-quality-grid-analytics">
               <article className="good">
@@ -556,7 +292,7 @@ function PendingPlans({ year, month, onChanged }) {
             ))}
           </select>
         </div>
-        {error && <div className="v2-error">{error}</div>}
+        {error && <div className="v2-error" role="alert">{error}</div>}
         <div className="v2-table-wrap">
           <table>
             <thead>
@@ -1578,159 +1314,6 @@ function LegacyWeeklyProgramming({ year, month, dashboard }) {
   );
 }
 
-function Pmp({ year, month, dashboard }) {
-  const [filters, setFilters] = useState({
-    specialty: "",
-    area: "",
-    search: "",
-  });
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const load = async () => {
-    try {
-      setLoading(true);
-      setError("");
-      setData(await getV2Pmp({ year, month, ...filters, limit: 400 }));
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-  useEffect(() => {
-    load();
-  }, [year, month]);
-  return (
-    <section className="v2-panel">
-      <div className="v2-section-head">
-        <div>
-          <span className="v2-kicker">PMP DEL MES</span>
-          <h3>Órdenes y planes exportados por el software</h3>
-          <p>
-            El día de ejecución del software no gobierna nuestra programación
-            interna; aquí usamos el mes como cartera de trabajo.
-          </p>
-        </div>
-        <Badge>
-          {loading
-            ? "Consultando..."
-            : (data?.rows?.length || 0) + " registros visibles"}
-        </Badge>
-      </div>
-      <div className="v2-toolbar v2-toolbar-4">
-        <select
-          value={filters.specialty}
-          onChange={(e) =>
-            setFilters((f) => ({ ...f, specialty: e.target.value }))
-          }
-        >
-          <option value="">Todas las especialidades</option>
-          {SPECS.map((s) => (
-            <option key={s} value={s}>
-              {SPEC_NAMES[s]}
-            </option>
-          ))}
-        </select>
-        <select
-          value={filters.area}
-          onChange={(e) => setFilters((f) => ({ ...f, area: e.target.value }))}
-        >
-          <option value="">Todas las áreas</option>
-          {(dashboard?.areas || []).map((a) => (
-            <option key={a.codigo} value={a.codigo}>
-              {a.codigo} · {a.nombre || "Sin nombre raíz"}
-            </option>
-          ))}
-        </select>
-        <input
-          placeholder="OT, equipo o plan..."
-          value={filters.search}
-          onChange={(e) =>
-            setFilters((f) => ({ ...f, search: e.target.value }))
-          }
-        />
-        <button className="v2-primary" onClick={load}>
-          Aplicar filtros
-        </button>
-      </div>
-      {error && <div className="v2-error">{error}</div>}
-      <div className="v2-table-wrap v2-pmp-table">
-        <table>
-          <thead>
-            <tr>
-              <th>OT</th>
-              <th>Área</th>
-              <th>Equipo</th>
-              <th>Plan</th>
-              <th>Esp.</th>
-              <th>Personas</th>
-              <th>Parada</th>
-              <th>Tiempo</th>
-              <th>H-H</th>
-              <th>Dato</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(data?.rows || []).map((r) => (
-              <tr key={r.id}>
-                <td>
-                  <b>{r.numero_ot || "SIN ASIGNAR"}</b>
-                </td>
-                <td>
-                  <Badge>{r.area_codigo || "—"}</Badge>
-                  <small>{r.area_nombre || ""}</small>
-                </td>
-                <td>
-                  <b>{r.activo_codigo}</b>
-                  <small>{r.activo_descripcion}</small>
-                </td>
-                <td>
-                  <span className="v2-plan">
-                    {r.plan_trabajo || r.plan_clave_software}
-                  </span>
-                  <small>{r.descripcion_grupo || ""}</small>
-                </td>
-                <td>
-                  <Badge>{r.especialidad || "—"}</Badge>
-                </td>
-                <td>{r.numero_personas_efectivo ?? "—"}</td>
-                <td>
-                  {r.requiere_parada == null ? (
-                    <Badge tone="warn">Falta</Badge>
-                  ) : r.requiere_parada ? (
-                    <Badge tone="stop">Sí</Badge>
-                  ) : (
-                    <Badge tone="ok">No</Badge>
-                  )}
-                </td>
-                <td>
-                  {r.tiempo_min != null ? fmt(r.tiempo_min, 0) + " min" : "—"}
-                </td>
-                <td>
-                  <b>{r.hh != null ? fmt(r.hh, 1) : "—"}</b>
-                </td>
-                <td>
-                  <Badge tone={r.calidad_dato === "LISTO" ? "ok" : "warn"}>
-                    {r.calidad_dato}
-                  </Badge>
-                </td>
-              </tr>
-            ))}
-            {!data?.rows?.length && !loading && (
-              <tr>
-                <td colSpan="10" className="v2-empty">
-                  No hay registros para estos filtros.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
-}
-
 export default function App() {
   const [view, setView] = useState(() => {
     const requested = window.location.hash.replace(/^#\/?/, "");
@@ -1744,16 +1327,22 @@ export default function App() {
   const [accessRole, setAccessRole] = useState("loading");
   const [error, setError] = useState("");
   const [backlogOrderId, setBacklogOrderId] = useState("");
-  const refresh = () =>
-    getV2Dashboard(year, month)
+  const dashboardRequest = useRef(0);
+  const refresh = () => {
+    const request = ++dashboardRequest.current;
+    return getV2Dashboard(year, month)
       .then((result) => {
-        setDashboard(result);
+        if (request === dashboardRequest.current) {
+          setError("");
+          setDashboard(result);
+        }
         return result;
       })
       .catch((e) => {
-        setError(e.message);
+        if (request === dashboardRequest.current) setError(e.message);
         throw e;
       });
+  };
 
   const refreshTechnicianData = () => {
     setTechnicianRevision((current) => current + 1);
@@ -1826,11 +1415,23 @@ export default function App() {
     setAccessRole("viewer");
   }
   useEffect(() => {
-    refresh();
+    setDashboard(null);
+    refresh().catch(() => null);
   }, [year, month]);
+
+  useEffect(() => {
+    const syncLocation = () => {
+      const requested = window.location.hash.replace(/^#\/?/, "");
+      setView(navigationIds().includes(requested) ? requested : "summary");
+    };
+    window.addEventListener("hashchange", syncLocation);
+    return () => window.removeEventListener("hashchange", syncLocation);
+  }, []);
   function navigate(nextView) {
+    if (!navigationIds().includes(nextView)) return;
     setView(nextView);
-    window.history.replaceState(null, "", `#/${nextView}`);
+    if (window.location.hash !== `#/${nextView}`) window.location.hash = `/${nextView}`;
+    document.getElementById("contenido-principal")?.focus();
     if (nextView === "summary") {
       refresh().catch(() => null);
     }
@@ -1852,7 +1453,7 @@ export default function App() {
         technicians: number(dashboard?.summary?.tecnicos_sin_especialidad),
       }}
     >
-        {error && <div className="v2-error">{error}</div>}
+        {error && <div className="v2-error" role="alert">No se pudo actualizar la información: {error}<button type="button" onClick={() => refresh().catch(() => null)}>Reintentar</button></div>}
         {view === "summary" && (
           <Summary data={dashboard} year={year} month={month} onNavigate={navigate} />
         )}{" "}
@@ -1864,6 +1465,7 @@ export default function App() {
             onGoMonthly={() => navigate("monthly")}
             onGoClosure={() => navigate("closure")}
             onTrackingChanged={refresh}
+            onNavigate={navigate}
           />
         )}{" "}
         {view === "pending" && (

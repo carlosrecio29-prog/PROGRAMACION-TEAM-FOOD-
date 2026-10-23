@@ -6,6 +6,7 @@ from typing import Any
 
 from sqlalchemy import text
 from backend.database import get_engine
+from backend.services.v2_portfolio_service import get_portfolio
 
 SPECS = {"MEC": "Mecánica", "ELE": "Eléctrica", "MET": "Metrología", "SER": "Servicios"}
 
@@ -299,6 +300,7 @@ def get_progress(year: int, month: int) -> dict[str, Any]:
         """), {"begin": begin, "end": end}).mappings()]
         tracking = {int(row["programacion_id"]): row for row in tracking_rows}
 
+        portfolio = get_portfolio(conn, begin, end)
         monthly_specialty_rows = [dict(r) for r in conn.execute(text("""
             WITH specs(code,name) AS (
               VALUES
@@ -526,6 +528,7 @@ def get_progress(year: int, month: int) -> dict[str, Any]:
         "month": month,
         **aggregate_progress(headers, items, pmp_count, begin, tracking),
         "monthly_progress_by_specialty": monthly_progress_by_specialty,
+        "portfolio_progress_by_specialty": portfolio["portfolio_progress_by_specialty"],
     }
 
 

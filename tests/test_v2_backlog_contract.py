@@ -28,7 +28,9 @@ def test_backlog_filters_cover_state_specialty_area_age_text_and_order_context()
 
 def test_backlog_defaults_to_active_rows_and_rejects_unknown_state():
     where, _ = _build_backlog_filters()
-    assert "estado_seguimiento<>'FINALIZADA'" in where
+    assert "b.estado_seguimiento IN ('PENDIENTE_DISPONIBLE','PENDIENTE_PROGRAMADA')" in where
+    assert "NOT LIKE 'ANUL%'" in where
+    assert "NOT LIKE 'FINALIZ%'" in where
     with pytest.raises(ValueError, match="Estado de backlog inválido"):
         _build_backlog_filters(state="BORRADA")
 
@@ -57,10 +59,18 @@ def test_external_finalization_variants_are_canonicalized():
     assert not _is_finalized("PENDIENTE")
 
 
-def test_mechanical_week_is_valid_and_finalized_orders_are_excluded():
+def test_mechanical_week_is_valid_and_confirmed_previous_results_are_excluded():
     assert _validate_week(date(2026, 9, 1), date(2026, 9, 7), "mec") == "MEC"
     assert "o.especialidad=:specialty" in PROGRAMMING
-    assert "NOT LIKE 'FINALIZ%'" in PROGRAMMING
+    # The weekly universe is historical: a source completion does not erase
+    # first-week demand. Only confirmed earlier closures resolve that demand.
+    block = PROGRAMMING.split("resolved_before_week AS (", 1)[1].split("moved_to_backlog_before_week AS (", 1)[0]
+    assert "ps.estado='CERRADA'" in block
+    assert "ps.semana_fin < :date_from" in block
+    assert "COALESCE(pi.finalizado,false)=true" in block
+    assert "COALESCE(pi.anulado,false)=true" in block
+    assert "FROM resolved_before_week r" in PROGRAMMING
+    assert "r.orden_mantenimiento_id=o.id" in PROGRAMMING
 
 
 def test_hh_capacity_and_closure_indicators_remain_backend_authoritative():

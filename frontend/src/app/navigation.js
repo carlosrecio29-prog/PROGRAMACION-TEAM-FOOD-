@@ -20,25 +20,31 @@ export const VIEW_META = {
 };
 
 export const NAV_GROUPS = [
-  { label: "Inicio", items: [{ id: "summary", label: "Panel de control", code: "PC" }] },
-  { label: "Planificación", items: [
+  { label: "Inicio", items: [
+    { id: "summary", label: "Panel de control", code: "PC" },
+    { id: "indicators", label: "Indicadores", code: "IN" },
+  ] },
+  { label: "Preparar", items: [
+    { id: "pmp", label: "PMP del mes", code: "PM" },
     { id: "advanceStops", label: "Preparación de paradas", code: "PA" },
     { id: "technicians", label: "Programación de técnicos", code: "TE", indicator: "technicians" },
-    { id: "programming", label: "Programación semanal", code: "PS" },
-    { id: "pmp", label: "PMP del mes", code: "PM" },
-    { id: "operationExclusions", label: "Actividades excluidas", code: "OP" },
   ] },
-  { label: "Cierre", items: [
+  { label: "Ejecutar", items: [
+    { id: "programming", label: "Programación semanal", code: "PS" },
+    { id: "tracking", label: "Seguimiento semanal", code: "SE" },
+    { id: "backlog", label: "Backlog acumulado", code: "BL" },
+  ] },
+  { label: "Cerrar", items: [
     { id: "closure", label: "Cierre semanal", code: "CI" },
     { id: "monthly", label: "Cierre mensual", code: "CM" },
   ] },
-  { label: "Backlog", items: [{ id: "backlog", label: "Seguimiento acumulado", code: "BL" }] },
-  { label: "Administración", items: [
+  { label: "Datos", items: [
     { id: "imports", label: "Cargar Excel", code: "EX" },
     { id: "pending", label: "Completar datos", code: "CD", indicator: "pending" },
+    { id: "operationExclusions", label: "Excluidas por operación", code: "OP" },
   ] },
 ];
 
 export function navigationIds(groups = NAV_GROUPS) {
-  return [...groups.flatMap((group) => group.items.map((item) => item.id)), "indicators", "tracking"];
+  return groups.flatMap((group) => group.items.map((item) => item.id));
 }

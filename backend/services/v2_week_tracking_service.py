@@ -120,7 +120,9 @@ def _reconcile_backlog_from_calendar(
         JOIN programacion.orden_mantenimiento o ON o.id=b.orden_mantenimiento_id
         JOIN programacion.activo a ON a.id=o.activo_id
         LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
-        WHERE b.estado_seguimiento<>'FINALIZADA'
+        WHERE b.estado_seguimiento IN ('PENDIENTE_DISPONIBLE','PENDIENTE_PROGRAMADA')
+          AND upper(COALESCE(o.estado,'')) NOT LIKE 'ANUL%'
+          AND upper(COALESCE(o.estado,'')) NOT LIKE 'FINALIZ%'
           AND upper(COALESCE(b.especialidad,''))=:specialty
           AND COALESCE(p.es_operacion,false)=false
         ORDER BY b.id
@@ -165,7 +167,7 @@ def _reconcile_backlog_from_calendar(
                 ultima_programacion_id=NULL,
                 actualizado_en=now()
             WHERE orden_mantenimiento_id=ANY(CAST(:ids AS bigint[]))
-              AND estado_seguimiento<>'FINALIZADA'
+              AND estado_seguimiento IN ('PENDIENTE_DISPONIBLE','PENDIENTE_PROGRAMADA')
         """), {
             "ids": ids,
             "recorded_by": recorded_by,

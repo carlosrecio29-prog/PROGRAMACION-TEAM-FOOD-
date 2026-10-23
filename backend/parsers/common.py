@@ -36,9 +36,13 @@ def canonical_plan_name(value: Any) -> str:
     return canonical
 
 def is_operation_plan(value: Any) -> bool:
-    """True only for plans that are genuinely still labeled as OPERACIÓN."""
-    canonical = canonical_plan_name(value)
-    return bool(re.match(r"^OPERACION(?=\s|[-–—:._/|]|$)", canonical))
+    """Detect the literal source label; a resolved master can override it.
+
+    Matching aliases in canonical_plan_name must not silently classify an
+    unresolved source plan as maintenance merely because of its family name.
+    """
+    label = re.sub(r"^\d+\s*[-–—:._/|]+\s*", "", normalize_text(value)).strip()
+    return bool(re.match(r"^OPERACION(?=\s|[-–—:._/|]|$)", label))
 
 
 def normalize_order(value: Any) -> str:

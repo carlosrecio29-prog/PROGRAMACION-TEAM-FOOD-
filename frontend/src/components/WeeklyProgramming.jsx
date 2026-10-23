@@ -309,6 +309,7 @@ export default function WeeklyProgramming({year,month,dashboard}){
           </div>
           <b>{fmt(technicianRemainingHH,1)} H-H</b>
           <small>Total mensual programable: {fmt(technicianMonthHH,1)} H-H · 20% del efectivo reservado para correctivo</small>
+          <small>Capacidad: 20% de horas brutas para Alistamiento / tiempo no programable; del 80% efectivo, 80% preventivo / 20% correctivo-reserva.</small>
         </article>
       </div>
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import MaintenanceBaseUpload from "../components/MaintenanceBaseUpload";
+import WorkflowContext from "./WorkflowContext";
 import PendingDataIndicators from "../components/PendingDataIndicators";
 import ShiftSettings from "../components/ShiftSettings";
 import companyLogo from "../assets/cekLogoData";
@@ -19,7 +19,7 @@ function SidebarIcon({ type }) {
     );
   }
 
-  if (type === "Planificación") {
+  if (type === "Preparar") {
     return (
       <svg {...common}>
         <path d="M7 2h2v2h6V2h2v2h4v18H3V4h4V2Zm12 8H5v10h14V10ZM5 8h14V6H5v2Zm3 4h3v3H8v-3Zm5 0h3v3h-3v-3Z" />
@@ -27,7 +27,7 @@ function SidebarIcon({ type }) {
     );
   }
 
-  if (type === "Cierre") {
+  if (type === "Cerrar") {
     return (
       <svg {...common}>
         <path d="M6 2h9l5 5v15H6V2Zm8 2v5h4l-4-5Zm-3 9-2 2 3 3 6-6-2-2-4 4-1-1Z" />
@@ -35,7 +35,7 @@ function SidebarIcon({ type }) {
     );
   }
 
-  if (type === "Backlog") {
+  if (type === "Ejecutar") {
     return (
       <svg {...common}>
         <path d="M5 3h14v4H5V3Zm0 7h14v4H5v-4Zm0 7h9v4H5v-4Zm11.5-.5H19V19h2.5v2H19v2.5h-2V21H14v-2h3v-2.5Z" />
@@ -172,7 +172,7 @@ export default function AppShell({
 }) {
   const [title, description] = VIEW_META[view] || VIEW_META.summary;
   const activeGroup = NAV_GROUPS.find(
-    (group) => group.label !== "Inicio" && group.items.some((item) => item.id === view),
+    (group) => group.items.some((item) => item.id === view),
   )?.label || "";
   const [openGroup, setOpenGroup] = useState(activeGroup);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -213,8 +213,26 @@ export default function AppShell({
     if (activeGroup) setOpenGroup(activeGroup);
   }, [activeGroup]);
 
+  useEffect(() => {
+    setHoverGroup("");
+    if (window.matchMedia("(max-width: 900px)").matches) setSidebarOpen(false);
+  }, [view]);
+
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setHoverGroup("");
+        setSidebarOpen(false);
+        setAccessOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   return (
     <div className={`v2-shell ${sidebarOpen ? "sidebar-open" : "sidebar-collapsed"} ${accessRole === "admin" ? "access-admin" : "access-viewer"}`}>
+      <a className="tf-skip-link" href="#contenido-principal" onClick={(event) => { event.preventDefault(); document.getElementById("contenido-principal")?.focus(); }}>Saltar al contenido</a>
       <aside className="v2-sidebar" aria-label="Navegación principal">
         <div className="v2-sidebar-head">
           <button
@@ -242,28 +260,8 @@ export default function AppShell({
         </div>
         <nav className="tf-side-nav" aria-label="Flujos operativos">
           {NAV_GROUPS.map((group) => {
-            const isHome = group.label === "Inicio";
-            const isOpen = isHome || openGroup === group.label;
+            const isOpen = openGroup === group.label;
             const hasActiveItem = group.items.some((item) => item.id === view);
-            const homeItem = isHome ? group.items[0] : null;
-
-            if (isHome) {
-              return (
-                <div className="tf-side-section" key={group.label}>
-                  <button
-                    type="button"
-                    className={`tf-side-root ${view === homeItem.id ? "is-active" : ""}`}
-                    title={!sidebarOpen ? homeItem.label : undefined}
-                    aria-current={view === homeItem.id ? "page" : undefined}
-                    onClick={() => onNavigate(homeItem.id)}
-                  >
-                    <span className="tf-side-icon"><SidebarIcon type="Inicio" /></span>
-                    <span className="tf-side-label">{homeItem.label}</span>
-                  </button>
-                </div>
-              );
-            }
-
             return (
               <div
                 className={`tf-side-section ${hasActiveItem ? "has-active" : ""}`}
@@ -296,7 +294,7 @@ export default function AppShell({
                 </button>
 
                 {!sidebarOpen && hoverGroup === group.label && (
-                  <div className="tf-side-flyout" role="menu" aria-label={group.label}>
+                  <div className="tf-side-flyout" aria-label={group.label}>
                     <div className="tf-side-flyout-head">
                       <span className="tf-side-flyout-icon"><SidebarIcon type={group.label} /></span>
                       <b>{group.label}</b>
@@ -307,7 +305,7 @@ export default function AppShell({
                           type="button"
                           key={item.id}
                           className={`tf-side-flyout-item ${view === item.id ? "is-active" : ""}`}
-                          role="menuitem"
+                          aria-current={view === item.id ? "page" : undefined}
                           onClick={() => {
                             onNavigate(item.id);
                             setHoverGroup("");
@@ -359,7 +357,7 @@ export default function AppShell({
           <small>C.E.K GLOBAL INSPECTION</small>
         </div>
       </aside>
-      <main className={`v2-main v2-view-${view}`} id="contenido-principal">
+      <main className={`v2-main v2-view-${view}`} id="contenido-principal" tabIndex={-1}>
         {view === "summary" ? (
           <header className="v2-dashboard-header">
             <div className="v2-dashboard-brand">
@@ -463,8 +461,8 @@ export default function AppShell({
           </header>
         )}
 
+        <WorkflowContext view={view} year={year} month={month} onNavigate={onNavigate} />
         {view === "pending" && <PendingDataIndicators year={year} month={month} />}
-        {view === "imports" && <MaintenanceBaseUpload year={year} month={month} />}
         {children}
         {view === "technicians" && (
           <ShiftSettings
@@ -479,9 +477,16 @@ export default function AppShell({
         <div className="v2-access-modal-backdrop" role="presentation" onMouseDown={(event) => {
           if (event.target === event.currentTarget) setAccessOpen(false);
         }}>
-          <form className="v2-access-modal" onSubmit={submitAdminLogin}>
+          <form className="v2-access-modal" role="dialog" aria-modal="true" aria-labelledby="tf-access-title" onSubmit={submitAdminLogin} onKeyDown={(event) => {
+            if (event.key !== "Tab") return;
+            const controls = [...event.currentTarget.querySelectorAll("input:not(:disabled), button:not(:disabled)")];
+            const first = controls[0];
+            const last = controls[controls.length - 1];
+            if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+            else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+          }}>
             <span className="v2-kicker">ACCESO RESTRINGIDO</span>
-            <h3>Modo administrador</h3>
+            <h3 id="tf-access-title">Modo administrador</h3>
             <p>Ingresa la clave administrativa para habilitar cargas, cambios, programaciones y cierres.</p>
             <label>
               <span>Clave de administrador</span>
