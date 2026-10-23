@@ -50,7 +50,7 @@ def _read_calendar(content: bytes) -> list[dict[str, Any]]:
 
 def _plan_match_key(value: Any) -> str:
     """Ignore presentation spaces around dashes, but never erase words."""
-    return re.sub(r"\\s*[-–—]\\s*", "-", normalize_text(value))
+    return re.sub(r"\s*[-–—]\s*", "-", normalize_text(value))
 
 
 def classify_advance(rows: list[dict[str, Any]], plans: dict, assets: dict,

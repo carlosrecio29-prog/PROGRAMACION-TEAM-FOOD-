@@ -20,7 +20,7 @@ function Card({label,value,extra,tone=""}){
   </article>;
 }
 
-export default function ProgressDashboard({year,month,full=false,onOpenMonthly}){
+export default function ProgressDashboard({year,month,full=false,scope="all",onOpenMonthly}){
   const [data,setData]=useState(null);
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState("");
@@ -30,7 +30,7 @@ export default function ProgressDashboard({year,month,full=false,onOpenMonthly})
   const [revision,setRevision]=useState(0);
   useEffect(()=>{
     let cancelled=false;
-    setLoading(true);setError("");
+    setLoading(true);setError("");setData(null);
     getV2Progress(year,month).then(result=>{if(!cancelled)setData(result);})
       .catch(err=>{if(!cancelled)setError(err.message);})
       .finally(()=>{if(!cancelled)setLoading(false);});
@@ -40,7 +40,6 @@ export default function ProgressDashboard({year,month,full=false,onOpenMonthly})
   const top=data?.monthly||{};
   const totals=data?.weekly_totals||{};
   const operational=data?.operational||{};
-  const monthlyProgressBySpecialty=data?.monthly_progress_by_specialty||[];
   const overallProgress=Math.max(0,Math.min(100,number(top.progress_ot_pct||0)));
   const showReport=async(programmingId=null)=>{
     const key=programmingId===null?"month":String(programmingId);
@@ -54,6 +53,8 @@ export default function ProgressDashboard({year,month,full=false,onOpenMonthly})
     <button type="button" onClick={()=>setRevision(x=>x+1)}>Reintentar</button>
   </section>;
   return <section className="v2-progress-dashboard v2-stack">
+    {error&&data&&<div className="v2-error" role="alert">No se pudo actualizar: {error}. Se conserva la última consulta.<button type="button" onClick={()=>setRevision(x=>x+1)}>Reintentar</button></div>}
+    {loading&&data&&<div role="status">Actualizando indicadores…</div>}
     {pdfError&&<div className="v2-error" role="alert" style={{
       position:"sticky",top:8,zIndex:10,padding:16,borderRadius:10
     }}>
@@ -68,8 +69,8 @@ export default function ProgressDashboard({year,month,full=false,onOpenMonthly})
       <div className="v2-section-head">
         <div>
           <span className="v2-kicker">SEGUIMIENTO DEL PERIODO</span>
-          <h3>{full?"Informe general de cierre mensual":"Avance de programación y cierres"}</h3>
-          <p>Lectura ejecutiva del avance registrado en programación, cierres y H-H estimadas.</p>
+          <h3>{full?"Informe general de cierre mensual":scope==="weekly"?"Cumplimiento de la programación semanal":"Resultados de cierre confirmado"}</h3>
+          <p>{scope==="weekly"?"Cuenta ejecuciones semanales; una OT reprogramada puede aparecer más de una vez.":"Órdenes programadas consolidadas según su último cierre del período. Es una base distinta de la cartera mensual."} H-H estimadas, sin horas reales.</p>
         </div>
         <button type="button" className="v2-progress-refresh" onClick={()=>setRevision(x=>x+1)} disabled={loading}>
           {loading?"Actualizando...":"Actualizar avance"}
@@ -81,7 +82,7 @@ export default function ProgressDashboard({year,month,full=false,onOpenMonthly})
         No presentar este informe como cierre operativo definitivo del mes.
       </div>}
 
-      <div className="v2-progress-live">
+      {scope!=="closed"&&<div className="v2-progress-live">
         <div className="v2-progress-live-head">
           <div>
             <span className="v2-kicker">AVANCE OPERATIVO ACTUAL</span>
@@ -127,38 +128,9 @@ export default function ProgressDashboard({year,month,full=false,onOpenMonthly})
           <b>Lectura operativa:</b> estos valores pueden cambiar con cada nueva Lista de Calendario.
           El resultado definitivo continúa siendo el Cierre semanal.
         </div>
-      </div>
+      </div>}
 
-      <div className="v2-progress-specialty-summary">
-        <div className="v2-progress-specialty-head">
-          <div>
-            <span className="v2-kicker">AVANCE DEL MES POR ESPECIALIDAD</span>
-            <h4>OT y H-H cumplidas en tiempo real</h4>
-          </div>
-          <small>Se actualiza con cada Seguimiento semanal; no necesita esperar el cierre de la semana.</small>
-        </div>
-        <div className="v2-progress-specialty-grid">
-          {monthlyProgressBySpecialty.map(row=>{
-            const progress=Math.max(0,Math.min(100,number(row.progress_ot_pct)));
-            return <article className="v2-progress-specialty-card" key={row.especialidad}>
-              <div className="v2-progress-specialty-ring v2-progress-ring" style={{"--progress":progress+"%"}}>
-                <div>
-                  <strong>{pct(row.progress_ot_pct)}</strong>
-                  <span>cumplimiento OT</span>
-                </div>
-              </div>
-              <div className="v2-progress-specialty-copy">
-                <span>{row.name||NAMES[row.especialidad]||row.especialidad}</span>
-                <h5><b>{count(row.completed_ot)}</b> de {count(row.total_ot)} OT</h5>
-                <p><b>{hh(row.completed_hh)}</b> de {hh(row.total_hh)} H-H</p>
-                <small>{count(row.scheduled_completed)} finalizadas programadas · {count(row.unplanned_completed)} fuera de programación</small>
-              </div>
-            </article>;
-          })}
-        </div>
-      </div>
-
-      <div className="v2-progress-official-label">
+      {scope!=="weekly"&&<><div className="v2-progress-official-label">
         <span>CIERRE OFICIAL DEL PERÍODO</span>
         <small>Resultado consolidado únicamente con semanas formalmente cerradas.</small>
       </div>
@@ -199,8 +171,9 @@ export default function ProgressDashboard({year,month,full=false,onOpenMonthly})
         <b>Criterio del tablero:</b> el consolidado superior cuenta cada OT una vez según su último cierre del período.
         El análisis semanal cuenta cada vez que fue programada. Las H-H mostradas son estimadas, no horas reales ejecutadas.
       </div>
+      </>}
     </div>
-    <section className="v2-panel v2-progress-trend-panel">
+    {scope!=="closed"&&<section className="v2-panel v2-progress-trend-panel">
       <div className="v2-section-head">
         <div>
           <span className="v2-kicker">TENDENCIA SEMANAL</span>
@@ -291,7 +264,7 @@ export default function ProgressDashboard({year,month,full=false,onOpenMonthly})
           </details>
         </>
       }
-    </section>
+    </section>}
     {full&&<section className="v2-panel">
       <div className="v2-section-head"><div><span className="v2-kicker">CONSOLIDADO MENSUAL</span>
         <h3>Cómo terminó el mes</h3><p>Resultado de cada orden distinta según su última programación del periodo.</p>

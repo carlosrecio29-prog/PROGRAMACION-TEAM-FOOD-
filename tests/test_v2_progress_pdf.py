@@ -149,14 +149,18 @@ def test_first_page_kpis_are_compact_and_without_removed_notes():
     assert summary_block.count('("') >= 8
 
 
-def test_weekly_pdf_removed_explanatory_labels_and_bar():
-    source = (ROOT / "backend/services/v2_pdf_fallback.py").read_text()
-    assert "Cada tarjeta refleja datos verificados en los cierres" not in source
-    assert "Sobre HH estimadas" not in source
-    assert "HH estimadas; no horas reales" not in source
-    weekly_block = source[source.index("    else:"):source.index('    kind="mensual"')]
-    assert 'pdf.section("OT programadas y finalizadas")' not in weekly_block
-    assert 'pdf.section("Criterios del informe")' not in weekly_block
+def test_weekly_pdf_removed_explanatory_labels_and_bar(monkeypatch):
+    monkeypatch.setattr(progress, "get_progress", lambda year, month: fake_progress())
+    monkeypatch.setattr(closure, "get_week_closure", _fake_week_closure)
+    monkeypatch.setattr(tracking, "get_week_tracking", _fake_week_tracking)
+    weekly, _ = progress.export_progress_pdf(2026, 9, 42)
+    for removed in ("Cada tarjeta refleja datos verificados en los cierres",
+                    "Sobre HH estimadas", "HH estimadas; no horas reales",
+                    "OT programadas y finalizadas", "Criterios del informe"):
+        assert removed.encode("latin-1") not in weekly
+    assert b"RESULTADOS DEL CIERRE SEMANAL" in weekly
+    assert b"DETALLE" in weekly
+    assert b"OT-1" in weekly
 
 
 def test_weekly_detail_does_not_force_new_page_after_summary():

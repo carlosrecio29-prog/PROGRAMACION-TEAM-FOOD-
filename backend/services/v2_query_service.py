@@ -7,6 +7,7 @@ from sqlalchemy import text
 
 from backend.database import get_engine
 from backend.services.v2_programming_service import refresh_open_program_capacities
+from backend.services.v2_portfolio_service import get_portfolio, get_management_insights, progress_payload
 
 
 VALID_SPECIALTIES={"MEC","ELE","MET","SER"}
@@ -18,26 +19,7 @@ def _period(year:int,month:int)->date:
     return date(year,month,1)
 
 
-def _dashboard_progress_payload(row:dict[str,Any])->dict[str,Any]:
-    total=max(0,int(row.get("total_orders") or 0))
-    finalized=max(0,min(total,int(row.get("finalized_orders") or 0)))
-    pending=max(0,total-finalized)
-    return {
-        "total_orders":total,
-        "finalized_orders":finalized,
-        "scheduled_finalized_orders":max(0,int(row.get("scheduled_finalized_orders") or 0)),
-        "unplanned_finalized_orders":max(0,int(row.get("unplanned_finalized_orders") or 0)),
-        "pending_orders":pending,
-        "progress_pct":round(100.0*finalized/total,1) if total else 0.0,
-        "pmp_orders":max(0,int(row.get("pmp_orders") or 0)),
-        "backlog_orders":max(0,int(row.get("backlog_orders") or 0)),
-        "total_workload_hh":round(float(row.get("total_workload_hh") or 0),2),
-        "finalized_workload_hh":round(float(row.get("finalized_workload_hh") or 0),2),
-        "progress_hh_pct":round(
-            100.0*float(row.get("finalized_workload_hh") or 0)/float(row.get("total_workload_hh") or 0),1
-        ) if float(row.get("total_workload_hh") or 0) else 0.0,
-        "latest_tracking_at":row.get("latest_tracking_at"),
-    }
+_dashboard_progress_payload = progress_payload
 
 
 def get_dashboard(year:int,month:int)->dict[str,Any]:
@@ -233,155 +215,9 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
             FROM all_pending
         """),{"period":period}).mappings().one()
 
-        progress_row=dict(conn.execute(text("""
-            WITH month_pmp AS (
-              SELECT DISTINCT o.id AS order_id
-              FROM programacion.orden_mantenimiento o
-              LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
-              WHERE o.periodo=:period
-                AND COALESCE(p.es_operacion,false)=false
-                AND upper(COALESCE(o.estado,'')) NOT LIKE 'ANUL%'
-            ),
-            backlog_available AS (
-              SELECT DISTINCT b.orden_mantenimiento_id AS order_id
-              FROM programacion.backlog_v2 b
-              JOIN programacion.orden_mantenimiento o ON o.id=b.orden_mantenimiento_id
-              LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
-              WHERE b.estado_seguimiento='PENDIENTE_DISPONIBLE'
-                AND COALESCE(p.es_operacion,false)=false
-            ),
-            backlog_used_month AS (
-              SELECT DISTINCT pi.orden_mantenimiento_id AS order_id
-              FROM programacion.programacion_item_v2 pi
-              JOIN programacion.programacion_semanal_v2 ps ON ps.id=pi.programacion_id
-              JOIN programacion.orden_mantenimiento o ON o.id=pi.orden_mantenimiento_id
-              LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
-              WHERE ps.semana_inicio>=:period
-                AND ps.semana_inicio<:next_period
-                AND COALESCE(pi.origen_backlog,false)=true
-                AND COALESCE(p.es_operacion,false)=false
-                AND upper(COALESCE(o.estado,'')) NOT LIKE 'ANUL%'
-            ),
-            unplanned_month AS (
-              SELECT DISTINCT n.orden_mantenimiento_id AS order_id
-              FROM programacion.seguimiento_no_programado_v2 n
-              JOIN programacion.programacion_semanal_v2 ps ON ps.id=n.programacion_id
-              LEFT JOIN programacion.orden_mantenimiento o ON o.id=n.orden_mantenimiento_id
-              LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
-              WHERE ps.semana_inicio>=:period
-                AND ps.semana_inicio<:next_period
-                AND n.orden_mantenimiento_id IS NOT NULL
-                AND COALESCE(p.es_operacion,false)=false
-                AND upper(COALESCE(o.estado,'')) NOT LIKE 'ANUL%'
-            ),
-            universe AS (
-              SELECT DISTINCT order_id
-              FROM (
-                SELECT order_id FROM month_pmp
-                UNION ALL
-                SELECT order_id FROM backlog_available
-                UNION ALL
-                SELECT order_id FROM backlog_used_month
-                UNION ALL
-                SELECT order_id FROM unplanned_month
-              ) all_orders
-            ),
-            tracked_finalized AS (
-              SELECT DISTINCT si.orden_mantenimiento_id AS order_id
-              FROM programacion.seguimiento_semanal_item_v2 si
-              JOIN programacion.seguimiento_semanal_v2 s ON s.id=si.seguimiento_id
-              JOIN programacion.programacion_semanal_v2 ps ON ps.id=s.programacion_id
-              WHERE ps.semana_inicio>=:period
-                AND ps.semana_inicio<:next_period
-                AND si.finalizado=true
-            ),
-            closed_finalized AS (
-              SELECT DISTINCT pi.orden_mantenimiento_id AS order_id
-              FROM programacion.programacion_item_v2 pi
-              JOIN programacion.programacion_semanal_v2 ps ON ps.id=pi.programacion_id
-              WHERE ps.semana_inicio>=:period
-                AND ps.semana_inicio<:next_period
-                AND ps.estado='CERRADA'
-                AND pi.finalizado=true
-            ),
-            scheduled_finished AS (
-              SELECT order_id FROM tracked_finalized
-              UNION
-              SELECT order_id FROM closed_finalized
-            ),
-            finished AS (
-              SELECT order_id FROM scheduled_finished
-              UNION
-              SELECT order_id FROM unplanned_month
-            ),
-            latest_tracking AS (
-              SELECT max(s.registrado_en) AS latest_tracking_at
-              FROM programacion.seguimiento_semanal_v2 s
-              JOIN programacion.programacion_semanal_v2 ps ON ps.id=s.programacion_id
-              WHERE ps.semana_inicio>=:period
-                AND ps.semana_inicio<:next_period
-            )
-            SELECT
-              (SELECT count(*) FROM universe)::int AS total_orders,
-              (
-                SELECT count(*)
-                FROM finished f
-                JOIN universe u USING(order_id)
-              )::int AS finalized_orders,
-              (
-                SELECT count(*)
-                FROM scheduled_finished f
-                JOIN universe u USING(order_id)
-              )::int AS scheduled_finalized_orders,
-              (
-                SELECT count(*)
-                FROM unplanned_month n
-                JOIN universe u USING(order_id)
-              )::int AS unplanned_finalized_orders,
-              (SELECT count(*) FROM month_pmp)::int AS pmp_orders,
-              (
-                SELECT count(DISTINCT x.order_id)
-                FROM (
-                  SELECT order_id FROM backlog_available
-                  UNION ALL
-                  SELECT order_id FROM backlog_used_month
-                ) x
-                WHERE NOT EXISTS (
-                  SELECT 1 FROM month_pmp p WHERE p.order_id=x.order_id
-                )
-              )::int AS backlog_orders,
-              round(COALESCE((
-                SELECT sum(
-                  CASE
-                    WHEN p.numero_personas_efectivo IS NOT NULL
-                     AND COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min) IS NOT NULL
-                    THEN COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min)
-                         / 60.0 * p.numero_personas_efectivo
-                    ELSE 0
-                  END
-                )
-                FROM universe u
-                JOIN programacion.orden_mantenimiento o ON o.id=u.order_id
-                LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
-              ),0),2) AS total_workload_hh,
-              round(COALESCE((
-                SELECT sum(
-                  CASE
-                    WHEN p.numero_personas_efectivo IS NOT NULL
-                     AND COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min) IS NOT NULL
-                    THEN COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min)
-                         / 60.0 * p.numero_personas_efectivo
-                    ELSE 0
-                  END
-                )
-                FROM finished f
-                JOIN universe u USING(order_id)
-                JOIN programacion.orden_mantenimiento o ON o.id=u.order_id
-                LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
-              ),0),2) AS finalized_workload_hh,
-              (SELECT latest_tracking_at FROM latest_tracking) AS latest_tracking_at
-        """),{"period":period,"next_period":next_period}).mappings().one())
-        tracking_progress=_dashboard_progress_payload(progress_row)
+        portfolio = get_portfolio(conn, period, next_period)
+        tracking_progress = portfolio['tracking_progress']
+        management_insights = get_management_insights(conn, period, portfolio)
 
     return {
         "periodo":str(period),
@@ -389,6 +225,8 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
         "pending":dict(pending),
         "workload":dict(workload),
         "tracking_progress":tracking_progress,
+        "management_insights":management_insights,
+        "portfolio_progress_by_specialty":portfolio["portfolio_progress_by_specialty"],
         "specialties":specialties,
         "areas":areas,
     }

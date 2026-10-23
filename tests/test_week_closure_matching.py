@@ -62,7 +62,8 @@ def test_duplicate_calendar_entries_are_ambiguous_not_finalized():
 
 def test_frontend_shares_week_label_and_previews_before_close():
     source = (ROOT / "frontend/src/components/WeeklyClosure.jsx").read_text()
-    assert "w.transition ? 'Transición' : `Semana ${w.weekNumber}`" in source
+    assert 'item.transition ? "Transición" : `Semana ${item.weekNumber}`' in source
+    assert '{item.label}' in source
     assert "previewV2WeekClosure" in source
     assert "Confirmar cierre semanal" in source
 

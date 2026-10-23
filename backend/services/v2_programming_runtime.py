@@ -329,6 +329,14 @@ def get_week_programming(*, date_from: date, date_to: date, specialty: str) -> d
               WHERE r.orden_mantenimiento_id=o.id
             )
               AND (
+                CAST(:is_closed AS boolean)=true
+                OR current_item.id IS NOT NULL
+                OR (
+                  upper(COALESCE(o.estado,'')) NOT LIKE 'ANUL%'
+                  AND COALESCE(b.estado_seguimiento,'')<>'ANULADA'
+                )
+              )
+              AND (
                 current_item.id IS NOT NULL
                 OR (
                   p.numero_personas_efectivo IS NOT NULL
@@ -486,6 +494,12 @@ def save_week_programming(*, date_from: date, date_to: date, specialty: str, ord
             JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
             WHERE o.id=ANY(CAST(:ids AS bigint[])) AND o.especialidad=:specialty
               AND NOT p.es_operacion
+              AND upper(COALESCE(o.estado,'')) NOT LIKE 'ANUL%'
+              AND NOT EXISTS (
+                SELECT 1 FROM programacion.backlog_v2 annulled_backlog
+                WHERE annulled_backlog.orden_mantenimiento_id=o.id
+                  AND annulled_backlog.estado_seguimiento='ANULADA'
+              )
               AND NOT EXISTS (
                 SELECT 1
                 FROM programacion.programacion_item_v2 previous_item
@@ -544,9 +558,12 @@ def save_week_programming(*, date_from: date, date_to: date, specialty: str, ord
                 )
                 SELECT x,:programming_id,:date_from,:date_to,:specialty,'RETIRADA DE PROGRAMACIÓN SEMANAL',:created_by,now(),now()
                 FROM unnest(CAST(:removed_ids AS bigint[])) AS x
+                JOIN programacion.orden_mantenimiento removed_order ON removed_order.id=x
+                WHERE upper(COALESCE(removed_order.estado,'')) NOT LIKE 'ANUL%'
                 ON CONFLICT(orden_mantenimiento_id)
                 DO UPDATE SET estado_seguimiento='PENDIENTE_DISPONIBLE',ultima_programacion_id=NULL,
                   motivo=EXCLUDED.motivo,movido_por=EXCLUDED.movido_por,movido_en=now(),actualizado_en=now()
+                WHERE programacion.backlog_v2.estado_seguimiento IN ('PENDIENTE_DISPONIBLE','PENDIENTE_PROGRAMADA')
             """), {"programming_id": programming_id, "date_from": date_from, "date_to": date_to,
                      "specialty": specialty, "created_by": created_by, "removed_ids": removed_ids})
 
