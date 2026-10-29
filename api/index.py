@@ -45,8 +45,9 @@ from backend.services.v2_closure_service import (
 from backend.services.v2_backlog_service import get_accumulated_backlog
 from backend.services.v2_backlog_bootstrap_service import bootstrap_initial_backlog
 from backend.services.v2_week_tracking_service import (
-    V2WeeklyTrackingError, export_week_tracking_excel, get_week_tracking, record_week_tracking,
+    V2WeeklyTrackingError, export_week_tracking_excel,
 )
+from backend.services.v2_manual_tracking_service import get_week_tracking, record_week_tracking, set_manual_status
 from backend.services.v2_operation_exclusion_service import get_operation_exclusions
 from backend.services.v2_progress_service import get_progress, export_progress_pdf
 from backend.services.v2_monthly_close_service import (
@@ -398,6 +399,17 @@ async def v2_record_week_tracking(
     except SQLAlchemyError as exc:
         raise HTTPException(503,"No se pudo guardar el seguimiento semanal") from exc
 
+class V2ManualTrackingStatus(BaseModel):
+    estado: str
+    comentario: str | None = Field(None, max_length=1000)
+    recorded_by: str | None = Field(None, max_length=200)
+
+@app.patch("/api/v2/programming/{programming_id}/tracking/{programacion_item_id}")
+def v2_manual_tracking_status(programming_id:int, programacion_item_id:int, body:V2ManualTrackingStatus):
+    try:
+        return set_manual_status(programming_id, programacion_item_id, body.estado, body.comentario, body.recorded_by)
+    except V2WeeklyTrackingError as exc:
+        raise HTTPException(422, str(exc)) from exc
 @app.get("/api/v2/programming/{programming_id}/closure")
 def v2_week_closure(programming_id:int):
     try:return get_week_closure(programming_id)
@@ -619,3 +631,5 @@ def reset_testing_data(body:TestResetRequest):
     if body.confirmation!="REINICIAR PRUEBAS":
         raise HTTPException(400,"Confirmación inválida")
     return reset_test_data()
+
+

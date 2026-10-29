@@ -303,6 +303,11 @@ export async function uploadV2WeekTracking(programmingId, file, recordedBy = "")
   ));
 }
 
+export async function saveV2ManualTrackingStatus(programmingId, itemId, payload) {
+  return check(await fetch(`/api/v2/programming/${programmingId}/tracking/${itemId}`, {
+    method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+  }));
+}
 export async function getV2Backlog(filters = {}) {
   const qs = new URLSearchParams();
   Object.entries(filters).forEach(([key, value]) => {
@@ -463,3 +468,4 @@ export async function downloadV2WeeklyReport(programmingId, format = "pdf") {
   a.remove();
   URL.revokeObjectURL(url);
 }
+
