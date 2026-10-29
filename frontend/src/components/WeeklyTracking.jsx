@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { monthWeeks, initialWeekIndex } from "../features/planning/monthWeeks.js";
+import { monthWeeks } from "../features/planning/monthWeeks.js";
 import {
   downloadV2WeekTrackingExcel,
   getV2Progress,
@@ -55,9 +55,8 @@ function when(value) {
   }
 }
 
-export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }) {
+export default function WeeklyTracking({ year, month, weekIndex = 0, onOpenClosure, onChanged }) {
   const weeks = useMemo(() => monthWeeks(year, month), [year, month]);
-  const [weekIndex, setWeekIndex] = useState(() => initialWeekIndex(weeks));
   const [specialty, setSpecialty] = useState("MEC");
   const [programming, setProgramming] = useState(null);
   const [tracking, setTracking] = useState(null);
@@ -107,7 +106,6 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
   }
 
   useEffect(() => {
-    setWeekIndex(initialWeekIndex(weeks));
     loadMonthlyProgress();
   }, [year, month]);
   useEffect(() => {
@@ -216,29 +214,6 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
 
   return (
     <div className="v2-stack weekly-tracking">
-      <section className="v2-panel weekly-tracking-context">
-        <div className="weekly-tracking-selectors">
-          <label>
-            <span>Semana</span>
-            <select value={weekIndex} onChange={(event) => setWeekIndex(Number(event.target.value))}>
-              {weeks.map((item, index) => (
-                <option key={item.from} value={index}>
-                  {item.transition ? "Transición" : `Semana ${item.weekNumber}`} · {item.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>Especialidad</span>
-            <select value={specialty} onChange={(event) => setSpecialty(event.target.value)}>
-              {SPECS.map((code) => (
-                <option value={code} key={code}>{code} · {SPEC_NAMES[code]}</option>
-              ))}
-            </select>
-          </label>
-        </div>
-      </section>
-
       <section className="v2-panel weekly-tracking-month-progress">
         <div className="v2-section-head">
           <div>
@@ -325,6 +300,12 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
               <div className="weekly-tracking-selected-progress-copy">
                 <span>AVANCE DE ESTA PROGRAMACIÓN</span>
                 <h4>{SPEC_NAMES[specialty]} · {week?.label || "Semana seleccionada"}</h4>
+                <label className="weekly-tracking-specialty-select">
+                  <span>Especialidad</span>
+                  <select value={specialty} onChange={(event) => setSpecialty(event.target.value)}>
+                    {SPECS.map((code) => <option value={code} key={code}>{code} · {SPEC_NAMES[code]}</option>)}
+                  </select>
+                </label>
                 <small>{finalized} finalizadas · {remaining} pendientes · {unmatched} sin validar</small>
               </div>
               <div className="weekly-tracking-selected-progress-bars">
@@ -686,7 +667,6 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
     </div>
   );
 }
-
 
 
 

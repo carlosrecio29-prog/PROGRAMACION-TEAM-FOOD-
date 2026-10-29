@@ -1,22 +1,4 @@
 .weekly-tracking{gap:12px}
-.weekly-tracking-context{padding:10px 14px}
-.weekly-tracking-selectors{
-  display:grid;
-  grid-template-columns:minmax(230px,1fr) minmax(180px,.65fr);
-  gap:8px;
-  align-items:end;
-}
-.weekly-tracking-selectors label{display:grid;gap:4px}
-.weekly-tracking-selectors label>span,.weekly-tracking-program>span{
-  color:var(--muted);font-size:7px;font-weight:950;text-transform:uppercase;letter-spacing:.4px
-}
-.weekly-tracking-selectors select{width:100%}
-.weekly-tracking-program{
-  min-height:38px;padding:7px 10px;border:1px solid var(--cek-line);border-radius:10px;background:#f8fbfd
-}
-.weekly-tracking-program b{display:block;color:#183d60;font-size:10px}
-.weekly-tracking-program small{display:block;margin-top:2px;color:var(--muted);font-size:7px}
-
 .weekly-tracking-upload{
   display:flex;align-items:center;justify-content:space-between;gap:18px;padding:16px 18px;
   border-color:#bddacb;background:linear-gradient(135deg,#f7fcf9,#fff)
@@ -219,6 +201,9 @@
 .weekly-tracking-selected-progress-copy>span{display:block;color:#2c7955;font-size:7px;font-weight:950;letter-spacing:.45px}
 .weekly-tracking-selected-progress-copy h4{margin:3px 0;color:#173f32;font-size:13px}
 .weekly-tracking-selected-progress-copy small,.weekly-tracking-selected-progress-value small{display:block;color:#71827a;font-size:8px}
+.weekly-tracking-specialty-select{display:grid;gap:3px;max-width:220px;margin:7px 0 5px}
+.weekly-tracking-specialty-select>span{color:#71827a;font-size:6.5px;font-weight:950;text-transform:uppercase;letter-spacing:.35px}
+.weekly-tracking-specialty-select select{min-height:29px;padding:0 8px;font-size:8px}
 .weekly-tracking-selected-progress-bars{display:grid;gap:6px}
 .weekly-tracking-selected-progress-bar{height:12px;overflow:hidden;border-radius:99px;background:#dcece2;box-shadow:inset 0 1px 2px #b7cfbf}
 .weekly-tracking-selected-progress-bar>div{height:100%;min-width:0;border-radius:inherit;background:linear-gradient(90deg,#16955f,#57c482);transition:width .25s ease}
@@ -339,4 +324,3 @@
   .weekly-tracking-month-rings{justify-content:center}
 }
 .tracking-discrepancy{display:block;color:#a33b00;font-size:11px;font-weight:700;margin-top:3px}
-

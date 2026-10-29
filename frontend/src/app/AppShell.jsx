@@ -162,6 +162,9 @@ export default function AppShell({
   year,
   month,
   onMonthChange,
+  trackingWeeks = [],
+  trackingWeekIndex = 0,
+  onTrackingWeekChange,
   health,
   accessRole = "viewer",
   onAdminLogin,
@@ -438,6 +441,22 @@ export default function AppShell({
                   ))}
                 </select>
               </label>
+              {(view === "indicators" || view === "tracking") && (
+                <label>
+                  Semana
+                  <select
+                    aria-label="Semana de seguimiento"
+                    value={trackingWeekIndex}
+                    onChange={(event) => onTrackingWeekChange?.(Number(event.target.value))}
+                  >
+                    {trackingWeeks.map((item, index) => (
+                      <option key={item.from} value={index}>
+                        {item.transition ? "Transición" : `Semana ${item.weekNumber}`} · {item.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
               <div className={`v2-health ${health}`} role="status">
                 <i />
                 {health === "ok"
