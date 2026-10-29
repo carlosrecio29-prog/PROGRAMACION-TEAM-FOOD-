@@ -157,6 +157,7 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
   const unmatched = number(latest?.sin_coincidencia);
   const otPct = number(latest?.avance_ot_pct);
   const hhPct = number(latest?.avance_hh_pct);
+  const weeklyProgress = Math.max(0, Math.min(100, otPct));
   const liveRows = tracking?.rows || [];
   const unplanned = tracking?.unplanned || {};
   const unplannedSummary = unplanned.summary || {};
@@ -244,6 +245,24 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
             <h3>Estado acumulado del mes mientras haces seguimiento semanal</h3>
           </div>
         </div>
+        <article className="weekly-tracking-selected-progress">
+          <div className="weekly-tracking-selected-progress-copy">
+            <span>AVANCE DE LA PROGRAMACIÓN SELECCIONADA</span>
+            <h4>{SPEC_NAMES[specialty]} · {week?.label || "Semana seleccionada"}</h4>
+            <small>
+              {id
+                ? `${finalized} finalizadas · ${remaining} pendientes · ${unmatched} sin validar`
+                : "No hay programación guardada para esta selección"}
+            </small>
+          </div>
+          <div className="weekly-tracking-selected-progress-bar" aria-label={`Avance semanal ${weeklyProgress}%`}>
+            <div style={{ width: `${weeklyProgress}%` }} />
+          </div>
+          <div className="weekly-tracking-selected-progress-value">
+            <b>{fmt(weeklyProgress)}%</b>
+            <small>{fmt(latest?.hh_finalizadas)} / {fmt(latest?.hh_programadas)} H-H</small>
+          </div>
+        </article>
         <div className="weekly-tracking-month-progress-grid">
           {monthlyProgress.map((row) => {
             const progress = Math.max(0, Math.min(100, number(row.progress_ot_pct)));
