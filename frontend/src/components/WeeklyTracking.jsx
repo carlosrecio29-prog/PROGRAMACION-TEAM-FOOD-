@@ -245,24 +245,6 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
             <h3>Estado acumulado del mes mientras haces seguimiento semanal</h3>
           </div>
         </div>
-        <article className="weekly-tracking-selected-progress">
-          <div className="weekly-tracking-selected-progress-copy">
-            <span>AVANCE DE LA PROGRAMACIÓN SELECCIONADA</span>
-            <h4>{SPEC_NAMES[specialty]} · {week?.label || "Semana seleccionada"}</h4>
-            <small>
-              {id
-                ? `${finalized} finalizadas · ${remaining} pendientes · ${unmatched} sin validar`
-                : "No hay programación guardada para esta selección"}
-            </small>
-          </div>
-          <div className="weekly-tracking-selected-progress-bar" aria-label={`Avance semanal ${weeklyProgress}%`}>
-            <div style={{ width: `${weeklyProgress}%` }} />
-          </div>
-          <div className="weekly-tracking-selected-progress-value">
-            <b>{fmt(weeklyProgress)}%</b>
-            <small>{fmt(latest?.hh_finalizadas)} / {fmt(latest?.hh_programadas)} H-H</small>
-          </div>
-        </article>
         <div className="weekly-tracking-month-progress-grid">
           {monthlyProgress.map((row) => {
             const progress = Math.max(0, Math.min(100, number(row.progress_ot_pct)));
@@ -330,14 +312,27 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
           {error && <div className="v2-error">{error}</div>}
           {message && <div className="v2-success">{message}</div>}
 
-          <section className="weekly-tracking-kpis">
-            <article><span>OT programadas</span><b>{programmed}</b><small>alcance de la semana</small></article>
-            <article className="ok"><span>Finalizadas detectadas</span><b>{finalized}</b><small>{fmt(otPct)}% por OT</small></article>
-            <article className="pending"><span>Por finalizar</span><b>{remaining}</b><small>incluye OT por validar</small></article>
-            <article className={unmatched ? "warn" : "ok"}><span>Sin coincidencia</span><b>{unmatched}</b><small>revisar antes del cierre</small></article>
-            <article><span>Avance por H-H</span><b>{fmt(hhPct)}%</b><small>{fmt(latest?.hh_finalizadas)} / {fmt(latest?.hh_programadas)} H-H</small></article>
-            <article><span>Última actualización</span><b className="tracking-date">{latest ? when(latest.registrado_en) : "—"}</b><small>{latest?.archivo_nombre || "Aún sin carga"}</small></article>
-            <article className="ok"><span>PMP + backlog finalizados detectados</span><b>{number(monthlyVerified.finalizadas_base_mes)}</b><small>Acumulado identificado en seguimientos del mes</small></article>
+          <section className="weekly-tracking-overview">
+            <article className="weekly-tracking-selected-progress">
+              <div className="weekly-tracking-selected-progress-copy">
+                <span>AVANCE DE ESTA PROGRAMACIÓN</span>
+                <h4>{SPEC_NAMES[specialty]} · {week?.label || "Semana seleccionada"}</h4>
+                <small>{finalized} finalizadas · {remaining} pendientes · {unmatched} sin validar</small>
+              </div>
+              <div className="weekly-tracking-selected-progress-bar" aria-label={`Avance semanal ${weeklyProgress}%`}>
+                <div style={{ width: `${weeklyProgress}%` }} />
+              </div>
+              <div className="weekly-tracking-selected-progress-value">
+                <b>{fmt(weeklyProgress)}%</b>
+                <small>{fmt(latest?.hh_finalizadas)} / {fmt(latest?.hh_programadas)} H-H</small>
+              </div>
+            </article>
+            <section className="weekly-tracking-kpis">
+              <article><span>OT programadas</span><b>{programmed}</b><small>alcance semanal</small></article>
+              <article className="ok"><span>Finalizadas</span><b>{finalized}</b><small>{fmt(otPct)}% de cumplimiento</small></article>
+              <article className="pending"><span>Pendientes</span><b>{remaining}</b><small>requieren seguimiento</small></article>
+              <article><span>Avance H-H</span><b>{fmt(hhPct)}%</b><small>{fmt(latest?.hh_finalizadas)} / {fmt(latest?.hh_programadas)} H-H</small></article>
+            </section>
           </section>
 
           <section className="v2-panel weekly-tracking-board">
