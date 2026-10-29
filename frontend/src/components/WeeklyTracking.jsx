@@ -6,6 +6,7 @@ import {
   getV2WeekProgramming,
   getV2WeekTracking,
   uploadV2WeekTracking,
+  saveV2ManualTrackingStatus,
 } from "../api";
 import Badge from "../shared/Badge";
 
@@ -71,6 +72,7 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
   const [downloading, setDownloading] = useState(false);
   const [showUnplanned, setShowUnplanned] = useState(false);
   const [monthlyProgress, setMonthlyProgress] = useState([]);
+  const [savingManual, setSavingManual] = useState(null);
 
   const week = weeks[Math.min(weekIndex, weeks.length - 1)] || weeks[0];
 
@@ -151,7 +153,7 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
   const latest = tracking?.latest;
   const programmed = latest ? number(latest.total_items) : number(tracking?.rows?.length, programming?.selected_ids?.length || 0);
   const finalized = number(latest?.finalizados);
-  const remaining = Math.max(0, programmed - finalized);
+  const remaining = number(latest?.pendientes);
   const unmatched = number(latest?.sin_coincidencia);
   const otPct = number(latest?.avance_ot_pct);
   const hhPct = number(latest?.avance_hh_pct);
@@ -187,6 +189,16 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
     });
   }, [liveRows, areaFilter, search]);
 
+  async function saveManualStatus(row, estado) {
+    const comentario = estado === "ANULADA" ? window.prompt("Motivo de la anulación:") : "";
+    if (estado === "ANULADA" && !comentario?.trim()) return;
+    try {
+      setSavingManual(row.programacion_item_id);
+      setTracking(await saveV2ManualTrackingStatus(id, row.programacion_item_id, { estado, comentario }));
+      await Promise.all([loadMonthlyProgress(), onChanged?.()]);
+    } catch (cause) { setError(cause.message || "No se pudo guardar el estado manual."); }
+    finally { setSavingManual(null); }
+  }
   async function downloadTracking() {
     if (!id) return;
     try {
@@ -411,12 +423,14 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
                     <th>Origen</th>
                     <th>H-H</th>
                     <th>Estado calendario</th>
+                    <th>Actualizar</th>
                   </tr>
                 </thead>
                 <tbody>
                   {visibleRows.map((row) => {
                     const done = row.finalizado === true;
                     const pendingRow = row.finalizado === false;
+                    const annulledRow = row.anulado === true;
                     return (
                       <tr
                         key={row.programacion_item_id}
@@ -436,12 +450,21 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
                         <td>{row.requiere_parada ? <Badge tone="stop">Equipo detenido</Badge> : <Badge tone="ok">Equipo operando</Badge>}</td>
                         <td>{row.origen === "BACKLOG" || row.origen_backlog ? <Badge tone="backlog">BACKLOG</Badge> : <Badge>PMP DEL MES</Badge>}</td>
                         <td><b>{fmt(row.hh_programadas)}</b></td>
-                        <td><span>{row.estado_calendario || (latest ? "Sin coincidencia" : "Aún sin carga")}</span></td>
+                        <td>
+                          <span>{row.estado_calendario || (latest ? "Sin coincidencia" : "Aún sin carga")}</span>
+                          {row.discrepancia_manual_excel && <small className="tracking-discrepancy">Difiere del estado manual</small>}
+                        </td>
+                        <td>
+                          {!closed && <select value={row.estado_manual || ""} disabled={savingManual === row.programacion_item_id} onChange={(event) => event.target.value && saveManualStatus(row, event.target.value)}>
+                            <option value="">Automático</option><option value="FINALIZADA">Finalizada</option><option value="PENDIENTE">Pendiente</option><option value="ANULADA">Anulada</option>
+                          </select>}
+                          {row.origen_estado === "MANUAL" && <small>Manual</small>}
+                        </td>
                       </tr>
                     );
                   })}
                   {!visibleRows.length && (
-                    <tr><td colSpan="9" className="v2-empty">No hay actividades con estos filtros.</td></tr>
+                    <tr><td colSpan="10" className="v2-empty">No hay actividades con estos filtros.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -678,3 +701,7 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
     </div>
   );
 }
+
+
+
+

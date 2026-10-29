@@ -308,3 +308,4 @@
   .weekly-tracking-month-progress-card{grid-template-columns:1fr;text-align:center}
   .weekly-tracking-month-ring{margin:auto}
 }
+.tracking-discrepancy{display:block;color:#a33b00;font-size:11px;font-weight:700;margin-top:3px}
