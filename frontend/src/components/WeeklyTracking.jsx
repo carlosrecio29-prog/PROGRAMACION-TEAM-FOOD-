@@ -252,10 +252,12 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
             const hhProgress = Math.max(0, Math.min(100, number(row.progress_hh_pct)));
             return (
               <article className="weekly-tracking-month-progress-card" key={row.especialidad}>
-                <div className="weekly-tracking-month-ring" style={{ "--progress": progress + "%" }}>
-                  <div>
-                    <strong>{fmt(row.progress_ot_pct)}%</strong>
-                    <span>cumplimiento OT</span>
+                <div className="weekly-tracking-month-rings">
+                  <div className="weekly-tracking-month-ring" style={{ "--progress": progress + "%" }}>
+                    <div>
+                      <strong>{fmt(row.progress_ot_pct)}%</strong>
+                      <span>cumplimiento OT</span>
+                    </div>
                   </div>
                   <div className="weekly-tracking-month-hh-ring" style={{ "--hh-progress": hhProgress + "%" }}>
                     <b>{fmt(row.progress_hh_pct)}%</b>
