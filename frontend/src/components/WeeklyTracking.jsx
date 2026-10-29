@@ -158,6 +158,7 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
   const otPct = number(latest?.avance_ot_pct);
   const hhPct = number(latest?.avance_hh_pct);
   const weeklyProgress = Math.max(0, Math.min(100, otPct));
+  const weeklyHhProgress = Math.max(0, Math.min(100, hhPct));
   const liveRows = tracking?.rows || [];
   const unplanned = tracking?.unplanned || {};
   const unplannedSummary = unplanned.summary || {};
@@ -248,12 +249,17 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
         <div className="weekly-tracking-month-progress-grid">
           {monthlyProgress.map((row) => {
             const progress = Math.max(0, Math.min(100, number(row.progress_ot_pct)));
+            const hhProgress = Math.max(0, Math.min(100, number(row.progress_hh_pct)));
             return (
               <article className="weekly-tracking-month-progress-card" key={row.especialidad}>
                 <div className="weekly-tracking-month-ring" style={{ "--progress": progress + "%" }}>
                   <div>
                     <strong>{fmt(row.progress_ot_pct)}%</strong>
                     <span>cumplimiento OT</span>
+                  </div>
+                  <div className="weekly-tracking-month-hh-ring" style={{ "--hh-progress": hhProgress + "%" }}>
+                    <b>{fmt(row.progress_hh_pct)}%</b>
+                    <small>H-H</small>
                   </div>
                 </div>
                 <div className="weekly-tracking-month-copy">
@@ -319,8 +325,13 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
                 <h4>{SPEC_NAMES[specialty]} · {week?.label || "Semana seleccionada"}</h4>
                 <small>{finalized} finalizadas · {remaining} pendientes · {unmatched} sin validar</small>
               </div>
-              <div className="weekly-tracking-selected-progress-bar" aria-label={`Avance semanal ${weeklyProgress}%`}>
-                <div style={{ width: `${weeklyProgress}%` }} />
+              <div className="weekly-tracking-selected-progress-bars">
+                <div className="weekly-tracking-selected-progress-bar" aria-label={`Avance semanal ${weeklyProgress}%`}>
+                  <div style={{ width: `${weeklyProgress}%` }} />
+                </div>
+                <div className="weekly-tracking-selected-hh-bar" aria-label={`Avance semanal H-H ${weeklyHhProgress}%`}>
+                  <span>H-H</span><div><i style={{ width: `${weeklyHhProgress}%` }} /></div><b>{fmt(weeklyHhProgress)}%</b>
+                </div>
               </div>
               <div className="weekly-tracking-selected-progress-value">
                 <b>{fmt(weeklyProgress)}%</b>
@@ -331,7 +342,7 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
               <article><span>OT programadas</span><b>{programmed}</b><small>alcance semanal</small></article>
               <article className="ok"><span>Finalizadas</span><b>{finalized}</b><small>{fmt(otPct)}% de cumplimiento</small></article>
               <article className="pending"><span>Pendientes</span><b>{remaining}</b><small>requieren seguimiento</small></article>
-              <article><span>Avance H-H</span><b>{fmt(hhPct)}%</b><small>{fmt(latest?.hh_finalizadas)} / {fmt(latest?.hh_programadas)} H-H</small></article>
+              <article><span>Última carga</span><b className="tracking-date">{latest ? when(latest.registrado_en) : "—"}</b><small>{latest?.archivo_nombre || "Aún sin carga"}</small></article>
             </section>
           </section>
 
