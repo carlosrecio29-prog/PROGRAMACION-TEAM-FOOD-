@@ -219,13 +219,6 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
           <div>
             <span className="v2-kicker">SEGUIMIENTO DURANTE LA SEMANA</span>
             <h3>Avance de la programación sin realizar el cierre</h3>
-            <p>
-              Puedes cargar la Lista de Calendario varias veces. Primero comprobamos
-              cuáles OT de la programación semanal están finalizadas. Después buscamos las OT
-              del PMP mensual y del backlog finalizadas aunque no estuvieran programadas.
-              Cada carga actualiza su disponibilidad sin cerrar la programación ni modificar
-              la selección guardada.
-            </p>
           </div>
           <Badge tone={closed ? "ok" : latest ? "warn" : undefined}>
             {loading
@@ -270,10 +263,6 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
           <div>
             <span className="v2-kicker">AVANCE MENSUAL POR ESPECIALIDAD</span>
             <h3>Estado acumulado del mes mientras haces seguimiento semanal</h3>
-            <p>
-              Estos círculos no esperan el cierre. Cada Lista de Calendario registrada en Seguimiento
-              suma inmediatamente las OT que aparezcan FINALIZADAS.
-            </p>
           </div>
         </div>
         <div className="weekly-tracking-month-progress-grid">
@@ -321,16 +310,6 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
               <div>
                 <span className="v2-kicker">NUEVA FOTOGRAFÍA DE AVANCE</span>
                 <h3>Cargar Lista de Calendario actualizada</h3>
-                <p>
-                  Paso 1: actualizar finalizadas, pendientes y sin coincidencia de las OT
-                  que seleccionaste en esta semana. Paso 2: comparar TODA la Lista de
-                  Calendario con el PMP del mes y su backlog; las órdenes finalizadas que no
-                  fueron programadas dejarán de ofrecerse en próximas semanas a partir de
-                  esta carga, aunque aún no hayas realizado el cierre. Una OT repetida en
-                  distintos archivos se registra una sola vez. El indicador de ejecución
-                  fuera de programación de ESTA semana conserva su propio filtro por fecha.
-                  Este proceso no elimina la selección semanal ni confirma el cierre.
-                </p>
               </div>
               <div className="weekly-tracking-upload-actions">
                 <input
@@ -701,6 +680,7 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
     </div>
   );
 }
+
 
 
 
