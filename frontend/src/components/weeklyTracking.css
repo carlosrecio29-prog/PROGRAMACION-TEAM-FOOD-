@@ -1,9 +1,9 @@
 .weekly-tracking{gap:12px}
-.weekly-tracking-context{padding:16px 18px}
+.weekly-tracking-context{padding:10px 14px}
 .weekly-tracking-selectors{
   display:grid;
-  grid-template-columns:minmax(230px,1.1fr) minmax(180px,.75fr) minmax(150px,.55fr);
-  gap:10px;
+  grid-template-columns:minmax(230px,1fr) minmax(180px,.65fr);
+  gap:8px;
   align-items:end;
 }
 .weekly-tracking-selectors label{display:grid;gap:4px}
@@ -309,3 +309,4 @@
   .weekly-tracking-month-ring{margin:auto}
 }
 .tracking-discrepancy{display:block;color:#a33b00;font-size:11px;font-weight:700;margin-top:3px}
+

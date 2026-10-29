@@ -215,22 +215,6 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
   return (
     <div className="v2-stack weekly-tracking">
       <section className="v2-panel weekly-tracking-context">
-        <div className="v2-section-head">
-          <div>
-            <span className="v2-kicker">SEGUIMIENTO DURANTE LA SEMANA</span>
-            <h3>Avance de la programación sin realizar el cierre</h3>
-          </div>
-          <Badge tone={closed ? "ok" : latest ? "warn" : undefined}>
-            {loading
-              ? "Consultando..."
-              : closed
-                ? "SEMANA CERRADA"
-                : latest
-                  ? `Última carga · ${when(latest.registrado_en)}`
-                  : "Sin seguimiento"}
-          </Badge>
-        </div>
-
         <div className="weekly-tracking-selectors">
           <label>
             <span>Semana</span>
@@ -250,11 +234,6 @@ export default function WeeklyTracking({ year, month, onOpenClosure, onChanged }
               ))}
             </select>
           </label>
-          <div className="weekly-tracking-program">
-            <span>Programación</span>
-            <b>{id ? `#${id}` : "No creada"}</b>
-            <small>{week?.label || ""}</small>
-          </div>
         </div>
       </section>
 
