@@ -106,6 +106,7 @@ function Summary({ data, onNavigate, year, month }) {
   const finalizedOrders = number(progress.finalized_orders);
   const scheduledFinalizedOrders = number(progress.scheduled_finalized_orders);
   const unplannedFinalizedOrders = number(progress.unplanned_finalized_orders);
+  const sourceFinalizedOrders = number(progress.source_finalized_orders);
   const totalOrders = number(progress.total_orders);
   const pendingOrders = Math.max(0, number(progress.pending_orders));
   const pmpOrders = number(progress.pmp_orders);
@@ -295,6 +296,7 @@ function Summary({ data, onNavigate, year, month }) {
             <span><b>{pmpOrders}</b> PMP del mes</span>
             <span><b>{backlogOrders}</b> Backlog</span>
             <span><b>{unplannedFinalizedOrders}</b> finalizadas fuera de programación</span>
+            {sourceFinalizedOrders > 0 && <span><b>{sourceFinalizedOrders}</b> finalizadas en archivo de origen</span>}
           </div>
         </button>
       </section>
