@@ -597,7 +597,7 @@ def get_progress(year: int, month: int) -> dict[str, Any]:
             "scheduled_reprogrammed_assignments": max(0, scheduled_assignments - scheduled_unique),
             "scheduled_progress_ot_pct": _pct(scheduled_completed, scheduled_unique),
             "unplanned_completed": int(row["unplanned_completed"] or 0),
-            "source_completed": int(row["source_completed"] or 0),
+            "source_completed": int(row.get("source_completed") or 0),
         })
 
 
