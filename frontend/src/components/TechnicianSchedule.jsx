@@ -38,6 +38,9 @@ function shiftTone(code) {
   if (code === "T-12") return "t12";
   if (code === "T-37") return "t37";
   if (code === "T-56") return "t56";
+  if (code === "T-39") return "t3";
+  if (code === "T-50") return "t37";
+  if (code === "T-21" || code === "T-11") return "";
   return "absence";
 }
 
@@ -221,6 +224,15 @@ export default function TechnicianSchedule({ year, month, revision = 0, onChange
         </div>
 
         {error && <div className="v2-error">{error}</div>}
+        {(data?.shifts || []).filter((shift) => !shift.es_ausencia && Number(shift.horas) === 0).length > 0 && (
+          <div className="v2-error">
+            Turnos de trabajo pendientes de definir horas:{" "}
+            {(data?.shifts || [])
+              .filter((shift) => !shift.es_ausencia && Number(shift.horas) === 0)
+              .map((shift) => shift.codigo)
+              .join(", ")}. Estas asignaciones suman 0 H-H hasta configurar su duración.
+          </div>
+        )}
         {message && <div className="v2-success">{message}</div>}
       </section>
 
