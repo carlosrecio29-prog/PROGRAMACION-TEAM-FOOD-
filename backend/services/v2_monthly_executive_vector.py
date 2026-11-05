@@ -406,7 +406,7 @@ def render_monthly_executive_vector(data:dict[str,Any],year:int,month:int):
                       "PMP, backlog y cierres semanales. OT distintas por mes; "
                       "H-H calculadas como estimaciones. Las recomendaciones "
                       "no implican aprobación ni cierre formal automático.",
-                      L,207,97,9,15,6)
+                      L,207,97,9,GRAY,15,6)
     pdf.text(L,87,"ELABORADO POR C.E.K GLOBAL INSPECTION SERVICES S.A.S.",
              9,NAVY,True)
     filename=f"informe_gerencial_cierre_mensual_{year}_{month:02d}.pdf"
