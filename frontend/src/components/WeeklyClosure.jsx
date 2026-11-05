@@ -71,7 +71,7 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
   const [preview, setPreview] = useState(null);
   const [acceptMissing, setAcceptMissing] = useState(false);
   const [manualResolutions, setManualResolutions] = useState({});
-  const problemRows = (preview?.rows || []).filter(row => row.finalizado === null);
+  const problemRows = (preview?.rows || []).filter(row => row.finalizado === null && !row.anulado);
   const noOtRows = problemRows.filter(row => row.coincidencia === "SIN_NUMERO_OT");
   const missingReasons = ["NO_ENCONTRADA", "NO_ENCONTRADA_SIN_OT"];
   const missingRows = problemRows.filter(row => missingReasons.includes(row.coincidencia));
@@ -427,12 +427,23 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
                 <h3>Conciliación de la programación #{preview.programming?.id}</h3>
                 <p><b>{preview.summary?.programmed}</b> OT programadas · <b>{preview.summary?.finalized}</b> finalizadas ·
                   <b> {preview.summary?.pending}</b> abiertas/pendientes ·
+                  <b> {preview.summary?.annulled || 0}</b> anuladas ·
+                  <b> {preview.summary?.manual_resolved || 0}</b> resueltas desde Seguimiento ·
                   <b> {preview.summary?.missing}</b> realmente no encontradas ·
                   <b> {preview.summary?.conflicts}</b> con conflicto de OT, equipo o plan ·
                   <b> {preview.summary?.blank_states}</b> sin estado.
                   Archivo: {preview.summary?.calendar_rows} filas.</p>
                 <p>H-H: {fmt(preview.summary?.hh_programmed,2)} programadas · {fmt(preview.summary?.hh_finalized,2)} finalizadas ·
                   {fmt(preview.summary?.hh_pending,2)} pendientes. Cumplimiento estimado: {fmt(preview.summary?.compliance_pct,1)}%.</p>
+                {(preview.summary?.manual_resolved || 0) > 0 && (
+                  <div className="v2-success" role="status" style={{ marginBottom: 12 }}>
+                    <b>{preview.summary.manual_resolved} OT clasificadas manualmente en Seguimiento de programación.</b>{" "}
+                    El cierre respetará esos estados aunque no aparezcan en el Excel.
+                    {(preview.summary?.manual_discrepancies || 0) > 0 && (
+                      <span> {preview.summary.manual_discrepancies} difieren del Excel; prevalece el estado manual.</span>
+                    )}
+                  </div>
+                )}
                 {noOtRows.length > 0 && (
                   <div className={unresolvedNoOtRows.length ? "v2-warning" : "v2-success"} role="status" style={{ marginBottom: 12 }}>
                     <b>{noOtRows.length} actividad(es) programada(s) no tienen OT.</b>{" "}
@@ -473,12 +484,20 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
                     OT a revisar: {problemRows.map(row => row.numero_ot || "SIN OT").join(" · ")}
                   </div>}
                   <div className="v2-table-wrap"><table>
-                    <thead><tr><th>OT programada</th><th>Equipo</th><th>Plan</th><th>H-H</th><th>Estado en Excel</th><th>Coincidencia</th><th>Definir actividad</th><th>Comentario</th><th>Resultado</th></tr></thead>
+                    <thead><tr><th>OT programada</th><th>Equipo</th><th>Plan</th><th>H-H</th><th>Estado en Excel</th><th>Estado aplicado</th><th>Coincidencia</th><th>Definir actividad</th><th>Comentario</th><th>Resultado</th></tr></thead>
                     <tbody>{(preview.rows||[]).map((row,i)=>(
-                      <tr key={i} style={row.finalizado === null ? { background: "rgba(234, 179, 8, 0.12)" } : undefined}>
+                      <tr key={i} style={row.finalizado === null && !row.anulado ? { background: "rgba(234, 179, 8, 0.12)" } : undefined}>
                         <td><b>{row.numero_ot || "SIN OT"}</b></td><td>{row.activo}</td><td>{row.plan}</td>
-                        <td>{fmt(row.hh,2)}</td><td>{row.estado_excel || "NO ENCONTRADA"}</td>
-                        <td><b>{row.coincidencia}</b>
+                        <td>{fmt(row.hh,2)}</td>
+                        <td>{row.estado_excel || (row.estado_manual ? "No figura en el Excel" : "NO ENCONTRADA")}</td>
+                        <td>
+                          <b>{row.estado_efectivo || "SIN IDENTIFICAR"}</b>
+                          {row.origen_estado === "MANUAL" && <small>Asignada en Seguimiento · Manual</small>}
+                        </td>
+                        <td><b>{row.origen_estado === "MANUAL" ? "IDENTIFICADA MANUALMENTE" : row.coincidencia}</b>
+                          {row.origen_estado === "MANUAL" && row.coincidencia_excel && (
+                            <small>Conciliación Excel: {row.coincidencia_excel}</small>
+                          )}
                           {row.alternativas_en_excel?.length > 0 && row.finalizado === null &&
                             <small>Excel: {row.alternativas_en_excel.map(a =>
                               [a.activo || "SIN EQUIPO", a.plan || "SIN PLAN", a.estado || "SIN ESTADO"].join(" / ")
@@ -533,7 +552,7 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
                           ) : "—"}
                         </td>
                         <td>{
-                          manualResolutions[row.orden_mantenimiento_id]?.estado_manual === "ANULADA"
+                          row.anulado || manualResolutions[row.orden_mantenimiento_id]?.estado_manual === "ANULADA"
                             ? "ANULADA · NO VA A BACKLOG"
                             : row.finalizado === true
                               ? "FINALIZADA"
