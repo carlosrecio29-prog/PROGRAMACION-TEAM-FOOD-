@@ -2,6 +2,7 @@ from pathlib import Path
 
 from backend.services.v2_closure_service import (
     _index_calendar, _match_calendar_item, _is_finalized, _is_annulled,
+    _effective_closure_state,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -178,3 +179,61 @@ def test_frontend_supports_annulment_comment_and_compact_selectors():
     assert "Motivo obligatorio si anulas" in source
     assert "tf-program-selectors" in source
     assert "Ver resultado del cierre" in source
+
+
+def test_closure_honors_saved_manual_status_when_ot_missing_in_excel():
+    decision = _effective_closure_state(
+        None, "NO_ENCONTRADA", {"estado": "FINALIZADA", "comentario": "Verificado por mantenimiento"}
+    )
+    assert decision["state"] == "FINALIZADA"
+    assert decision["reason"] == "SEGUIMIENTO_MANUAL"
+    assert decision["matched"] == {"estado": "FINALIZADA"}
+    assert decision["excel_reason"] == "NO_ENCONTRADA"
+    assert decision["comment"] == "Verificado por mantenimiento"
+
+
+def test_closure_preserves_manual_pending_when_excel_has_no_match():
+    decision = _effective_closure_state(
+        None, "NO_ENCONTRADA", {"estado": "PENDIENTE", "comentario": None}
+    )
+    assert decision["state"] == "PENDIENTE"
+    assert decision["reason"] == "SEGUIMIENTO_MANUAL"
+    assert decision["discrepancy"] is False
+
+
+def test_closure_manual_annulled_overrides_automatically_finalized():
+    decision = _effective_closure_state(
+        sample_calendar("FINALIZADO"), "OT_EQUIPO_PLAN",
+        {"estado": "ANULADA", "comentario": "Cancelada por supervisión"},
+    )
+    assert decision["state"] == "ANULADA"
+    assert decision["excel_state"] == "FINALIZADO"
+    assert decision["discrepancy"] is True
+    assert _is_annulled(decision["matched"]["estado"])
+
+
+def test_closure_matches_equivalent_manual_and_excel_finalized_states():
+    decision = _effective_closure_state(
+        sample_calendar("Finalizado"), "OT_EQUIPO_PLAN",
+        {"estado": "FINALIZADA"},
+    )
+    assert decision["discrepancy"] is False
+    assert decision["excel_reason"] == "OT_EQUIPO_PLAN"
+
+
+def test_closure_uses_excel_if_no_manual_decision():
+    decision = _effective_closure_state(
+        sample_calendar("ABIERTO"), "OT_EQUIPO_PLAN", None
+    )
+    assert decision["state"] == "ABIERTO"
+    assert decision["manual"] is None
+    assert decision["reason"] == "OT_EQUIPO_PLAN"
+
+
+def test_closure_manual_status_is_loaded_at_preview_and_at_commit():
+    source = (ROOT / "backend/services/v2_closure_service.py").read_text()
+    assert source.count("manual_states = _load_manual_tracking_states(conn, programming_id)") == 2
+    assert 'f"{filename} · SEGUIMIENTO MANUAL"' in source
+    frontend = (ROOT / "frontend/src/components/WeeklyClosure.jsx").read_text()
+    assert "IDENTIFICADA MANUALMENTE" in frontend
+    assert "Estado aplicado" in frontend
