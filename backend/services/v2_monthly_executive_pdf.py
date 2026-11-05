@@ -196,8 +196,8 @@ def _cover(c, year, month, issue_date, code, cek_logo, team_logo, complete):
         c.line(x, 518, x, H)
 
     # Uso del logotipo C.E.K almacenado en la propia aplicación.
-    _rounded(c, 148, 596, 300, 122, WHITE, LIGHT, 13)
-    _logo(c, cek_logo, 186, 600, 224, 113)
+    _rounded(c, 152, 585, 290, 190, WHITE, LIGHT, 13)
+    _logo(c, cek_logo, 193, 592, 209, 178)
     _text(c, W / 2, 568, "INFORME GERENCIAL", 29, NAVY, True, "center")
     _text(c, W / 2, 535, "DE MANTENIMIENTO", 24, INK, True, "center")
     c.setStrokeColor(TEAL)
@@ -408,8 +408,8 @@ def _summary_page(c, m, code, issue):
     _section(c, 508, "Resultados de la ejecución")
     _tile(c, LEFT, 402, tw, "OT programadas únicas", _num(m["planned_unique"]),
           "Sin contar reprogramaciones", NAVY)
-    _tile(c, LEFT + tw + gap, 402, tw, "Programadas finalizadas", _num(m["planned_done"]),
-          "Cierre / seguimiento", TEAL)
+    _tile(c, LEFT + tw + gap, 402, tw, "H-H OT finalizadas", _num(m["hh_done"], 1),
+          f"De {_num(m['hh_total'],1)} H-H estimadas", TEAL)
     _tile(c, LEFT + 2 * (tw + gap), 402, tw, "Fuera de programación",
           _num(m["unplanned_done"]), "OT únicas finalizadas", AMBER)
 
@@ -491,9 +491,11 @@ def _weekly_page(c, data, code, issue):
     grouped = _group_weeks(data)
     _section(c, 641, "Programadas y finalizadas por corte")
     top = 614
-    max_events = max([g["assigned"] for _, g in grouped] or [1])
-    for idx, ((from_day, to_day), g) in enumerate(grouped[:6]):
-        y = top - idx * 57
+    visible = grouped[:6]
+    row_spacing = 50 if len(visible) == 6 else 57
+    max_events = max([g["assigned"] for _, g in visible] or [1])
+    for idx, ((from_day, to_day), g) in enumerate(visible):
+        y = top - idx * row_spacing
         _text(c, LEFT, y, f"{from_day[5:]} al {to_day[5:]}", 9, NAVY, True)
         _text(c, RIGHT, y, f"{_num(g['done'])} / {_num(g['assigned'])}", 9, INK, True, "right")
         bar_width = CONTENT_W - 110
@@ -510,7 +512,7 @@ def _weekly_page(c, data, code, issue):
         _text(c, RIGHT, y - 22, "CERRADA" if g["closed"] else "ABIERTA",
               7.3, TEAL if g["closed"] else AMBER, True, "right")
 
-    table_top = 607 - min(len(grouped), 6) * 57 - 15
+    table_top = 607 - len(visible) * row_spacing - 15
     _section(c, table_top + 18, "Cuadro de seguimiento semanal")
     rows = [
         [f"{from_day[5:]} al {to_day[5:]}", _num(g["assigned"]), _num(g["done"]),
