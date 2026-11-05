@@ -116,6 +116,16 @@ def test_pdf_falls_back_if_reportlab_missing(monkeypatch):
         assert content.rstrip().endswith(b"%%EOF")
         assert len(content) > 1000
         assert filename.endswith(".pdf")
+        if programming_id is None:
+            # El entorno de producción sin ReportLab no puede volver a
+            # descargar el PDF antiguo horizontal de 10 páginas.
+            assert filename == "informe_gerencial_cierre_mensual_2026_09.pdf"
+            assert b"INFORME GERENCIAL" in content
+            assert b"INFORME GENERAL DE CIERRE MENSUAL" not in content
+            assert content.count(b"/Type /Page ") == 7
+            assert b"/MediaBox [0 0 595 842]" in content
+        else:
+            assert "electrica" in filename
 
 
 def test_visual_pdf_contains_kpi_charts_and_technical_sections(monkeypatch):
