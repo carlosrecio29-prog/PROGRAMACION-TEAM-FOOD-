@@ -399,7 +399,7 @@ export async function downloadV2ProgressPdf(year, month, programmingId = null) {
   const disposition = res.headers.get("content-disposition") || "";
   const match = disposition.match(/filename="?([^";]+)"?/i);
   const filename = match?.[1] || `informe_mtto_${year}_${month}.pdf`;
-  if (programmingId == null && !/^informe_gerencial_cierre_mensual_\\d{4}_\\d{2}\\.pdf$/i.test(filename)) {
+  if (programmingId == null && !/^informe_gerencial_cierre_mensual_\d{4}_\d{2}\.pdf$/i.test(filename)) {
     throw new Error(
       "El servidor aún entrega el formato mensual anterior. La descarga fue detenida para evitar un informe desactualizado. Actualiza la página y vuelve a intentarlo."
     );
