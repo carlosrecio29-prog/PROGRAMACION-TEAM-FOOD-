@@ -32,7 +32,7 @@ function isoDate(year, month, day) {
 
 function shiftTone(code) {
   if (!code) return "";
-  if (code === "T1") return "t1";
+  if (code === "T1" || code === "T4") return "t1";
   if (code === "T2") return "t2";
   if (code === "T3") return "t3";
   if (code === "T-12") return "t12";
