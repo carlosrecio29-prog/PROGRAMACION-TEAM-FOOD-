@@ -369,6 +369,27 @@ def get_progress(year: int, month: int) -> dict[str, Any]:
                     AND COALESCE(b.ultimo_cierre_en,b.actualizado_en)::date >= :begin
                   )
                 )
+                -- El cierre de la última semana de octubre pudo registrarse
+                -- en noviembre. No convertir ese cierre histórico en cartera
+                -- de noviembre salvo que la OT participe realmente en este mes.
+                AND (
+                  :begin < DATE '2026-11-01'
+                  OR b.estado_seguimiento IN ('PENDIENTE_DISPONIBLE','PENDIENTE_PROGRAMADA')
+                  OR EXISTS (
+                    SELECT 1
+                    FROM programacion.programacion_item_v2 pi
+                    JOIN programacion.programacion_semanal_v2 ps ON ps.id=pi.programacion_id
+                    WHERE pi.orden_mantenimiento_id=b.orden_mantenimiento_id
+                      AND ps.semana_inicio >= :begin AND ps.semana_inicio < :end
+                  )
+                  OR EXISTS (
+                    SELECT 1
+                    FROM programacion.seguimiento_no_programado_v2 snp
+                    JOIN programacion.programacion_semanal_v2 ps ON ps.id=snp.programacion_id
+                    WHERE snp.orden_mantenimiento_id=b.orden_mantenimiento_id
+                      AND ps.semana_inicio >= :begin AND ps.semana_inicio < :end
+                  )
+                )
             ),
             base_universe AS (
               SELECT
