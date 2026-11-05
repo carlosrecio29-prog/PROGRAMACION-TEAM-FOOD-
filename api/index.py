@@ -245,7 +245,11 @@ def v2_progress_report_pdf(year:int=2026,month:int=Query(9,ge=1,le=12),
         content,filename=export_progress_pdf(year,month,programming_id)
         return StreamingResponse(
             iter([content]),media_type="application/pdf",
-            headers={"Content-Disposition":f'attachment; filename="{filename}"'}
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Cache-Control": "private, no-store, max-age=0",
+                "X-Report-Format": "gerencial-a4" if programming_id is None else "semanal",
+            }
         )
     except ValueError as exc:
         raise HTTPException(422,str(exc)) from exc
