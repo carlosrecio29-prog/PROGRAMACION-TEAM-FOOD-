@@ -57,8 +57,8 @@ class _PortraitPDF(_PDF):
         self.page_number += 1
         self.rect(0, 0, W, H, WHITE)
         if self.page_number > 1:
-            self.text(R, 816, "C.E.K / TEAM FOODS  |  INFORME GERENCIAL",
-                      8, NAVY, True)  # aligned by short length
+            self.text(289, 816, "C.E.K / TEAM FOODS  |  INFORME GERENCIAL",
+                      8, NAVY, True)
             self.rule(L, 804, R, 804, LINE)
             self.rule(L, 49, R, 49, LINE)
             self.text(L, 33, "C.E.K GLOBAL INSPECTION  |  MANTENIMIENTO", 7, GRAY)
@@ -101,9 +101,11 @@ class _PortraitPDF(_PDF):
         self.text(40, 55, f"{code}  |  Rev. 00  |  {issue}", 9, SKY)
         self.text(40, 29, "CIERRE CONCILIADO" if complete else
                   "INFORME PARCIAL / PROGRAMACIONES ABIERTAS", 8, SKY, True)
+        self.rect(390, 63, 163, 70, WHITE)
         if self.team_logo_jpeg:
-            self.rect(390, 63, 163, 70, WHITE)
             self.emit("q 152 0 0 58 396 69 cm /TeamLogo Do Q")
+        else:
+            self.text(406, 96, "TEAM FOODS", 17, GREEN, True)
 
     def heading(self, number, title, desc):
         self.text(L, 771, f"{number} / INFORME MENSUAL", 9, TEAL, True)
