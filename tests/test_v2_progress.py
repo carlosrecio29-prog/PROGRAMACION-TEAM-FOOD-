@@ -74,3 +74,65 @@ def test_annulled_activity_does_not_count_as_pending_or_reduce_compliance():
     assert data["weekly_totals"]["progress_hh_pct"] == 100.0
     assert data["monthly"]["annulled"] == 1
     assert data["monthly"]["progress_ot_pct"] == 100.0
+
+
+def test_unique_scheduled_kpi_reconciles_monthly_and_weekly_counts(monkeypatch):
+    """646 asignaciones semanales son 357 OT; cumplimiento programado = 298/357."""
+    from backend.services import v2_progress_service as service
+
+    class Result:
+        def __init__(self, rows=None, scalar=None):
+            self.rows, self.scalar = rows or [], scalar
+
+        def mappings(self):
+            return self.rows
+
+        def scalar_one(self):
+            return self.scalar
+
+    class Connection:
+        def __init__(self):
+            self.queries = []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, statement, params):
+            sql = str(statement)
+            self.queries.append(sql)
+            if "monthly_specialty_rows" in sql:
+                raise AssertionError("El nombre de la variable no forma parte de SQL")
+            if "scheduled_summary AS" in sql:
+                assert "COUNT(DISTINCT pi.orden_mantenimiento_id)" in sql
+                assert "NOT COALESCE(p.es_operacion,false)" in sql
+                return Result([{
+                    "especialidad": "ELE", "name": "Eléctrica",
+                    "total_ot": 479, "total_hh": 653.56,
+                    "completed_ot": 410, "completed_hh": 382.77,
+                    "scheduled_completed": 298, "unplanned_completed": 112,
+                    "scheduled_unique": 357, "scheduled_assignments": 646,
+                }])
+            if "count(*) FROM programacion.orden_mantenimiento" in sql:
+                return Result(scalar=479)
+            return Result()
+
+    conn = Connection()
+
+    class Engine:
+        def connect(self):
+            return conn
+
+    monkeypatch.setattr(service, "get_engine", lambda: Engine())
+    progress = service.get_progress(2026, 10)
+    row = progress["monthly_progress_by_specialty"][0]
+    assert row["progress_ot_pct"] == 85.6
+    assert row["scheduled_progress_ot_pct"] == 83.5
+    assert row["completed_ot"] == 410
+    assert row["total_ot"] == 479
+    assert row["scheduled_completed"] == 298
+    assert row["scheduled_unique"] == 357
+    assert row["scheduled_assignments"] == 646
+    assert row["scheduled_reprogrammed_assignments"] == 289

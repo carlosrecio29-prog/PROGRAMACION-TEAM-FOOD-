@@ -3,7 +3,7 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import { buildMonthlySpecialtySummary } from "../src/features/reporting/monthlySpecialtySummary.js";
 
-test("cierre mensual muestra el KPI oficial de OT únicas y conserva el semanal aparte", () => {
+test("cierre mensual separa OT únicas del mes y OT únicas programadas", () => {
   const summary = buildMonthlySpecialtySummary({
     specialties: [{
       especialidad: "ELE", programmed: 646, finalized: 298, progress_ot_pct: 46.1,
@@ -11,6 +11,8 @@ test("cierre mensual muestra el KPI oficial de OT únicas y conserva el semanal 
     monthly_progress_by_specialty: [{
       especialidad: "ELE", name: "Eléctrica", total_ot: 479, completed_ot: 410,
       progress_ot_pct: 85.6, scheduled_completed: 298, unplanned_completed: 112,
+      scheduled_unique: 357, scheduled_assignments: 646,
+      scheduled_reprogrammed_assignments: 289, scheduled_progress_ot_pct: 83.5,
     }],
   }, { ELE: "Eléctrica" });
 
@@ -22,6 +24,10 @@ test("cierre mensual muestra el KPI oficial de OT únicas y conserva el semanal 
   assert.equal(summary[0].weekly.progress_ot_pct, 46.1);
   assert.equal(summary[0].weekly.programmed, 646);
   assert.equal(summary[0].weekly.finalized, 298);
+  assert.equal(summary[0].monthly.scheduled_unique, 357);
+  assert.equal(summary[0].monthly.scheduled_completed, 298);
+  assert.equal(summary[0].monthly.scheduled_progress_ot_pct, 83.5);
+  assert.equal(summary[0].monthly.scheduled_reprogrammed_assignments, 289);
 });
 
 test("incluye especialidad con cartera mensual aunque no tenga programación semanal", () => {
@@ -43,11 +49,15 @@ test("las especialidades sin dato mensual no muestran el porcentaje semanal como
   assert.equal(summary[0].weekly.progress_ot_pct, 60);
 });
 
-test("la vista consolidada usa las fuentes mensuales y semanales distintas", () => {
+test("la vista consolidada no confunde 646 asignaciones con OT programadas diferentes", () => {
   const source = readFileSync(new URL("../src/components/MonthlyClose.jsx", import.meta.url), "utf8");
   const dashboard = readFileSync(new URL("../src/components/ProgressDashboard.jsx", import.meta.url), "utf8");
   assert.ok(source.includes("row.monthly.progress_ot_pct"));
-  assert.ok(source.includes("row.weekly.progress_ot_pct"));
+  assert.ok(source.includes("row.monthly.scheduled_progress_ot_pct"));
+  assert.ok(source.includes("row.monthly.scheduled_unique"));
+  assert.ok(source.includes("row.monthly.scheduled_reprogrammed_assignments"));
+  assert.ok(!source.includes("row.weekly.progress_ot_pct"));
+  assert.ok(!source.includes("row.weekly.programmed"));
   assert.ok(source.includes("row.monthly.completed_ot"));
   assert.ok(source.includes("row.monthly.unplanned_completed"));
   assert.ok(dashboard.includes("row.progress_ot_pct"));
