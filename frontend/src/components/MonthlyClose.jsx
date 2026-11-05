@@ -285,7 +285,7 @@ export default function MonthlyClose({ year, month }) {
             <div>
               <span className="v2-kicker">RESULTADO POR ESPECIALIDAD</span>
               <h3>Consolidado de cierre</h3>
-              <p>El avance principal usa OT únicas del mes, incluidas las finalizadas fuera de programación. Las asignaciones semanales se muestran aparte para analizar reprogramaciones.</p>
+              <p>El avance general incluye toda la cartera mensual. El cumplimiento programado cuenta cada OT una sola vez, aunque se haya reprogramado en varias semanas.</p>
             </div>
           </div>
           <div className="monthly-close-specialties">
@@ -308,13 +308,20 @@ export default function MonthlyClose({ year, month }) {
                   )}
                 </div>
                 <div className="monthly-close-specialty-secondary">
-                  <span>Finalización sobre asignaciones semanales</span>
-                  <b>{row.weekly ? pct(row.weekly.progress_ot_pct) : "—"}</b>
+                  <span>Cumplimiento de OT programadas únicas</span>
+                  <b>{number(row.monthly?.scheduled_unique) > 0
+                    ? pct(row.monthly.scheduled_progress_ot_pct)
+                    : "—"}</b>
                   <small>
-                    {row.weekly
-                      ? `${count(row.weekly.finalized)} de ${count(row.weekly.programmed)} registros de programación finalizados`
-                      : "Sin programación semanal"}
+                    {number(row.monthly?.scheduled_unique) > 0
+                      ? `${count(row.monthly.scheduled_completed)} de ${count(row.monthly.scheduled_unique)} OT programadas diferentes`
+                      : "Sin OT programadas en este período"}
                   </small>
+                  {number(row.monthly?.scheduled_reprogrammed_assignments) > 0 && (
+                    <small>
+                      {count(row.monthly.scheduled_reprogrammed_assignments)} asignaciones adicionales por reprogramación (excluidas del cálculo)
+                    </small>
+                  )}
                 </div>
               </article>
             ))}
