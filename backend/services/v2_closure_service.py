@@ -111,6 +111,48 @@ def _match_calendar_item(item, exact, by_ot):
     return match, "SOLO_OT"  # Archivo parcial: no trae equipo y/o plan.
 
 
+def _load_manual_tracking_states(conn, programming_id: int) -> dict[int, dict[str, Any]]:
+    """Decisiones ya guardadas en Seguimiento de programación para esta semana."""
+    rows = conn.execute(text("""
+        SELECT sm.programacion_item_id, sm.estado, sm.comentario
+        FROM programacion.seguimiento_estado_manual_v2 sm
+        JOIN programacion.programacion_item_v2 pi ON pi.id=sm.programacion_item_id
+        WHERE pi.programacion_id=:id
+    """), {"id": programming_id}).mappings()
+    return {int(row["programacion_item_id"]): dict(row) for row in rows}
+
+
+def _effective_closure_state(
+    matched: dict[str, Any] | None,
+    match_reason: str,
+    saved_manual: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """La decisión manual prevalece; conservar la evidencia del Excel por separado."""
+    excel_state = normalize_text(matched.get("estado")) if matched else ""
+    excel_reason = "ESTADO_VACIO" if matched and not excel_state else match_reason
+    if not saved_manual:
+        return {
+            "matched": matched, "state": excel_state, "reason": excel_reason,
+            "excel_state": excel_state, "excel_reason": excel_reason,
+            "manual": None, "comment": None, "discrepancy": False,
+        }
+    manual_state = normalize_text(saved_manual.get("estado"))
+    if manual_state not in {"FINALIZADA", "PENDIENTE", "ANULADA"}:
+        raise V2ClosureError("Estado de seguimiento manual no válido para este cierre.")
+    excel_category = (
+        "ANULADA" if _is_annulled(excel_state)
+        else "FINALIZADA" if _is_finalized(excel_state)
+        else "PENDIENTE"
+    ) if excel_state else None
+    return {
+        "matched": {"estado": manual_state}, "state": manual_state,
+        "reason": "SEGUIMIENTO_MANUAL", "excel_state": excel_state,
+        "excel_reason": excel_reason, "manual": manual_state,
+        "comment": saved_manual.get("comentario"),
+        "discrepancy": bool(excel_category and excel_category != manual_state),
+    }
+
+
 def preview_week_closure(*, programming_id: int, content: bytes) -> dict[str, Any]:
     """Conciliación de solo lectura. No altera estado, programación ni backlog."""
     calendar_rows = _parse_calendar(content)
@@ -133,20 +175,31 @@ def preview_week_closure(*, programming_id: int, content: bytes) -> dict[str, An
             LEFT JOIN programacion.activo root ON root.codigo='BA-'||a.area_codigo
             WHERE pi.programacion_id=:id ORDER BY pi.id
         """), {"id": programming_id}).mappings().all()
+        manual_states = _load_manual_tracking_states(conn, programming_id)
     summary = {"programmed": len(items), "finalized": 0, "pending": 0,
-               "not_found": 0, "missing": 0, "conflicts": 0, "blank_states": 0,
-               "hh_programmed": 0.0, "hh_finalized": 0.0,
-               "hh_pending": 0.0}
+               "annulled": 0, "not_found": 0, "missing": 0,
+               "conflicts": 0, "blank_states": 0, "manual_resolved": 0,
+               "manual_discrepancies": 0, "hh_programmed": 0.0,
+               "hh_finalized": 0.0, "hh_pending": 0.0, "hh_annulled": 0.0}
     rows = []
     for item in items:
-        match, reason = _match_calendar_item(item, exact, by_ot)
-        state = normalize_text(match["estado"]) if match else ""
-        if match and not state:
-            reason = "ESTADO_VACIO"
-        finalized = _is_finalized(state) if match and state else None
+        matched, reason = _match_calendar_item(item, exact, by_ot)
+        decision = _effective_closure_state(
+            matched, reason, manual_states.get(int(item["item_id"]))
+        )
+        state = decision["state"]
+        annulled = _is_annulled(state) if state else False
+        finalized = None if annulled or not state else _is_finalized(state)
         hh = float(item["hh_programadas"] or 0)
         summary["hh_programmed"] += hh
-        if finalized is True:
+        if decision["manual"]:
+            summary["manual_resolved"] += 1
+            if decision["discrepancy"]:
+                summary["manual_discrepancies"] += 1
+        if annulled:
+            summary["annulled"] += 1
+            summary["hh_annulled"] += hh
+        elif finalized is True:
             summary["finalized"] += 1
             summary["hh_finalized"] += hh
         elif finalized is False:
@@ -154,9 +207,10 @@ def preview_week_closure(*, programming_id: int, content: bytes) -> dict[str, An
             summary["hh_pending"] += hh
         else:
             summary["not_found"] += 1
-            if reason in {"NO_ENCONTRADA", "NO_ENCONTRADA_SIN_OT", "SIN_NUMERO_OT"}:
+            excel_reason = decision["excel_reason"]
+            if excel_reason in {"NO_ENCONTRADA", "NO_ENCONTRADA_SIN_OT", "SIN_NUMERO_OT"}:
                 summary["missing"] += 1
-            elif reason == "ESTADO_VACIO":
+            elif excel_reason == "ESTADO_VACIO":
                 summary["blank_states"] += 1
             else:
                 summary["conflicts"] += 1
@@ -166,19 +220,26 @@ def preview_week_closure(*, programming_id: int, content: bytes) -> dict[str, An
             "numero_ot": item["numero_ot"], "activo": item["activo_codigo"],
             "area_codigo": item["area_codigo"], "area_nombre": item["area_nombre"],
             "plan": item["plan_clave_software"], "hh": hh,
-            "estado_excel": state or ("SIN ESTADO" if match else None),
-            "finalizado": finalized, "coincidencia": reason,
+            "estado_excel": decision["excel_state"] or ("SIN ESTADO" if matched else None),
+            "estado_manual": decision["manual"], "estado_efectivo": state or None,
+            "origen_estado": "MANUAL" if decision["manual"] else "EXCEL",
+            "discrepancia_manual_excel": decision["discrepancy"],
+            "comentario_manual": decision["comment"],
+            "finalizado": finalized, "anulado": annulled,
+            "coincidencia": decision["reason"],
+            "coincidencia_excel": decision["excel_reason"],
             "alternativas_en_excel": [
                 {"activo": candidate["activo"], "plan": candidate["plan"],
                  "estado": candidate["estado"]}
                 for candidate in by_ot.get(normalize_text(item["numero_ot"]), [])[:5]
-            ] if finalized is None else [],
+            ] if finalized is None and not annulled else [],
         })
-    for key in ("hh_programmed", "hh_finalized", "hh_pending"):
+    for key in ("hh_programmed", "hh_finalized", "hh_pending", "hh_annulled"):
         summary[key] = round(summary[key], 2)
+    effective_hh = summary["hh_programmed"] - summary["hh_annulled"]
     summary["compliance_pct"] = round(
-        summary["hh_finalized"] / summary["hh_programmed"] * 100, 1
-    ) if summary["hh_programmed"] else 0
+        summary["hh_finalized"] / effective_hh * 100, 1
+    ) if effective_hh > 0 else 0
     summary["calendar_rows"] = len(calendar_rows)
     rows_with_ot = sum(1 for row in calendar_rows if normalize_text(row["numero_ot"]) not in {"", "SIN ASIGNAR"})
     summary["duplicates_identical_ignored"] = rows_with_ot - sum(len(matches) for matches in by_ot.values())
@@ -325,6 +386,7 @@ def close_week_from_calendar(
         """), {"id": programming_id}).mappings()]
         if not items:
             raise V2ClosureError("La programación seleccionada no tiene OT para cerrar")
+        manual_states = _load_manual_tracking_states(conn, programming_id)
 
         finalized_ids: list[int] = []
         pending_ids: list[int] = []
@@ -337,7 +399,14 @@ def close_week_from_calendar(
             assigned_ot = None
             manual_comment = None
 
-            if not original_ot or original_ot == "SIN ASIGNAR":
+            saved_manual = manual_states.get(int(item["item_id"]))
+            if saved_manual:
+                matched_excel, reason_excel = _match_calendar_item(item, exact, by_ot)
+                decision = _effective_closure_state(matched_excel, reason_excel, saved_manual)
+                matched = decision["matched"]
+                match_reason = decision["reason"]
+                manual_comment = decision["comment"]
+            elif not original_ot or original_ot == "SIN ASIGNAR":
                 resolution = resolution_map.get(int(item["orden_mantenimiento_id"]))
                 if not resolution:
                     raise V2ClosureError(
@@ -415,7 +484,9 @@ def close_week_from_calendar(
             annulled = _is_annulled(state)
             finalized = False if annulled else _is_finalized(state)
             closure_source = (
-                f"{filename} · RESOLUCIÓN MANUAL"
+                f"{filename} · SEGUIMIENTO MANUAL"
+                if match_reason == "SEGUIMIENTO_MANUAL"
+                else f"{filename} · RESOLUCIÓN MANUAL"
                 if match_reason == "ESTADO_MANUAL_SIN_OT"
                 else filename
             )
