@@ -6,6 +6,7 @@ import {
   getV2ProgressPdfUrl,
 } from "../api";
 import Badge from "../shared/Badge";
+import { buildMonthlySpecialtySummary } from "../features/reporting/monthlySpecialtySummary";
 import "./monthlyClose.css";
 
 const MONTHS = [
@@ -52,12 +53,10 @@ export default function MonthlyClose({ year, month }) {
   const requirements = data?.requirements || [];
   const weeks = progress.weeks || [];
 
-  const specialtySummary = useMemo(() => {
-    return (progress.specialties || []).map((row) => ({
-      ...row,
-      name: NAMES[row.especialidad] || row.especialidad,
-    }));
-  }, [progress.specialties]);
+  const specialtySummary = useMemo(
+    () => buildMonthlySpecialtySummary(progress, NAMES),
+    [progress.specialties, progress.monthly_progress_by_specialty]
+  );
 
   async function handleCloseMonth() {
     if (!data?.ready_to_close || closing) return;
@@ -286,14 +285,37 @@ export default function MonthlyClose({ year, month }) {
             <div>
               <span className="v2-kicker">RESULTADO POR ESPECIALIDAD</span>
               <h3>Consolidado de cierre</h3>
+              <p>El avance principal usa OT únicas del mes, incluidas las finalizadas fuera de programación. Las asignaciones semanales se muestran aparte para analizar reprogramaciones.</p>
             </div>
           </div>
           <div className="monthly-close-specialties">
             {specialtySummary.map((row) => (
               <article key={row.especialidad}>
-                <span>{row.name}</span>
-                <b>{pct(row.progress_ot_pct)}</b>
-                <small>{count(row.finalized)} de {count(row.programmed)} OT finalizadas</small>
+                <span className="monthly-close-specialty-name">{row.name}</span>
+                <div className="monthly-close-specialty-primary">
+                  <span>Cumplimiento mensual · OT únicas</span>
+                  <strong>{row.monthly ? pct(row.monthly.progress_ot_pct) : "—"}</strong>
+                  <small>
+                    {row.monthly
+                      ? `${count(row.monthly.completed_ot)} de ${count(row.monthly.total_ot)} OT únicas cumplidas`
+                      : "Sin datos de cartera mensual"}
+                  </small>
+                  {row.monthly && (
+                    <small>
+                      {count(row.monthly.scheduled_completed)} finalizadas programadas ·{" "}
+                      {count(row.monthly.unplanned_completed)} fuera de programación
+                    </small>
+                  )}
+                </div>
+                <div className="monthly-close-specialty-secondary">
+                  <span>Finalización sobre asignaciones semanales</span>
+                  <b>{row.weekly ? pct(row.weekly.progress_ot_pct) : "—"}</b>
+                  <small>
+                    {row.weekly
+                      ? `${count(row.weekly.finalized)} de ${count(row.weekly.programmed)} registros de programación finalizados`
+                      : "Sin programación semanal"}
+                  </small>
+                </div>
               </article>
             ))}
           </div>
