@@ -326,6 +326,12 @@ def get_progress(year: int, month: int) -> dict[str, Any]:
               JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
               WHERE o.periodo=:begin
                 AND NOT COALESCE(p.es_operacion,false)
+                -- Mantener el cálculo histórico hasta octubre. Desde noviembre,
+                -- las OT anuladas quedan fuera del universo mensual programable.
+                AND (
+                  :begin < DATE '2026-11-01'
+                  OR upper(COALESCE(o.estado,'')) NOT LIKE 'ANUL%'
+                )
             ),
             initial_backlog AS (
               SELECT
@@ -361,6 +367,27 @@ def get_progress(year: int, month: int) -> dict[str, Any]:
                   OR (
                     b.estado_seguimiento='ANULADA'
                     AND COALESCE(b.ultimo_cierre_en,b.actualizado_en)::date >= :begin
+                  )
+                )
+                -- El cierre de la última semana de octubre pudo registrarse
+                -- en noviembre. No convertir ese cierre histórico en cartera
+                -- de noviembre salvo que la OT participe realmente en este mes.
+                AND (
+                  :begin < DATE '2026-11-01'
+                  OR b.estado_seguimiento IN ('PENDIENTE_DISPONIBLE','PENDIENTE_PROGRAMADA')
+                  OR EXISTS (
+                    SELECT 1
+                    FROM programacion.programacion_item_v2 pi
+                    JOIN programacion.programacion_semanal_v2 ps ON ps.id=pi.programacion_id
+                    WHERE pi.orden_mantenimiento_id=b.orden_mantenimiento_id
+                      AND ps.semana_inicio >= :begin AND ps.semana_inicio < :end
+                  )
+                  OR EXISTS (
+                    SELECT 1
+                    FROM programacion.seguimiento_no_programado_v2 snp
+                    JOIN programacion.programacion_semanal_v2 ps ON ps.id=snp.programacion_id
+                    WHERE snp.orden_mantenimiento_id=b.orden_mantenimiento_id
+                      AND ps.semana_inicio >= :begin AND ps.semana_inicio < :end
                   )
                 )
             ),
@@ -451,6 +478,31 @@ def get_progress(year: int, month: int) -> dict[str, Any]:
                    snp.fecha_fin_orden::date >= :begin
                    AND snp.fecha_fin_orden::date < :end
                  )
+
+              UNION ALL
+
+              SELECT
+                o.especialidad,
+                o.id AS orden_mantenimiento_id,
+                o.numero_ot,
+                CASE
+                  WHEN p.numero_personas_efectivo IS NOT NULL
+                   AND COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min) IS NOT NULL
+                  THEN round(
+                    COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min)/60.0
+                    * p.numero_personas_efectivo,
+                    2
+                  )
+                  ELSE NULL
+                END AS hh,
+                'ESTADO_ORIGEN'::text AS fuente,
+                4 AS prioridad
+              FROM programacion.orden_mantenimiento o
+              LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
+              WHERE o.periodo=:begin
+                AND :begin >= DATE '2026-11-01'
+                AND upper(btrim(COALESCE(o.estado,''))) LIKE 'FINALIZ%'
+                AND NOT COALESCE(p.es_operacion,false)
             ),
             mapped_completed AS (
               SELECT
@@ -488,7 +540,8 @@ def get_progress(year: int, month: int) -> dict[str, Any]:
                 count(*)::int AS completed_ot,
                 round(COALESCE(sum(COALESCE(c.hh,b.hh)),0),2) AS completed_hh,
                 count(*) FILTER (WHERE c.fuente='PROGRAMADA')::int AS scheduled_completed,
-                count(*) FILTER (WHERE c.fuente='NO_PROGRAMADA')::int AS unplanned_completed
+                count(*) FILTER (WHERE c.fuente='NO_PROGRAMADA')::int AS unplanned_completed,
+                count(*) FILTER (WHERE c.fuente='ESTADO_ORIGEN')::int AS source_completed
               FROM completed_unique c
               JOIN base_universe b
                 ON b.orden_mantenimiento_id=c.orden_mantenimiento_id
@@ -504,6 +557,7 @@ def get_progress(year: int, month: int) -> dict[str, Any]:
               round(COALESCE(cs.completed_hh,0),2) AS completed_hh,
               COALESCE(cs.scheduled_completed,0)::int AS scheduled_completed,
               COALESCE(cs.unplanned_completed,0)::int AS unplanned_completed,
+              COALESCE(cs.source_completed,0)::int AS source_completed,
               COALESCE(ss.scheduled_unique,0)::int AS scheduled_unique,
               COALESCE(ss.scheduled_assignments,0)::int AS scheduled_assignments
             FROM specs s
@@ -543,6 +597,7 @@ def get_progress(year: int, month: int) -> dict[str, Any]:
             "scheduled_reprogrammed_assignments": max(0, scheduled_assignments - scheduled_unique),
             "scheduled_progress_ot_pct": _pct(scheduled_completed, scheduled_unique),
             "unplanned_completed": int(row["unplanned_completed"] or 0),
+            "source_completed": int(row.get("source_completed") or 0),
         })
 
 

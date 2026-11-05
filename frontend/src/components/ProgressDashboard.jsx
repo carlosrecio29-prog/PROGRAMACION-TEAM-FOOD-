@@ -135,7 +135,7 @@ export default function ProgressDashboard({year,month,full=false,onOpenMonthly})
             <span className="v2-kicker">AVANCE DEL MES POR ESPECIALIDAD</span>
             <h4>OT y H-H cumplidas en tiempo real</h4>
           </div>
-          <small>Se actualiza con cada Seguimiento semanal; no necesita esperar el cierre de la semana.</small>
+          <small>Combina seguimiento, cierres y estados finalizados del origen, sin duplicar OT.</small>
         </div>
         <div className="v2-progress-specialty-grid">
           {monthlyProgressBySpecialty.map(row=>{
@@ -151,7 +151,10 @@ export default function ProgressDashboard({year,month,full=false,onOpenMonthly})
                 <span>{row.name||NAMES[row.especialidad]||row.especialidad}</span>
                 <h5><b>{count(row.completed_ot)}</b> de {count(row.total_ot)} OT</h5>
                 <p><b>{hh(row.completed_hh)}</b> de {hh(row.total_hh)} H-H</p>
-                <small>{count(row.scheduled_completed)} finalizadas programadas · {count(row.unplanned_completed)} fuera de programación</small>
+                <small>
+                  {count(row.scheduled_completed)} finalizadas programadas · {count(row.unplanned_completed)} fuera de programación
+                  {number(row.source_completed) > 0 && <> · {count(row.source_completed)} ya finalizadas en origen</>}
+                </small>
               </div>
             </article>;
           })}
