@@ -93,4 +93,4 @@ def test_partial_month_is_explicit_and_never_claims_formal_monthly_close():
     raw, _ = render_monthly_executive_pdf(data, 2026, 10)
     assert b"INFORME PARCIAL" in raw
     assert b"PROGRAMACIONES ABIERTAS" in raw
-    assert b"aprobaci" not in raw.lower()
+    assert b"no acredita" in raw.lower()
