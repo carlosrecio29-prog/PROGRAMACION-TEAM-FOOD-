@@ -72,8 +72,22 @@ class _PDF:
             self.logo_jpeg = None
         try:
             encoded = (Path(__file__).resolve().parents[1] / "assets" / "team_foods_logo.b64").read_text()
-            self.team_logo_jpeg = b64decode(encoded)
-        except (OSError, ValueError):
+            raw = b64decode(encoded)
+            if raw.startswith(b"\\xff\\xd8"):
+                self.team_logo_jpeg = raw
+            else:
+                # El logo de Team Foods se almacena como WebP (RIFF).
+                # Un recurso DCTDecode PDF necesita bytes JPEG genuinos.
+                from io import BytesIO
+                from PIL import Image
+                with Image.open(BytesIO(raw)) as img:
+                    rgba = img.convert("RGBA")
+                    white_bg = Image.new("RGB", rgba.size, "white")
+                    white_bg.paste(rgba, mask=rgba.getchannel("A"))
+                    output = BytesIO()
+                    white_bg.save(output, format="JPEG", quality=90)
+                    self.team_logo_jpeg = output.getvalue()
+        except (OSError, ValueError, ImportError):
             self.team_logo_jpeg = None
         self.new_page()
 
