@@ -136,3 +136,69 @@ def test_unique_scheduled_kpi_reconciles_monthly_and_weekly_counts(monkeypatch):
     assert row["scheduled_unique"] == 357
     assert row["scheduled_assignments"] == 646
     assert row["scheduled_reprogrammed_assignments"] == 289
+
+
+def test_november_source_status_updates_monthly_specialty_without_closure(monkeypatch):
+    from backend.services import v2_progress_service as service
+
+    class Result:
+        def __init__(self, rows=None, scalar=None):
+            self.rows = rows or []
+            self.scalar = scalar
+
+        def mappings(self):
+            return self.rows
+
+        def scalar_one(self):
+            return self.scalar
+
+    class Connection:
+        def __init__(self):
+            self.monthly_sql = None
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, statement, params):
+            sql = str(statement)
+            if "scheduled_summary AS" in sql:
+                self.monthly_sql = sql
+                return Result([{
+                    "especialidad": "ELE",
+                    "name": "Eléctrica",
+                    "total_ot": 445,
+                    "total_hh": 577.15,
+                    "completed_ot": 71,
+                    "completed_hh": 69.86,
+                    "scheduled_completed": 0,
+                    "unplanned_completed": 0,
+                    "source_completed": 71,
+                    "scheduled_unique": 0,
+                    "scheduled_assignments": 0,
+                }])
+            if "count(*) FROM programacion.orden_mantenimiento" in sql:
+                return Result(scalar=378)
+            return Result()
+
+    conn = Connection()
+
+    class Engine:
+        def connect(self):
+            return conn
+
+    monkeypatch.setattr(service, "get_engine", lambda: Engine())
+    progress = service.get_progress(2026, 11)
+
+    electric = progress["monthly_progress_by_specialty"][0]
+    assert electric["completed_ot"] == 71
+    assert electric["source_completed"] == 71
+    assert electric["scheduled_completed"] == 0
+    assert electric["progress_ot_pct"] == 16.0
+    assert progress["monthly"]["programmed"] == 0
+    assert progress["monthly"]["finalized"] == 0  # Cierre formal separado.
+    assert "ESTADO_ORIGEN" in conn.monthly_sql
+    assert ":begin >= DATE '2026-11-01'" in conn.monthly_sql
+    assert "DISTINCT ON (especialidad,orden_mantenimiento_id)" in conn.monthly_sql
