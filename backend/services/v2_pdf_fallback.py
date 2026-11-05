@@ -70,6 +70,11 @@ class _PDF:
             self.logo_jpeg = b64decode(encoded)
         except (OSError, ValueError):
             self.logo_jpeg = None
+        try:
+            encoded = (Path(__file__).resolve().parents[1] / "assets" / "team_foods_logo.b64").read_text()
+            self.team_logo_jpeg = b64decode(encoded)
+        except (OSError, ValueError):
+            self.team_logo_jpeg = None
         self.new_page()
 
     def emit(self, command):
@@ -289,14 +294,27 @@ class _PDF:
                 + str(len(self.logo_jpeg)).encode() + b" >>\nstream\n"
                 + self.logo_jpeg + b"\nendstream"
             )
+        team_logo = None
+        if self.team_logo_jpeg:
+            team_logo = add(
+                b"<< /Type /XObject /Subtype /Image /Width 420 /Height 160 "
+                b"/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length "
+                + str(len(self.team_logo_jpeg)).encode() + b" >>\nstream\n"
+                + self.team_logo_jpeg + b"\nendstream"
+            )
         pages=add(b"")
         refs=[]
         for stream in self.pages:
             content=add(b"<< /Length %d >>\nstream\n"%len(stream)+stream+b"\nendstream")
-            xobject = (b" /XObject << /Logo "+str(logo).encode()+b" 0 R >>") if logo else b""
+            xobject_parts=[]
+            if logo:
+                xobject_parts.append(b"/Logo "+str(logo).encode()+b" 0 R")
+            if team_logo:
+                xobject_parts.append(b"/TeamLogo "+str(team_logo).encode()+b" 0 R")
+            xobject = (b" /XObject << "+b" ".join(xobject_parts)+b" >>") if xobject_parts else b""
             refs.append(add(
                 b"<< /Type /Page /Parent "+str(pages).encode()+b" 0 R "
-                b"/MediaBox [0 0 842 595] /Resources << /Font << /F1 "
+                + f"/MediaBox [0 0 {self.W} {self.H}] /Resources << /Font << /F1 ".encode()
                 +str(normal).encode()+b" 0 R /F2 "+str(bold).encode()
                 +b" 0 R >>"+xobject+b" >> "
                 +b"/Contents "+str(content).encode()+b" 0 R >>"
