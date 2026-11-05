@@ -36,7 +36,7 @@ def test_render_has_vector_graphs_and_branding():
             "weekly_totals": {"hh_programmed": 160., "hh_finalized": 85.},
             "specialties": [], "unresolved": []}
     raw, filename = render_progress_fallback(data, 2026, 9, 7, [])
-    assert filename == "informe_semanal_mtto_2026_09_7.pdf"
+    assert filename == "informe_cierre_semanal_mecanica_2026-09-03_al_2026-09-09_7.pdf"
     assert b"INDICADORES PRINCIPALES" in raw
     assert b"CUMPLIMIENTO POR OT" in raw
     assert b"TEAM FOODS" in raw

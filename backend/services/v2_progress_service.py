@@ -563,6 +563,19 @@ def export_progress_pdf(year: int, month: int, programming_id: int | None = None
     from backend.services.v2_pdf_fallback import render_progress_fallback
 
     data = get_progress(year, month)
+    # Informe gerencial de cierre mensual: mismo endpoint y mismos datos de
+    # progreso, con maquetación A4 inspirada en la referencia corporativa.
+    # El PDF semanal mantiene su formato actual.
+    if programming_id is None:
+        try:
+            import reportlab  # Dependencia PDF instalada en producción.
+        except ModuleNotFoundError as exc:
+            if exc.name != "reportlab":
+                raise
+            # Contingencia de lectura si el entorno carece de ReportLab.
+            return render_progress_fallback(data, year, month)
+        from backend.services.v2_monthly_executive_pdf import render_monthly_executive_pdf
+        return render_monthly_executive_pdf(data, year, month)
     details = None
     unplanned_details = None
     if programming_id is not None:

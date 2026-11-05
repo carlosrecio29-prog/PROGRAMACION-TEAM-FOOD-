@@ -127,16 +127,21 @@ def test_visual_pdf_contains_kpi_charts_and_technical_sections(monkeypatch):
     for document in (monthly, weekly):
         assert document.startswith(b"%PDF-1.4")
         assert document.rstrip().endswith(b"%%EOF")
-        assert b"INDICADORES PRINCIPALES" in document
-        assert b"CUMPLIMIENTO OT" in document
-        assert b"HH DE OT CERRADAS" in document
-        assert document.count(b"/Type /Page ") >= 2
-    assert b"COMPARATIVO POR ESPECIALIDAD" in monthly
-    assert b"DETALLE" in monthly and b"OT-2" in monthly
-    assert b"DETALLE" in weekly and b"OT-1" in weekly
-    assert b"OT FINALIZADAS NO PROGRAMADAS" in weekly
-    assert b"OT NO PROGRAMADAS REALIZADAS" in weekly
-    assert b"OT-NP-1" in weekly
+        import re
+        assert len(re.findall(rb"/Type\s*/Page\b", document)) >= 2
+    # El mensual ahora es un informe gerencial A4 con portada y siete páginas.
+    for marker in (b"INFORME GERENCIAL", b"Resumen ejecutivo",
+                   b"Balance mensual de OT", b"Desempe", b"Backlog",
+                   b"Conclusiones gerenciales"):
+        assert marker in monthly, marker
+    assert len(re.findall(rb"/Type\s*/Page\b", monthly)) == 7
+    assert b"OT-2" in monthly
+    # El semanal conserva el generador vectorial anterior.
+    for marker in (b"INDICADORES PRINCIPALES", b"CUMPLIMIENTO OT",
+                   b"HH DE OT CERRADAS", b"DETALLE", b"OT-1",
+                   b"OT FINALIZADAS NO PROGRAMADAS",
+                   b"OT NO PROGRAMADAS REALIZADAS", b"OT-NP-1"):
+        assert marker in weekly
     assert weekly.rfind(b"OT FINALIZADAS NO PROGRAMADAS") > weekly.rfind(b"DETALLE")
 
 
@@ -154,7 +159,7 @@ def test_weekly_pdf_removed_explanatory_labels_and_bar():
     assert "Cada tarjeta refleja datos verificados en los cierres" not in source
     assert "Sobre HH estimadas" not in source
     assert "HH estimadas; no horas reales" not in source
-    weekly_block = source[source.index("    else:"):source.index('    kind="mensual"')]
+    weekly_block = source[source.index('pdf.section("Resultados del cierre semanal")'):]
     assert 'pdf.section("OT programadas y finalizadas")' not in weekly_block
     assert 'pdf.section("Criterios del informe")' not in weekly_block
 
