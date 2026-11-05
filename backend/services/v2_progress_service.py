@@ -382,6 +382,21 @@ def get_progress(year: int, month: int) -> dict[str, Any]:
               FROM programacion.programacion_semanal_v2
               WHERE semana_inicio >= :begin AND semana_inicio < :end
             ),
+            scheduled_summary AS (
+              -- El conteo de programaciones semanales incluye arrastres y
+              -- reprogramaciones. Cada OT cuenta una sola vez para el
+              -- cumplimiento de OT programadas únicas del mes.
+              SELECT
+                mp.especialidad,
+                COUNT(DISTINCT pi.orden_mantenimiento_id)::int AS scheduled_unique,
+                COUNT(*)::int AS scheduled_assignments
+              FROM month_programs mp
+              JOIN programacion.programacion_item_v2 pi ON pi.programacion_id=mp.id
+              JOIN programacion.orden_mantenimiento o ON o.id=pi.orden_mantenimiento_id
+              LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
+              WHERE NOT COALESCE(p.es_operacion,false)
+              GROUP BY mp.especialidad
+            ),
             latest_tracking AS (
               SELECT DISTINCT ON (t.programacion_id)
                      t.programacion_id,t.id AS seguimiento_id
@@ -488,10 +503,13 @@ def get_progress(year: int, month: int) -> dict[str, Any]:
               COALESCE(cs.completed_ot,0)::int AS completed_ot,
               round(COALESCE(cs.completed_hh,0),2) AS completed_hh,
               COALESCE(cs.scheduled_completed,0)::int AS scheduled_completed,
-              COALESCE(cs.unplanned_completed,0)::int AS unplanned_completed
+              COALESCE(cs.unplanned_completed,0)::int AS unplanned_completed,
+              COALESCE(ss.scheduled_unique,0)::int AS scheduled_unique,
+              COALESCE(ss.scheduled_assignments,0)::int AS scheduled_assignments
             FROM specs s
             LEFT JOIN base_summary bs ON bs.especialidad=s.code
             LEFT JOIN completed_summary cs ON cs.especialidad=s.code
+            LEFT JOIN scheduled_summary ss ON ss.especialidad=s.code
             ORDER BY CASE s.code
               WHEN 'MEC' THEN 1
               WHEN 'ELE' THEN 2
@@ -507,6 +525,9 @@ def get_progress(year: int, month: int) -> dict[str, Any]:
         total_hh = round(float(row["total_hh"] or 0), 2)
         completed_ot = int(row["completed_ot"] or 0)
         completed_hh = round(float(row["completed_hh"] or 0), 2)
+        scheduled_unique = int(row["scheduled_unique"] or 0)
+        scheduled_assignments = int(row["scheduled_assignments"] or 0)
+        scheduled_completed = int(row["scheduled_completed"] or 0)
         monthly_progress_by_specialty.append({
             "especialidad": row["especialidad"],
             "name": row["name"],
@@ -516,7 +537,11 @@ def get_progress(year: int, month: int) -> dict[str, Any]:
             "completed_hh": completed_hh,
             "progress_ot_pct": _pct(completed_ot, total_ot),
             "progress_hh_pct": _pct(completed_hh, total_hh),
-            "scheduled_completed": int(row["scheduled_completed"] or 0),
+            "scheduled_completed": scheduled_completed,
+            "scheduled_unique": scheduled_unique,
+            "scheduled_assignments": scheduled_assignments,
+            "scheduled_reprogrammed_assignments": max(0, scheduled_assignments - scheduled_unique),
+            "scheduled_progress_ot_pct": _pct(scheduled_completed, scheduled_unique),
             "unplanned_completed": int(row["unplanned_completed"] or 0),
         })
 
