@@ -572,8 +572,11 @@ def export_progress_pdf(year: int, month: int, programming_id: int | None = None
         except ModuleNotFoundError as exc:
             if exc.name != "reportlab":
                 raise
-            # Contingencia de lectura si el entorno carece de ReportLab.
-            return render_progress_fallback(data, year, month)
+            # Vercel puede empaquetar la función sin ReportLab. En ese
+            # caso usar el informe ejecutivo A4 vectorial, NUNCA el informe
+            # mensual anterior de 10 páginas en horizontal.
+            from backend.services.v2_monthly_executive_vector import render_monthly_executive_vector
+            return render_monthly_executive_vector(data, year, month)
         from backend.services.v2_monthly_executive_pdf import render_monthly_executive_pdf
         return render_monthly_executive_pdf(data, year, month)
     details = None
