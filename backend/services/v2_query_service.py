@@ -27,6 +27,7 @@ def _dashboard_progress_payload(row:dict[str,Any])->dict[str,Any]:
         "finalized_orders":finalized,
         "scheduled_finalized_orders":max(0,int(row.get("scheduled_finalized_orders") or 0)),
         "unplanned_finalized_orders":max(0,int(row.get("unplanned_finalized_orders") or 0)),
+        "source_finalized_orders":max(0,int(row.get("source_finalized_orders") or 0)),
         "pending_orders":pending,
         "progress_pct":round(100.0*finalized/total,1) if total else 0.0,
         "pmp_orders":max(0,int(row.get("pmp_orders") or 0)),
@@ -304,6 +305,18 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
                 AND ps.estado='CERRADA'
                 AND pi.finalizado=true
             ),
+            source_finalized AS (
+              -- Desde noviembre de 2026 también reconocemos los estados del
+              -- calendario/Google Sheets antes de realizar el primer seguimiento.
+              -- Los períodos previos mantienen inalterado su cierre histórico.
+              SELECT o.id AS order_id
+              FROM programacion.orden_mantenimiento o
+              LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
+              WHERE o.periodo=:period
+                AND :period >= DATE '2026-11-01'
+                AND upper(btrim(COALESCE(o.estado,''))) LIKE 'FINALIZ%'
+                AND COALESCE(p.es_operacion,false)=false
+            ),
             scheduled_finished AS (
               SELECT order_id FROM tracked_finalized
               UNION
@@ -313,6 +326,8 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
               SELECT order_id FROM scheduled_finished
               UNION
               SELECT order_id FROM unplanned_month
+              UNION
+              SELECT order_id FROM source_finalized
             ),
             latest_tracking AS (
               SELECT max(s.registrado_en) AS latest_tracking_at
@@ -338,6 +353,17 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
                 FROM unplanned_month n
                 JOIN universe u USING(order_id)
               )::int AS unplanned_finalized_orders,
+              (
+                SELECT count(*)
+                FROM source_finalized sf
+                JOIN universe u USING(order_id)
+                WHERE NOT EXISTS (
+                  SELECT 1 FROM scheduled_finished f WHERE f.order_id=sf.order_id
+                )
+                  AND NOT EXISTS (
+                    SELECT 1 FROM unplanned_month n WHERE n.order_id=sf.order_id
+                  )
+              )::int AS source_finalized_orders,
               (SELECT count(*) FROM month_pmp)::int AS pmp_orders,
               (
                 SELECT count(DISTINCT x.order_id)
