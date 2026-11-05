@@ -73,7 +73,7 @@ class _PDF:
         try:
             encoded = (Path(__file__).resolve().parents[1] / "assets" / "team_foods_logo.b64").read_text()
             raw = b64decode(encoded)
-            if raw.startswith(b"\\xff\\xd8"):
+            if raw.startswith(b"\xff\xd8"):
                 self.team_logo_jpeg = raw
             else:
                 # El logo de Team Foods se almacena como WebP (RIFF).
