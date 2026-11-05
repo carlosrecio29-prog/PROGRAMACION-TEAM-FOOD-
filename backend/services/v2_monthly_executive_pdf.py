@@ -550,11 +550,16 @@ def _specialty_page(c, m, code, issue):
         _text(c, x + 14, y + 114,
               f"{_num(s.get('completed_ot'))} de {_num(s.get('total_ot'))} OT de la cartera",
               8.2, INK)
-        _progress(c, x + 14, y + 63, width - 28, "OT programadas únicas",
-                  s.get("scheduled_progress_ot_pct"), color=TEAL)
-        _text(c, x + 14, y + 37,
-              f"{_num(s.get('scheduled_completed'))} de {_num(s.get('scheduled_unique'))} OT",
-              8.2, MUTED)
+        if _n(s.get("scheduled_unique")) > 0:
+            _progress(c, x + 14, y + 63, width - 28, "OT programadas únicas",
+                      s.get("scheduled_progress_ot_pct"), color=TEAL)
+            _text(c, x + 14, y + 37,
+                  f"{_num(s.get('scheduled_completed'))} de {_num(s.get('scheduled_unique'))} OT",
+                  8.2, MUTED)
+        else:
+            _text(c, x + 14, y + 90, "OT programadas únicas", 9, NAVY, True)
+            _text(c, x + 14, y + 67, "SIN PROGRAMACIÓN", 10, MUTED, True)
+            _text(c, x + 14, y + 37, "Sin base de cumplimiento programado", 8.2, MUTED)
         _text(c, x + 14, y + 18,
               f"H-H est.: {_num(s.get('completed_hh'),1)} de {_num(s.get('total_hh'),1)}",
               8.2, INK, True)
