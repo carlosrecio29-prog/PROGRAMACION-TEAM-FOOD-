@@ -173,8 +173,8 @@ function cekVerificarFuente() {
     stats.porEspecialidad[spec] = (stats.porEspecialidad[spec] || 0) + 1;
     if (seen[ot]) stats.repetidas++;
     else { seen[ot] = true; stats.unicas++; }
-    const plan = cekNormalizar_(r[12]).replace(/^\\d+\\s*[-–—:._/|]+\\s*/, '');
-    if (/^OPERACION(?:\\b|\\s|[-–—:._/|])/.test(plan)) stats.operaciones++;
+    const plan = cekNormalizar_(r[12]).replace(/^\d+\s*[-–—:._/|]+\s*/, '');
+    if (/^OPERACION(?:\b|\s|[-–—:._/|])/.test(plan)) stats.operaciones++;
   }
   console.log(JSON.stringify(stats));
   return stats;
