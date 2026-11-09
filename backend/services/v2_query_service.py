@@ -52,6 +52,9 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
               FROM programacion.orden_mantenimiento o
               LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
               WHERE o.periodo=:period AND COALESCE(p.es_operacion,false)=false
+                AND NOT EXISTS (SELECT 1 FROM programacion.google_sheet_ot_estado_v2 gs
+                  WHERE gs.periodo=:period AND gs.numero_ot=upper(btrim(o.numero_ot))
+                    AND gs.es_operacion=true)
             )
             SELECT
               (SELECT count(*) FROM programacion.activo) AS activos,
@@ -126,6 +129,9 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
             FROM programacion.orden_mantenimiento o
             LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
             WHERE o.periodo=:period AND COALESCE(p.es_operacion,false)=false
+              AND NOT EXISTS (SELECT 1 FROM programacion.google_sheet_ot_estado_v2 gs
+                WHERE gs.periodo=:period AND gs.numero_ot=upper(btrim(o.numero_ot))
+                  AND gs.es_operacion=true)
             GROUP BY COALESCE(o.especialidad,'SIN')
             ORDER BY especialidad
         """),{"period":period}).mappings()]
@@ -181,6 +187,9 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
               FROM programacion.orden_mantenimiento o
               LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
               WHERE o.periodo=:period AND COALESCE(p.es_operacion,false)=false
+                AND NOT EXISTS (SELECT 1 FROM programacion.google_sheet_ot_estado_v2 gs
+                  WHERE gs.periodo=:period AND gs.numero_ot=upper(btrim(o.numero_ot))
+                    AND gs.es_operacion=true)
             ),
             pmp_pending AS (
               SELECT orden_mantenimiento_id,hh
@@ -246,6 +255,9 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
               LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
               WHERE o.periodo=:period
                 AND COALESCE(p.es_operacion,false)=false
+                AND NOT EXISTS (SELECT 1 FROM programacion.google_sheet_ot_estado_v2 gs
+                  WHERE gs.periodo=:period AND gs.numero_ot=upper(btrim(o.numero_ot))
+                    AND gs.es_operacion=true)
                 AND upper(COALESCE(o.estado,'')) NOT LIKE 'ANUL%'
             ),
             backlog_available AS (
