@@ -76,3 +76,63 @@ def test_incomplete_status_does_not_turn_into_pending():
 def test_empty_period_aborts_without_modifying_database():
     with pytest.raises(SheetSyncError, match="No hay OT"):
         _parse_rows([HEADERS,source_row(month="OCTUBRE")], date(2026,11,1))
+
+
+def test_transport_preserves_original_base_de_datos_row_number():
+    selected, _, _ = _parse_rows([
+        HEADERS + ["__ORIGINAL_ROW"],
+        source_row() + ["14937"],
+    ], date(2026, 11, 1))
+    assert selected["OT-15001-26"]["row"] == 14937
+
+
+def test_apps_script_pull_uses_private_post(monkeypatch):
+    import requests
+    from backend.services.v2_sheet_sync_service import _read_sheet_apps_script
+
+    monkeypatch.setenv("SHEET_SYNC_SECRET", "S" * 48)
+    monkeypatch.setenv(
+        "APPS_SCRIPT_WEBAPP_URL",
+        "https://script.google.com/macros/s/AKfycbMockDeploy/exec",
+    )
+    captured = {}
+
+    class Response:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {
+                "ok": True, "year": 2026, "month": 11,
+                "values": [HEADERS, source_row()],
+            }
+
+    def fake_post(url, **kwargs):
+        captured.update({"url": url, **kwargs})
+        return Response()
+
+    monkeypatch.setattr(requests, "post", fake_post)
+    rows = _read_sheet_apps_script(2026, 11)
+    assert len(rows) == 2
+    assert "S" * 48 not in captured["url"]
+    assert captured["json"]["secret"] == "S" * 48
+    assert captured["json"]["action"] == "snapshot"
+
+
+def test_apps_script_pull_fails_closed_without_secret(monkeypatch):
+    from backend.services.v2_sheet_sync_service import _read_sheet_apps_script
+    monkeypatch.delenv("SHEET_SYNC_SECRET", raising=False)
+    monkeypatch.setenv(
+        "APPS_SCRIPT_WEBAPP_URL",
+        "https://script.google.com/macros/s/AKfycbMockDeploy/exec",
+    )
+    with pytest.raises(SheetSyncError, match="SHEET_SYNC_SECRET"):
+        _read_sheet_apps_script(2026, 11)
+
+
+def test_apps_script_pull_rejects_unsafe_urls(monkeypatch):
+    from backend.services.v2_sheet_sync_service import _read_sheet_apps_script
+    monkeypatch.setenv("SHEET_SYNC_SECRET", "A" * 48)
+    monkeypatch.setenv("APPS_SCRIPT_WEBAPP_URL", "https://evil.invalid/macros/s/foo/exec")
+    with pytest.raises(SheetSyncError, match="URL"):
+        _read_sheet_apps_script(2026, 11)
