@@ -578,6 +578,7 @@ def sync_status(year: int, month: int) -> dict[str, Any]:
         """), {"period":period}).mappings()]
     return {
       "configurado": bool(os.environ.get("GOOGLE_SHEETS_SERVICE_ACCOUNT_JSON")),
+      "cron_configurado": bool(os.environ.get("CRON_SECRET")),
       "origen": "BASE DE DATOS",
       "horario": "06:00 America/Bogota (11:00 UTC)",
       "periodo": str(period), "ultima": rows[0] if rows else None,
