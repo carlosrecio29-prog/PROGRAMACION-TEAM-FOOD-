@@ -15,7 +15,6 @@ from sqlalchemy import text
 from backend.database import get_engine
 
 SPREADSHEET_ID = "1Or0L7epumDQUsUuLjb4FXt-7FRbC16pJ8-b0VwROwdo"
-SHEET_RANGE = "'BASE DE DATOS'!A1:M"
 SPECIALTIES = {"ELE", "MEC", "MET", "SER"}
 MONTHS = {name: i for i, name in enumerate(
     ("ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO",
@@ -97,6 +96,9 @@ def _parse_rows(values: list[list[Any]], period: date) -> tuple[dict[str, dict[s
         else:
             suffix = ot.rsplit("-", 1)[-1]
             source_year = 2000 + int(suffix) if len(suffix) == 2 else int(suffix)
+        original_row = cell(row, "__ORIGINAL_ROW")
+        if str(original_row or "").isdigit():
+            row_number = int(original_row)
         item = {
             "ot": ot, "spec": spec, "asset": asset, "plan": plan,
             "title": str(cell(row, "OBSERVACION") or cell(row, "DESCRIPCION") or "").strip(),
@@ -123,32 +125,38 @@ def _parse_rows(values: list[list[Any]], period: date) -> tuple[dict[str, dict[s
     return selected, errors, dict(stats)
 
 
-def _read_sheet() -> list[list[Any]]:
-    raw = os.environ.get("GOOGLE_SHEETS_SERVICE_ACCOUNT_JSON", "").strip()
-    if not raw:
-        raise SheetSyncError("Falta configurar GOOGLE_SHEETS_SERVICE_ACCOUNT_JSON en Vercel.")
-    try:
-        from google.oauth2 import service_account
-        from google.auth.transport.requests import AuthorizedSession
-        credentials = service_account.Credentials.from_service_account_info(
-            json.loads(raw), scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"]
+def _read_sheet_apps_script(year: int, month: int) -> list[list[Any]]:
+    # Apps Script se ejecuta bajo la cuenta que ya puede leer el Google Sheet.
+    # Solo Vercel conoce URL del Web App y secreto; nada va al navegador.
+    import requests
+
+    url = os.environ.get("APPS_SCRIPT_WEBAPP_URL", "").strip()
+    secret = os.environ.get("SHEET_SYNC_SECRET", "").strip()
+    if not url or not secret or len(secret) < 32:
+        raise SheetSyncError(
+            "Falta configurar APPS_SCRIPT_WEBAPP_URL y SHEET_SYNC_SECRET en Vercel."
         )
-        session = AuthorizedSession(credentials)
-        url = f"https://sheets.googleapis.com/v4/spreadsheets/{SPREADSHEET_ID}/values/{SHEET_RANGE}"
-        response = session.get(url, params={"valueRenderOption": "FORMATTED_VALUE"}, timeout=25)
+    if not re.fullmatch(r"https://script\\.google\\.com/macros/s/[A-Za-z0-9_-]+/exec", url):
+        raise SheetSyncError("La URL de Google Apps Script no tiene formato de despliegue válido.")
+    try:
+        response = requests.post(
+            url, json={"action": "snapshot", "year": year, "month": month, "secret": secret},
+            timeout=(5, 35), allow_redirects=True,
+        )
         response.raise_for_status()
         result = response.json()
-        if not isinstance(result.get("values"), list):
-            raise ValueError("Respuesta incompleta")
-        return result["values"]
-    except SheetSyncError:
-        raise
+        if not isinstance(result, dict) or result.get("ok") is not True:
+            raise ValueError("Respuesta rechazada por Apps Script")
+        if result.get("year") != year or result.get("month") != month:
+            raise ValueError("Período incorrecto en la respuesta de Apps Script")
+        values = result.get("values")
+        if not isinstance(values, list) or not values or len(values) > 15000:
+            raise ValueError("Respuesta de datos incompleta o excesiva")
+        return values
     except Exception as exc:
-        # No exponer JSON de la cuenta de servicio, tokens ni respuestas privadas.
         raise SheetSyncError(
-            "No fue posible leer BASE DE DATOS desde Google Sheets. Comprueba la cuenta de servicio, su acceso como lector y la API de Sheets."
+            "Apps Script no respondió con datos válidos. Revisa su despliegue, permisos y Propiedades del script."
         ) from exc
-
 
 def _lookup_plan(plans: dict[str, dict[str, Any]], plan: str) -> dict[str, Any] | None:
     return plans.get(_norm(plan))
@@ -268,17 +276,22 @@ def _week_snapshots(conn, period: date, today: date, states: dict[str, dict[str,
     return saved
 
 
-def sync_month(*, year: int, month: int, trigger: str) -> dict[str, Any]:
+def sync_month(*, year: int, month: int, trigger: str,
+               values: list[list[Any]] | None = None) -> dict[str, Any]:
     if trigger not in ("CRON", "MANUAL") or not (2020 <= year <= 2100 and 1 <= month <= 12):
         raise SheetSyncError("Parámetros de sincronización inválidos.")
     period = date(year, month, 1)
     today = datetime.now(ZoneInfo("America/Bogota")).date()
     if period > today.replace(day=1):
         raise SheetSyncError("No se puede sincronizar un mes futuro.")
+    if period < date(2026, 11, 1):
+        raise SheetSyncError("Los meses anteriores a noviembre de 2026 están protegidos.")
     engine = get_engine()
     try:
-        values = _read_sheet()
-        states, warnings, scan = _parse_rows(values, period)
+        snapshot = values if values is not None else _read_sheet_apps_script(year, month)
+        if not isinstance(snapshot, list) or not snapshot or len(snapshot) > 15000:
+            raise SheetSyncError("La fotografía recibida está vacía o excede el límite seguro.")
+        states, warnings, scan = _parse_rows(snapshot, period)
         if len(states) > 10000:
             raise SheetSyncError("La cantidad de OT supera el límite seguro por mes.")
     except SheetSyncError as exc:
@@ -294,6 +307,11 @@ def sync_month(*, year: int, month: int, trigger: str) -> dict[str, Any]:
             locked = conn.execute(text("SELECT pg_try_advisory_xact_lock(72026,1109)")).scalar_one()
             if not locked:
                 return {"ok": False, "estado": "OMITIDA", "mensaje": "Otra sincronización está en curso."}
+            month_close = conn.execute(text("""
+              SELECT estado FROM programacion.cierre_mensual_v2 WHERE periodo=:period
+            """), {"period": period}).scalar()
+            if month_close and str(month_close).upper() != "ABIERTO":
+                raise SheetSyncError("El mes ya está cerrado; no se sincronizarán ni modificarán sus datos.")
             run_id = conn.execute(text("""
               INSERT INTO programacion.google_sheet_sync_run_v2(periodo,origen,estado)
               VALUES (:period,:origin,'COMPLETADA') RETURNING id
@@ -577,10 +595,10 @@ def sync_status(year: int, month: int) -> dict[str, Any]:
           WHERE periodo=:period ORDER BY iniciado_en DESC,id DESC LIMIT 10
         """), {"period":period}).mappings()]
     return {
-      "configurado": bool(os.environ.get("GOOGLE_SHEETS_SERVICE_ACCOUNT_JSON")),
-      "cron_configurado": bool(os.environ.get("CRON_SECRET")),
-      "origen": "BASE DE DATOS",
-      "horario": "06:00 America/Bogota (11:00 UTC)",
+      "configurado": bool(os.environ.get("APPS_SCRIPT_WEBAPP_URL")) and len(os.environ.get("SHEET_SYNC_SECRET","")) >= 32,
+      "cron_configurado": len(os.environ.get("SHEET_SYNC_SECRET","")) >= 32,
+      "origen": "BASE DE DATOS · Google Apps Script",
+      "horario": "≈06:00 America/Bogota (activador de Apps Script)",
       "periodo": str(period), "ultima": rows[0] if rows else None,
       "historial": rows,
     }
