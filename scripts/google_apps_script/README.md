@@ -1,10 +1,11 @@
 # Activar CEK Global MTTO con Google Apps Script (sin Google Cloud ni tarjeta)
 
-## 1. Crear el script dentro del Google Sheets
-1. Abre https://docs.google.com/spreadsheets/d/1Or0L7epumDQUsUuLjb4FXt-7FRbC16pJ8-b0VwROwdo/edit
-2. En el menú **Extensiones → Apps Script** abre el proyecto vinculado.
-3. Sustituye `Code.gs` por el contenido de [Code.gs](./Code.gs) y guarda.
-4. El script lee solo `BASE DE DATOS`; no modifica la hoja ni revisa las pestañas de especialidad.
+## 1. Crear un script privado para leer Google Sheets
+1. Desde tu cuenta de Google abre https://script.google.com/home/projects/create y crea un proyecto independiente llamado **CEK Global MTTO Sync**.
+2. Reemplaza su `Code.gs` por el contenido de [Code.gs](./Code.gs) y guarda.
+3. El script utiliza `SpreadsheetApp.openById` para leer tu hoja, por lo que no es necesario vincularlo directamente al libro.
+4. Se recomienda un proyecto **privado independiente** para que otros editores del Google Sheets no puedan ver las claves del script.
+5. Solo consulta `BASE DE DATOS`; no modifica la hoja ni lee las pestañas por especialidad.
 
 ## 2. Configurar el secreto y destino
 En Apps Script, **Configuración del proyecto → Propiedades del script**:
