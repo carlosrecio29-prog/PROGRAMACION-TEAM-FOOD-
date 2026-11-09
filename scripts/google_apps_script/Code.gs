@@ -152,7 +152,35 @@ function cekInstalarTriggerDiario() {
   console.log('Activador diario configurado alrededor de las 06:00 de Colombia.');
 }
 
-/** Ejecutar opcionalmente desde Apps Script para probar sin esperar al trigger. */
+/**
+ * PREFLIGHT de solo lectura: antes de aplicar cualquier estado en Supabase.
+ * Informa volumen por especialidad, duplicados y cantidad de operaciones;
+ * no envía ninguna orden a la aplicación.
+ */
+function cekVerificarFuente() {
+  const today = new Date();
+  const year = Number(Utilities.formatDate(today, CEK_TZ, 'yyyy'));
+  const month = Number(Utilities.formatDate(today, CEK_TZ, 'M'));
+  const values = cekSnapshot_(year, month);
+  const seen = {};
+  const stats = {periodo: year + '-' + String(month).padStart(2, '0'),
+                 filas: values.length - 1, unicas: 0, repetidas: 0,
+                 porEspecialidad: {}, operaciones: 0};
+  for (let i = 1; i < values.length; i++) {
+    const r = values[i];
+    const ot = cekNormalizar_(r[2]);
+    const spec = cekNormalizar_(r[3]);
+    stats.porEspecialidad[spec] = (stats.porEspecialidad[spec] || 0) + 1;
+    if (seen[ot]) stats.repetidas++;
+    else { seen[ot] = true; stats.unicas++; }
+    const plan = cekNormalizar_(r[12]).replace(/^\\d+\\s*[-–—:._/|]+\\s*/, '');
+    if (/^OPERACION(?:\\b|\\s|[-–—:._/|])/.test(plan)) stats.operaciones++;
+  }
+  console.log(JSON.stringify(stats));
+  return stats;
+}
+
+/** Ejecutar después del preflight, desde Apps Script, para probar el envío. */
 function cekProbarAhora() {
   cekSincronizacionDiaria();
 }
