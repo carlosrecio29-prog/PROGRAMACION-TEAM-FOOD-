@@ -275,11 +275,20 @@ def sync_month(*, year: int, month: int, trigger: str) -> dict[str, Any]:
     today = datetime.now(ZoneInfo("America/Bogota")).date()
     if period > today.replace(day=1):
         raise SheetSyncError("No se puede sincronizar un mes futuro.")
-    values = _read_sheet()
-    states, warnings, scan = _parse_rows(values, period)
-    if len(states) > 10000:
-        raise SheetSyncError("La cantidad de OT supera el límite seguro por mes.")
     engine = get_engine()
+    try:
+        values = _read_sheet()
+        states, warnings, scan = _parse_rows(values, period)
+        if len(states) > 10000:
+            raise SheetSyncError("La cantidad de OT supera el límite seguro por mes.")
+    except SheetSyncError as exc:
+        with engine.begin() as conn:
+            conn.execute(text("""
+              INSERT INTO programacion.google_sheet_sync_run_v2(
+                periodo,origen,estado,error_resumido)
+              VALUES (:period,:origin,'ERROR',:detail)
+            """), {"period": period, "origin": trigger, "detail": str(exc)[:400]})
+        raise
     try:
         with engine.begin() as conn:
             locked = conn.execute(text("SELECT pg_try_advisory_xact_lock(72026,1109)")).scalar_one()
@@ -549,17 +558,18 @@ def sync_month(*, year: int, month: int, trigger: str) -> dict[str, Any]:
 def sync_status(year: int, month: int) -> dict[str, Any]:
     period = date(year,month,1)
     with get_engine().connect() as conn:
-        last = conn.execute(text("""
+        rows = [dict(row) for row in conn.execute(text("""
           SELECT id,estado,origen,iniciado_en,terminado_en,
                  filas_leidas,ots_validas,ots_nuevas,estados_cambiados,
                  backlog_conciliado,exclusiones_operacion,seguimientos_actualizados,
                  conflictos,resumen,error_resumido
           FROM programacion.google_sheet_sync_run_v2
-          WHERE periodo=:period ORDER BY iniciado_en DESC,id DESC LIMIT 1
-        """), {"period":period}).mappings().first()
+          WHERE periodo=:period ORDER BY iniciado_en DESC,id DESC LIMIT 10
+        """), {"period":period}).mappings()]
     return {
       "configurado": bool(os.environ.get("GOOGLE_SHEETS_SERVICE_ACCOUNT_JSON")),
       "origen": "BASE DE DATOS",
       "horario": "06:00 America/Bogota (11:00 UTC)",
-      "periodo": str(period), "ultima": dict(last) if last else None,
+      "periodo": str(period), "ultima": rows[0] if rows else None,
+      "historial": rows,
     }
