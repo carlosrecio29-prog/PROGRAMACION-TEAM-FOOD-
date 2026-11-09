@@ -324,6 +324,21 @@ def sync_month(*, year: int, month: int, trigger: str) -> dict[str, Any]:
             counts: Counter[str] = Counter()
             group_ops: Counter[tuple[str, str]] = Counter()
             prior_end = period - timedelta(days=1)
+            prior_snapshots = {
+                _norm(r["numero_ot"]): r["estado"]
+                for r in conn.execute(text("""
+                    SELECT numero_ot,estado FROM programacion.google_sheet_ot_estado_v2
+                    WHERE periodo=:period
+                """), {"period": period}).mappings()
+            }
+            existing_operations = {
+                _norm(ot) for ot in conn.execute(text("""
+                    SELECT numero_ot FROM programacion.operacion_exclusion_detalle_v2
+                    WHERE periodo=:period
+                """), {"period": period}).scalars()
+            }
+            observations: list[dict[str, Any]] = []
+            source_changes: list[dict[str, Any]] = []
             for ot, item in states.items():
                 found = previous.get(ot, [])
                 order = next((x for x in found if x["periodo"] == period), None) or (found[0] if found else None)
@@ -332,10 +347,7 @@ def sync_month(*, year: int, month: int, trigger: str) -> dict[str, Any]:
                     counts["operaciones"] += 1
                     group_ops[(item["plan"], item["spec"])] += 1
                     # Excluidas: no crear PMP ni afectar los indicadores de cumplimiento.
-                    if not conn.execute(text("""
-                      SELECT 1 FROM programacion.operacion_exclusion_detalle_v2
-                      WHERE periodo=:period AND upper(btrim(numero_ot))=:ot LIMIT 1
-                    """), {"period": period, "ot": ot}).first():
+                    if ot not in existing_operations:
                         conn.execute(text("""
                           INSERT INTO programacion.operacion_exclusion_detalle_v2(
                             periodo,fila_origen,numero_ot,activo_codigo,plan_clave_software,
@@ -439,18 +451,34 @@ def sync_month(*, year: int, month: int, trigger: str) -> dict[str, Any]:
                                 counts["backlog_conciliado"] += 1
                                 _write_change(conn,run_id,period,item,"BACKLOG_FINALIZADO_ORIGEN",order["id"])
 
-                old_status = conn.execute(text("""
-                  SELECT estado FROM programacion.google_sheet_ot_estado_v2
-                  WHERE periodo=:period AND numero_ot=:ot
-                """), {"period": period, "ot": ot}).scalar()
+                old_status = prior_snapshots.get(ot)
                 if old_status != item["estado"]:
-                    _write_change(conn,run_id,period,item,"OBSERVACION_ORIGEN",
-                                  order["id"] if order else None, before=old_status,after=item["estado"])
+                    source_changes.append({
+                        "run": run_id, "period": str(period), "ot": ot,
+                        "order_id": order["id"] if order else None,
+                        "action": "OBSERVACION_ORIGEN",
+                        "before": old_status, "after": item["estado"],
+                    })
+                observations.append({
+                    "period": str(period), "ot": ot, "spec": item["spec"],
+                    "state": item["estado"], "plan": item["plan"],
+                    "asset": item["asset"], "operation": item["operation"],
+                    "row": item["row"], "run": run_id,
+                })
+
+            # Alta y actualización de fotografías en lotes: no realizar miles
+            # de viajes SQL por cada consulta diaria de BASE DE DATOS.
+            for offset in range(0, len(observations), 500):
+                batch = observations[offset:offset + 500]
                 conn.execute(text("""
                   INSERT INTO programacion.google_sheet_ot_estado_v2(
                     periodo,numero_ot,especialidad,estado,plan_trabajo,activo_codigo,
                     es_operacion,hoja_fila,observado_en,actualizado_en,ultima_sincronizacion_id)
-                  VALUES (:period,:ot,:spec,:state,:plan,:asset,:operation,:row,now(),now(),:run)
+                  SELECT CAST(s.period AS date),s.ot,s.spec,s.state,s.plan,s.asset,
+                         s.operation,s.row,now(),now(),s.run
+                  FROM jsonb_to_recordset(CAST(:payload AS jsonb))
+                    AS s(period text,ot text,spec text,state text,plan text,asset text,
+                         operation boolean,row integer,run bigint)
                   ON CONFLICT(periodo,numero_ot)
                   DO UPDATE SET estado=EXCLUDED.estado,especialidad=EXCLUDED.especialidad,
                     plan_trabajo=EXCLUDED.plan_trabajo,activo_codigo=EXCLUDED.activo_codigo,
@@ -458,11 +486,18 @@ def sync_month(*, year: int, month: int, trigger: str) -> dict[str, Any]:
                     observado_en=CASE WHEN programacion.google_sheet_ot_estado_v2.estado IS DISTINCT FROM EXCLUDED.estado
                                       THEN now() ELSE programacion.google_sheet_ot_estado_v2.observado_en END,
                     actualizado_en=now(),ultima_sincronizacion_id=EXCLUDED.ultima_sincronizacion_id
-                """), {
-                    "period": period, "ot": ot, "spec": item["spec"], "state": item["estado"],
-                    "plan": item["plan"], "asset": item["asset"],
-                    "operation": item["operation"], "row": item["row"], "run": run_id,
-                })
+                """), {"payload": json.dumps(batch)})
+            for offset in range(0,len(source_changes),500):
+                conn.execute(text("""
+                  INSERT INTO programacion.google_sheet_sync_cambio_v2(
+                    sincronizacion_id,periodo,numero_ot,orden_mantenimiento_id,
+                    accion,estado_anterior,estado_nuevo)
+                  SELECT s.run,CAST(s.period AS date),s.ot,s.order_id,
+                         s.action,s.before,s.after
+                  FROM jsonb_to_recordset(CAST(:payload AS jsonb))
+                    AS s(run bigint,period text,ot text,order_id bigint,action text,
+                         before text,after text)
+                """), {"payload": json.dumps(source_changes[offset:offset+500])})
 
             # Actualizar el contador por plan sin borrar detalles históricos.
             for (plan, spec), quantity in group_ops.items():
