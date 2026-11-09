@@ -7,6 +7,8 @@ import {
   getV2WeekTracking,
   uploadV2WeekTracking,
   saveV2ManualTrackingStatus,
+  getSheetSyncStatus,
+  syncGoogleSheetNow,
 } from "../api";
 import Badge from "../shared/Badge";
 
@@ -55,7 +57,7 @@ function when(value) {
   }
 }
 
-export default function WeeklyTracking({ year, month, weekIndex = 0, onOpenClosure, onChanged }) {
+export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole = "viewer", onOpenClosure, onChanged }) {
   const weeks = useMemo(() => monthWeeks(year, month), [year, month]);
   const [specialty, setSpecialty] = useState("MEC");
   const [programming, setProgramming] = useState(null);
@@ -72,6 +74,8 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, onOpenClosu
   const [showUnplanned, setShowUnplanned] = useState(false);
   const [monthlyProgress, setMonthlyProgress] = useState([]);
   const [savingManual, setSavingManual] = useState(null);
+  const [sheetSync, setSheetSync] = useState(null);
+  const [syncingSheet, setSyncingSheet] = useState(false);
 
   const week = weeks[Math.min(weekIndex, weeks.length - 1)] || weeks[0];
 
@@ -105,9 +109,40 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, onOpenClosu
     }
   }
 
+  async function loadSheetSyncStatus() {
+    if (accessRole !== "admin") {
+      setSheetSync(null);
+      return;
+    }
+    try {
+      setSheetSync(await getSheetSyncStatus(year, month));
+    } catch {
+      setSheetSync({configurado: false, error: "No se pudo consultar el estado de la conexión."});
+    }
+  }
+
   useEffect(() => {
     loadMonthlyProgress();
-  }, [year, month]);
+    loadSheetSyncStatus();
+  }, [year, month, accessRole]);
+
+  async function syncSheets() {
+    try {
+      setSyncingSheet(true);
+      setError("");
+      setMessage("");
+      const result = await syncGoogleSheetNow(year, month);
+      await Promise.all([load(), loadMonthlyProgress(), loadSheetSyncStatus(), onChanged?.()]);
+      setMessage(
+        `Google Sheets · BASE DE DATOS sincronizada: ${number(result.ots_validas)} OT revisadas, ${number(result.estados_cambiados)} estados actualizados, ${number(result.nuevas)} OT nuevas, ${number(result.backlog_conciliado)} movimientos en backlog y ${number(result.conflictos)} situaciones por revisar. No se modificaron cierres históricos.`
+      );
+    } catch (cause) {
+      setError(cause.message || "No se pudo sincronizar Google Sheets.");
+      await loadSheetSyncStatus();
+    } finally {
+      setSyncingSheet(false);
+    }
+  }
   useEffect(() => {
     setFile(null);
     setMessage("");
@@ -256,6 +291,30 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, onOpenClosu
             </div>
           )}
         </div>
+      </section>
+
+      <section className="v2-panel weekly-tracking-upload">
+        <div>
+          <span className="v2-kicker">SINCRONIZACIÓN DIARIA · SOLO LECTURA</span>
+          <h3>Google Sheets · BASE DE DATOS</h3>
+          <p>Actualización automática a las 6:00 a. m. (Colombia) y actualización manual adicional. Se consultan las cuatro especialidades; las programaciones y cierres aprobados permanecen intactos.</p>
+          <small>
+            {sheetSync?.ultima
+              ? `Último intento: ${when(sheetSync.ultima.terminado_en)} · ${sheetSync.ultima.estado} · ${number(sheetSync.ultima.ots_validas)} OT revisadas · ${number(sheetSync.ultima.estados_cambiados)} cambios · ${number(sheetSync.ultima.conflictos)} conflictos`
+              : "Sin sincronizaciones registradas para este mes."}
+          </small>
+          {accessRole === "admin" && !sheetSync?.configurado && (
+            <p className="v2-warning">La conexión todavía requiere configurar en Vercel una cuenta de servicio de Google con acceso de lector a BASE DE DATOS.</p>
+          )}
+        </div>
+        {accessRole === "admin" ? (
+          <button type="button" className="v2-primary" disabled={syncingSheet || !sheetSync?.configurado}
+            onClick={syncSheets}>
+            {syncingSheet ? "Sincronizando cuatro especialidades..." : "Sincronizar ahora"}
+          </button>
+        ) : (
+          <small>El botón de sincronización solo está disponible para el administrador.</small>
+        )}
       </section>
 
       {!id && !loading && (
