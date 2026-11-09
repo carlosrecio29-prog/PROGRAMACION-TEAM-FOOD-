@@ -5,3 +5,5 @@ SQLAlchemy>=2.0.43,<3
 psycopg[binary]>=3.2.9,<4
 reportlab>=4.2,<5
 Pillow>=10,<12
+google-auth>=2.35,<3
+requests>=2.32,<3
