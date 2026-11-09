@@ -403,14 +403,13 @@ def sync_month(*, year: int, month: int, trigger: str,
                         if asset_id is None and _norm(item["asset"]).startswith("BA-"):
                             asset_id = conn.execute(text("""
                               INSERT INTO programacion.activo(
-                                codigo,descripcion,criticidad,especialidad,area_codigo,habilitado,fila_origen)
-                              VALUES (:code,:description,:criticality,:spec,:area,true,:row)
+                                codigo,descripcion,criticidad,habilitado,fila_origen)
+                              VALUES (:code,:description,:criticality,true,:row)
                               ON CONFLICT (codigo) DO UPDATE SET codigo=EXCLUDED.codigo
                               RETURNING id
                             """), {
                                 "code": item["asset"], "description": item["asset_description"],
                                 "criticality": item["criticidad"] if item["criticidad"] in ("A","B","C") else None,
-                                "spec": item["spec"], "area": item["asset"].split("-")[1] if "-" in item["asset"] else None,
                                 "row": item["row"],
                             }).scalar_one()
                             assets[_norm(item["asset"])] = asset_id
