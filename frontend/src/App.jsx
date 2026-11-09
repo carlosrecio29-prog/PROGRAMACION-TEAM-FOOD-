@@ -304,7 +304,7 @@ function Summary({ data, onNavigate, year, month }) {
   );
 }
 
-function IndicatorsTracking({ data, year, month, weekIndex, onGoMonthly, onGoClosure, onTrackingChanged }) {
+function IndicatorsTracking({ data, year, month, weekIndex, accessRole, onGoMonthly, onGoClosure, onTrackingChanged }) {
   const [section, setSection] = useState("period");
   const s = data?.summary || {};
   const specialties = data?.specialties || [];
@@ -376,6 +376,7 @@ function IndicatorsTracking({ data, year, month, weekIndex, onGoMonthly, onGoClo
           year={year}
           month={month}
           weekIndex={weekIndex}
+          accessRole={accessRole}
           onOpenClosure={onGoClosure}
           onChanged={onTrackingChanged}
         />
@@ -1874,6 +1875,7 @@ export default function App() {
             year={year}
             month={month}
             weekIndex={trackingWeekIndex}
+            accessRole={accessRole}
             onGoMonthly={() => navigate("monthly")}
             onGoClosure={() => navigate("closure")}
             onTrackingChanged={refresh}
@@ -1891,6 +1893,7 @@ export default function App() {
             year={year}
             month={month}
             weekIndex={trackingWeekIndex}
+            accessRole={accessRole}
             onOpenClosure={() => navigate("closure")}
             onChanged={refresh}
           />
