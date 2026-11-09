@@ -3,7 +3,7 @@
  * Sin Google Cloud Console, tarjeta ni APIs avanzadas.
  * Fuente ÚNICA: BASE DE DATOS (A:M).
  *
- * CONFIGURACIÓN (Propiedades del script):
+ * RECOMENDADO: crear proyecto Apps Script independiente/privado (no vinculado\n * al Sheet compartido) para proteger las propiedades frente a otros editores.\n *\n * CONFIGURACIÓN (Propiedades del script):
  *   SHEET_SYNC_SECRET: token aleatorio idéntico al de Vercel (mínimo 32 caracteres)
  *   CEK_API_URL: https://programacion-team-food-cek-global.vercel.app
  *
