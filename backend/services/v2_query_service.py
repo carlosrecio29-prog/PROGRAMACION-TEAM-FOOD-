@@ -213,6 +213,11 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
                      )
                 )
                 AND COALESCE(p.es_operacion,false)=false
+                AND NOT EXISTS (
+                  SELECT 1 FROM programacion.google_sheet_ot_estado_v2 gs
+                  WHERE gs.periodo=:period AND gs.numero_ot=upper(btrim(o.numero_ot))
+                    AND gs.es_operacion=true
+                )
             ),
             all_pending AS (
               SELECT orden_mantenimiento_id,max(hh) AS hh
@@ -250,6 +255,11 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
               LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
               WHERE b.estado_seguimiento='PENDIENTE_DISPONIBLE'
                 AND COALESCE(p.es_operacion,false)=false
+                AND NOT EXISTS (
+                  SELECT 1 FROM programacion.google_sheet_ot_estado_v2 gs
+                  WHERE gs.periodo=:period AND gs.numero_ot=upper(btrim(o.numero_ot))
+                    AND gs.es_operacion=true
+                )
             ),
             backlog_used_month AS (
               SELECT DISTINCT pi.orden_mantenimiento_id AS order_id
