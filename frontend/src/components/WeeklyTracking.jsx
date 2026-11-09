@@ -296,18 +296,18 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
       <section className="v2-panel weekly-tracking-upload">
         <div>
           <span className="v2-kicker">SINCRONIZACIÓN DIARIA · SOLO LECTURA</span>
-          <h3>Google Sheets · BASE DE DATOS</h3>
-          <p>Actualización automática a las 6:00 a. m. (Colombia) y actualización manual adicional. Se consultan las cuatro especialidades; las programaciones y cierres aprobados permanecen intactos.</p>
+          <h3>Google Apps Script · BASE DE DATOS</h3>
+          <p>Un activador de Google Apps Script revisa las cuatro especialidades aproximadamente a las 6:00 a. m. (Colombia). El botón manual consulta la misma fuente; las programaciones y los cierres aprobados no se modifican.</p>
           <small>
             {sheetSync?.ultima
               ? `Último intento: ${when(sheetSync.ultima.terminado_en)} · ${sheetSync.ultima.estado} · ${number(sheetSync.ultima.ots_validas)} OT revisadas · ${number(sheetSync.ultima.estados_cambiados)} cambios · ${number(sheetSync.ultima.conflictos)} conflictos`
               : "Sin sincronizaciones registradas para este mes."}
           </small>
           {accessRole === "admin" && sheetSync?.configurado && !sheetSync?.cron_configurado && (
-            <p className="v2-warning">El botón manual está disponible, pero el cron diario necesita configurar CRON_SECRET en Vercel.</p>
+            <p className="v2-warning">Configura el activador diario desde Extensiones → Apps Script para habilitar las actualizaciones automáticas.</p>
           )}
           {accessRole === "admin" && !sheetSync?.configurado && (
-            <p className="v2-warning">La conexión todavía requiere configurar en Vercel una cuenta de servicio de Google con acceso de lector a BASE DE DATOS.</p>
+            <p className="v2-warning">Falta configurar APPS_SCRIPT_WEBAPP_URL y SHEET_SYNC_SECRET en Vercel y desplegar el script desde Google Sheets. No necesitas Google Cloud ni tarjeta bancaria.</p>
           )}
         </div>
         {accessRole === "admin" ? (
