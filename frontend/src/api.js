@@ -260,6 +260,14 @@ export async function bootstrapV2Backlog(file, year, month, movedBy = "") {
   }));
 }
 
+export async function getSheetSyncStatus(year, month) {
+  return check(await fetch(`/api/v2/sheet-sync/status?${new URLSearchParams({year,month})}`, {cache:"no-store"}));
+}
+
+export async function syncGoogleSheetNow(year, month) {
+  return check(await fetch(`/api/v2/sheet-sync?${new URLSearchParams({year,month})}`, {method:"POST",cache:"no-store"}));
+}
+
 export async function getV2WeekTracking(programmingId) {
   return check(await fetch(`/api/v2/programming/${programmingId}/tracking`, { cache: "no-store" }));
 }

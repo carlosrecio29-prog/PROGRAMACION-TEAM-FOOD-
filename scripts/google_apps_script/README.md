@@ -1,0 +1,52 @@
+# Activar CEK Global MTTO con Google Apps Script (sin Google Cloud ni tarjeta)
+
+## 1. Crear el script dentro del Google Sheets
+1. Abre https://docs.google.com/spreadsheets/d/1Or0L7epumDQUsUuLjb4FXt-7FRbC16pJ8-b0VwROwdo/edit
+2. En el menú **Extensiones → Apps Script** abre el proyecto vinculado.
+3. Sustituye `Code.gs` por el contenido de [Code.gs](./Code.gs) y guarda.
+4. El script lee solo `BASE DE DATOS`; no modifica la hoja ni revisa las pestañas de especialidad.
+
+## 2. Configurar el secreto y destino
+En Apps Script, **Configuración del proyecto → Propiedades del script**:
+- `SHEET_SYNC_SECRET`: genera una clave privada aleatoria de al menos 32 caracteres (idealmente 48+ con gestor de contraseñas).
+- `CEK_API_URL`: `https://programacion-team-food-cek-global.vercel.app`
+
+No compartas la clave privada en chats, capturas, Github, Google Sheets ni con usuarios de solo lectura. Ten presente que otras personas con acceso de editor al proyecto de Apps Script podrían acceder a sus propiedades; limita el acceso de editores.
+
+## 3. Publicar Web App para el botón manual
+1. **Implementar → Nueva implementación → Aplicación web**.
+2. Ejecutar como: **Yo**.
+3. Quién tiene acceso: **Cualquier persona** (esta opción permite peticiones del servidor de Vercel; no hace público el contenido de Google Sheets).
+4. Autoriza los permisos que solicita Apps Script.
+5. Copia la URL `https://script.google.com/macros/s/.../exec`.
+
+**Seguridad**: `doPost` exige un secreto privado antes de devolver datos y `doGet` jamás muestra órdenes. No publiques el secreto junto con la URL. La URL no debería difundirse públicamente. Si tu organización no permite el acceso «Cualquier persona» para apps web, el botón bajo esta arquitectura no funcionará; el trigger diario puede seguir funcionando.
+
+## 4. Configurar Vercel (Production)
+En **CEK GLOBAL → programacion-team-food → Settings → Environment Variables** añade:
+
+| Clave | Valor |
+|---|---|
+| `SHEET_SYNC_SECRET` | El MISMO secreto privado de Apps Script |
+| `APPS_SCRIPT_WEBAPP_URL` | URL del paso 3, terminada en `/exec` |
+
+Marca el entorno **Production**, configura como *Sensitive/Encrypted* cuando esté disponible y **redepliega** la aplicación para aplicar las variables. No agregues estas claves al repositorio.
+
+No se necesita `GOOGLE_SHEETS_SERVICE_ACCOUNT_JSON` ni `CRON_SECRET` (claves del diseño anterior). No activamos Vercel Cron.
+
+## 5. Probar
+1. En Apps Script, menú de funciones, ejecuta **`cekProbarAhora`**. Da los permisos a tu cuenta si se solicitan.
+2. Comprueba en **Ejecuciones** que aparezca el ID de sincronización, sin fallas.
+3. Entra a CEK Global MTTO como administrador → **Seguimiento de programación** → pulsa **Sincronizar ahora**.
+4. Verifica la bitácora: OT revisadas, cambios, conflictos, y confirma que octubre siga igual.
+5. Cuando ambas pruebas funcionen, ejecuta **`cekInstalarTriggerDiario`** una vez desde Apps Script. Verifica el activador en el panel «Desencadenadores».
+
+El activador se programa en torno a **06:00 America/Bogota**, con tolerancia temporal de Google, aproximadamente ±15 minutos. Una sincronización manual no reemplaza la ejecución diaria.
+
+## Manejo de fallos
+- Si falta una variable, el botón estará deshabilitado y mostrará la configuración pendiente.
+- Si Apps Script no responde, no se reemplazan las órdenes por información incompleta.
+- Si hay OT duplicada con estados contradictorios, se señala para revisión y no se cambia esa OT.
+- El sistema solo registra avances provisionales en semanas abiertas. Los cierres aprobados permanecen protegidos.
+- Si el Web App cambia de implementación, actualiza `APPS_SCRIPT_WEBAPP_URL` en Vercel.
+- Si sospechas filtración de `SHEET_SYNC_SECRET`, genera otro y actualízalo en ambas plataformas.

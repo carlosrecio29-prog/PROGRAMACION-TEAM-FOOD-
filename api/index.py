@@ -3,6 +3,10 @@ from __future__ import annotations
 from datetime import date
 import logging
 import json
+import os
+import hmac
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from sqlalchemy.exc import SQLAlchemyError
 from fastapi.middleware.cors import CORSMiddleware
@@ -49,6 +53,7 @@ from backend.services.v2_week_tracking_service import (
 )
 from backend.services.v2_manual_tracking_service import get_week_tracking, record_week_tracking, set_manual_status
 from backend.services.v2_operation_exclusion_service import get_operation_exclusions
+from backend.services.v2_sheet_sync_service import SheetSyncError, sync_month, sync_status
 from backend.services.v2_progress_service import get_progress, export_progress_pdf
 from backend.services.v2_monthly_close_service import (
     V2MonthlyCloseError, get_monthly_close, close_month,
@@ -118,6 +123,51 @@ def run_import(fn,filename,content,**kwargs):
     try:return fn(filename,content,**kwargs)
     except ValueError as exc:raise HTTPException(422,str(exc)) from exc
     except Exception as exc:raise HTTPException(500,f"Error procesando archivo: {exc}") from exc
+
+
+@app.get("/api/v2/sheet-sync/status")
+def sheet_sync_status(request:Request,year:int=Query(...,ge=2020,le=2100),month:int=Query(...,ge=1,le=12)):
+    if not request_is_admin(request):
+        raise HTTPException(403,"Solo el administrador puede consultar la sincronización.")
+    try:
+        return sync_status(year,month)
+    except SQLAlchemyError as exc:
+        raise HTTPException(503,"No se pudo consultar el historial de sincronizaciones.") from exc
+
+
+@app.post("/api/v2/sheet-sync")
+def sheet_sync_manual(year:int=Query(...,ge=2020,le=2100),month:int=Query(...,ge=1,le=12)):
+    # admin_write_guard verifica la sesión de administrador para POST.
+    if date(year,month,1) < date(2026,11,1):
+        raise HTTPException(422,"La sincronización comienza en noviembre de 2026 para proteger los cierres anteriores.")
+    try:
+        return sync_month(year=year,month=month,trigger="MANUAL")
+    except SheetSyncError as exc:
+        raise HTTPException(503,str(exc)) from exc
+
+
+class SheetSyncPushRequest(BaseModel):
+    year: int = Field(ge=2026, le=2100)
+    month: int = Field(ge=1, le=12)
+    values: list[list[str]] = Field(min_length=2, max_length=15000)
+
+
+@app.post("/api/v2/sheet-sync/push")
+def sheet_sync_push(request: Request, body: SheetSyncPushRequest):
+    # Complementa la validación del middleware: solo el activador firmado.
+    secret = os.environ.get("SHEET_SYNC_SECRET", "")
+    supplied = request.headers.get("Authorization", "")
+    if len(secret) < 32 or not hmac.compare_digest(supplied, f"Bearer {secret}"):
+        raise HTTPException(401, "Sincronización no autorizada.")
+    today = datetime.now(ZoneInfo("America/Bogota")).date()
+    if (body.year, body.month) != (today.year, today.month):
+        raise HTTPException(422, "La sincronización automática solo permite el mes actual.")
+    try:
+        return sync_month(year=body.year, month=body.month,
+                          trigger="CRON", values=body.values)
+    except SheetSyncError as exc:
+        raise HTTPException(503, str(exc)) from exc
+
 
 @app.get("/api/v2/operation-exclusions")
 def v2_operation_exclusions(

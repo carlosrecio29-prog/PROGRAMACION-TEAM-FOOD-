@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import os
 import secrets
 from datetime import datetime, timedelta, timezone
 
@@ -132,6 +133,15 @@ async def admin_write_guard(request: Request, call_next):
 
     if method in SAFE_METHODS or path in AUTH_WRITE_PATHS:
         return await call_next(request)
+
+    # Receptor firmado para el trigger de Google Apps Script.
+    # No se habilitan otras mutaciones anónimas.
+    if path == "/api/v2/sheet-sync/push" and method == "POST":
+        secret = os.environ.get("SHEET_SYNC_SECRET", "")
+        supplied = request.headers.get("Authorization", "")
+        if len(secret) >= 32 and hmac.compare_digest(supplied, f"Bearer {secret}"):
+            return await call_next(request)
+        return JSONResponse(status_code=401, content={"detail": "Sincronización no autorizada."})
 
     if request_is_admin(request):
         return await call_next(request)

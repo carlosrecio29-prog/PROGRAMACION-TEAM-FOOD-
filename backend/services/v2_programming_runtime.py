@@ -27,6 +27,14 @@ def _reconcile_weekly_pending(conn, date_from: date, specialty: str) -> dict[str
           WHERE o.especialidad=:specialty
             AND o.periodo=date_trunc('month',CAST(:week_start AS date))::date
             AND NOT COALESCE(p.es_operacion,false)
+                AND (
+                  NOT EXISTS (
+                    SELECT 1 FROM programacion.google_sheet_ot_estado_v2 gs
+                    WHERE gs.periodo=date_trunc('month',CAST(:week_start AS date))::date
+                      AND gs.numero_ot=upper(btrim(o.numero_ot))
+                      AND gs.es_operacion=true
+                  )
+                )
         ),
         initial_backlog AS (
           SELECT o.id
@@ -35,6 +43,14 @@ def _reconcile_weekly_pending(conn, date_from: date, specialty: str) -> dict[str
           JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
           WHERE b.especialidad=:specialty
             AND NOT COALESCE(p.es_operacion,false)
+                AND (
+                  NOT EXISTS (
+                    SELECT 1 FROM programacion.google_sheet_ot_estado_v2 gs
+                    WHERE gs.periodo=date_trunc('month',CAST(:week_start AS date))::date
+                      AND gs.numero_ot=upper(btrim(o.numero_ot))
+                      AND gs.es_operacion=true
+                  )
+                )
             AND COALESCE(
               b.primera_semana_origen_inicio,b.semana_origen_inicio,o.periodo
             ) < date_trunc('month',CAST(:week_start AS date))::date
@@ -141,6 +157,19 @@ def get_week_programming(*, date_from: date, date_to: date, specialty: str) -> d
               WHERE o.especialidad=:specialty
                 AND o.periodo=date_trunc('month',CAST(:date_from AS date))::date
                 AND NOT COALESCE(p.es_operacion,false)
+                AND (
+                  NOT EXISTS (
+                    SELECT 1 FROM programacion.google_sheet_ot_estado_v2 gs
+                    WHERE gs.periodo=date_trunc('month',CAST(:date_from AS date))::date
+                      AND gs.numero_ot=upper(btrim(o.numero_ot))
+                      AND gs.es_operacion=true
+                  )
+                  OR EXISTS(
+                    SELECT 1 FROM programacion.programacion_item_v2 held
+                    WHERE held.orden_mantenimiento_id=o.id
+                      AND held.programacion_id=CAST(:programming_id AS bigint)
+                  )
+                )
             ),
             initial_backlog AS (
               SELECT
@@ -152,6 +181,19 @@ def get_week_programming(*, date_from: date, date_to: date, specialty: str) -> d
               JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
               WHERE b.especialidad=:specialty
                 AND NOT COALESCE(p.es_operacion,false)
+                AND (
+                  NOT EXISTS (
+                    SELECT 1 FROM programacion.google_sheet_ot_estado_v2 gs
+                    WHERE gs.periodo=date_trunc('month',CAST(:date_from AS date))::date
+                      AND gs.numero_ot=upper(btrim(o.numero_ot))
+                      AND gs.es_operacion=true
+                  )
+                  OR EXISTS(
+                    SELECT 1 FROM programacion.programacion_item_v2 held
+                    WHERE held.orden_mantenimiento_id=o.id
+                      AND held.programacion_id=CAST(:programming_id AS bigint)
+                  )
+                )
                 AND COALESCE(
                   b.primera_semana_origen_inicio,
                   b.semana_origen_inicio,

@@ -52,6 +52,9 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
               FROM programacion.orden_mantenimiento o
               LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
               WHERE o.periodo=:period AND COALESCE(p.es_operacion,false)=false
+                AND NOT EXISTS (SELECT 1 FROM programacion.google_sheet_ot_estado_v2 gs
+                  WHERE gs.periodo=:period AND gs.numero_ot=upper(btrim(o.numero_ot))
+                    AND gs.es_operacion=true)
             )
             SELECT
               (SELECT count(*) FROM programacion.activo) AS activos,
@@ -126,6 +129,9 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
             FROM programacion.orden_mantenimiento o
             LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
             WHERE o.periodo=:period AND COALESCE(p.es_operacion,false)=false
+              AND NOT EXISTS (SELECT 1 FROM programacion.google_sheet_ot_estado_v2 gs
+                WHERE gs.periodo=:period AND gs.numero_ot=upper(btrim(o.numero_ot))
+                  AND gs.es_operacion=true)
             GROUP BY COALESCE(o.especialidad,'SIN')
             ORDER BY especialidad
         """),{"period":period}).mappings()]
@@ -181,6 +187,9 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
               FROM programacion.orden_mantenimiento o
               LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
               WHERE o.periodo=:period AND COALESCE(p.es_operacion,false)=false
+                AND NOT EXISTS (SELECT 1 FROM programacion.google_sheet_ot_estado_v2 gs
+                  WHERE gs.periodo=:period AND gs.numero_ot=upper(btrim(o.numero_ot))
+                    AND gs.es_operacion=true)
             ),
             pmp_pending AS (
               SELECT orden_mantenimiento_id,hh
@@ -213,6 +222,11 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
                      )
                 )
                 AND COALESCE(p.es_operacion,false)=false
+                AND NOT EXISTS (
+                  SELECT 1 FROM programacion.google_sheet_ot_estado_v2 gs
+                  WHERE gs.periodo=:period AND gs.numero_ot=upper(btrim(o.numero_ot))
+                    AND gs.es_operacion=true
+                )
             ),
             all_pending AS (
               SELECT orden_mantenimiento_id,max(hh) AS hh
@@ -241,6 +255,9 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
               LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
               WHERE o.periodo=:period
                 AND COALESCE(p.es_operacion,false)=false
+                AND NOT EXISTS (SELECT 1 FROM programacion.google_sheet_ot_estado_v2 gs
+                  WHERE gs.periodo=:period AND gs.numero_ot=upper(btrim(o.numero_ot))
+                    AND gs.es_operacion=true)
                 AND upper(COALESCE(o.estado,'')) NOT LIKE 'ANUL%'
             ),
             backlog_available AS (
@@ -250,6 +267,11 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
               LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
               WHERE b.estado_seguimiento='PENDIENTE_DISPONIBLE'
                 AND COALESCE(p.es_operacion,false)=false
+                AND NOT EXISTS (
+                  SELECT 1 FROM programacion.google_sheet_ot_estado_v2 gs
+                  WHERE gs.periodo=:period AND gs.numero_ot=upper(btrim(o.numero_ot))
+                    AND gs.es_operacion=true
+                )
             ),
             backlog_used_month AS (
               SELECT DISTINCT pi.orden_mantenimiento_id AS order_id
@@ -262,6 +284,20 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
                 AND COALESCE(pi.origen_backlog,false)=true
                 AND COALESCE(p.es_operacion,false)=false
                 AND upper(COALESCE(o.estado,'')) NOT LIKE 'ANUL%'
+            ),
+            backlog_completed_source AS (
+              SELECT DISTINCT b.orden_mantenimiento_id AS order_id
+              FROM programacion.backlog_v2 b
+              JOIN programacion.orden_mantenimiento o ON o.id=b.orden_mantenimiento_id
+              LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
+              JOIN programacion.google_sheet_ot_estado_v2 gs
+                ON gs.periodo=:period
+               AND gs.numero_ot=upper(btrim(o.numero_ot))
+               AND gs.estado='FINALIZADA' AND gs.es_operacion=false
+              WHERE :period >= DATE '2026-11-01'
+                AND b.estado_seguimiento='FINALIZADA'
+                AND b.finalizado_en::date >= :period
+                AND COALESCE(p.es_operacion,false)=false
             ),
             unplanned_month AS (
               SELECT DISTINCT n.orden_mantenimiento_id AS order_id
@@ -283,6 +319,8 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
                 SELECT order_id FROM backlog_available
                 UNION ALL
                 SELECT order_id FROM backlog_used_month
+                UNION ALL
+                SELECT order_id FROM backlog_completed_source
                 UNION ALL
                 SELECT order_id FROM unplanned_month
               ) all_orders
@@ -316,6 +354,11 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
                 AND :period >= DATE '2026-11-01'
                 AND upper(btrim(COALESCE(o.estado,''))) LIKE 'FINALIZ%'
                 AND COALESCE(p.es_operacion,false)=false
+                AND NOT EXISTS (
+                  SELECT 1 FROM programacion.google_sheet_ot_estado_v2 gs
+                  WHERE gs.periodo=:period AND gs.numero_ot=upper(btrim(o.numero_ot))
+                    AND gs.es_operacion=true
+                )
             ),
             scheduled_finished AS (
               SELECT order_id FROM tracked_finalized
@@ -328,6 +371,8 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
               SELECT order_id FROM unplanned_month
               UNION
               SELECT order_id FROM source_finalized
+              UNION
+              SELECT order_id FROM backlog_completed_source
             ),
             latest_tracking AS (
               SELECT max(s.registrado_en) AS latest_tracking_at
@@ -355,7 +400,11 @@ def get_dashboard(year:int,month:int)->dict[str,Any]:
               )::int AS unplanned_finalized_orders,
               (
                 SELECT count(*)
-                FROM source_finalized sf
+                FROM (
+                  SELECT order_id FROM source_finalized
+                  UNION
+                  SELECT order_id FROM backlog_completed_source
+                ) sf
                 JOIN universe u USING(order_id)
                 WHERE NOT EXISTS (
                   SELECT 1 FROM scheduled_finished f WHERE f.order_id=sf.order_id

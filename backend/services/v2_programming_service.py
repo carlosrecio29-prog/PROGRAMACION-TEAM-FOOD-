@@ -98,6 +98,12 @@ def _monthly_demand(conn, month_date: date, specialty: str, exclude_programming_
           WHERE o.especialidad=:specialty
             AND o.periodo=:period
             AND NOT COALESCE(p.es_operacion,false)
+            AND NOT EXISTS (
+              SELECT 1 FROM programacion.google_sheet_ot_estado_v2 gs
+              WHERE gs.periodo=:period
+                AND gs.numero_ot=upper(btrim(o.numero_ot))
+                AND gs.es_operacion=true
+            )
         ),
         coverage AS (
           SELECT
@@ -190,6 +196,12 @@ def _monthly_demand(conn, month_date: date, specialty: str, exclude_programming_
           WHERE o.especialidad=:specialty
             AND o.periodo=:period
             AND NOT COALESCE(p.es_operacion,false)
+            AND NOT EXISTS (
+              SELECT 1 FROM programacion.google_sheet_ot_estado_v2 gs
+              WHERE gs.periodo=:period
+                AND gs.numero_ot=upper(btrim(o.numero_ot))
+                AND gs.es_operacion=true
+            )
         ),
         pmp_pending AS (
           SELECT orden_mantenimiento_id,hh
@@ -222,6 +234,12 @@ def _monthly_demand(conn, month_date: date, specialty: str, exclude_programming_
                  )
             )
             AND NOT COALESCE(p.es_operacion,false)
+            AND NOT EXISTS (
+              SELECT 1 FROM programacion.google_sheet_ot_estado_v2 gs
+              WHERE gs.periodo=:period
+                AND gs.numero_ot=upper(btrim(o.numero_ot))
+                AND gs.es_operacion=true
+            )
         ),
         all_pending AS (
           SELECT orden_mantenimiento_id,max(hh) AS hh
@@ -267,6 +285,12 @@ def _monthly_demand(conn, month_date: date, specialty: str, exclude_programming_
           WHERE o.especialidad=:specialty
             AND o.periodo=:period
             AND NOT COALESCE(p.es_operacion,false)
+            AND NOT EXISTS (
+              SELECT 1 FROM programacion.google_sheet_ot_estado_v2 gs
+              WHERE gs.periodo=:period
+                AND gs.numero_ot=upper(btrim(o.numero_ot))
+                AND gs.es_operacion=true
+            )
         ),
         initial_backlog AS (
           SELECT
@@ -289,6 +313,12 @@ def _monthly_demand(conn, month_date: date, specialty: str, exclude_programming_
           JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
           WHERE b.especialidad=:specialty
             AND NOT COALESCE(p.es_operacion,false)
+            AND NOT EXISTS (
+              SELECT 1 FROM programacion.google_sheet_ot_estado_v2 gs
+              WHERE gs.periodo=:period
+                AND gs.numero_ot=upper(btrim(o.numero_ot))
+                AND gs.es_operacion=true
+            )
             AND COALESCE(
               b.primera_semana_origen_inicio,
               b.semana_origen_inicio,
