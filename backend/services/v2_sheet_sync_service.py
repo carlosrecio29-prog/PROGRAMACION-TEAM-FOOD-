@@ -136,7 +136,7 @@ def _read_sheet_apps_script(year: int, month: int) -> list[list[Any]]:
         raise SheetSyncError(
             "Falta configurar APPS_SCRIPT_WEBAPP_URL y SHEET_SYNC_SECRET en Vercel."
         )
-    if not re.fullmatch(r"https://script\\.google\\.com/macros/s/[A-Za-z0-9_-]+/exec", url):
+    if not re.fullmatch(r"https://script\.google\.com/macros/s/[A-Za-z0-9_-]+/exec", url):
         raise SheetSyncError("La URL de Google Apps Script no tiene formato de despliegue válido.")
     try:
         response = requests.post(
