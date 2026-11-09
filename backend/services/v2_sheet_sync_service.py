@@ -321,6 +321,12 @@ def sync_month(*, year: int, month: int, trigger: str) -> dict[str, Any]:
                   JOIN programacion.programacion_semanal_v2 ps ON ps.id=pi.programacion_id
                   WHERE pi.orden_mantenimiento_id=o.id AND ps.estado='CERRADA'
                 ) AS has_closed,
+                EXISTS(
+                  SELECT 1 FROM programacion.programacion_item_v2 pi
+                  JOIN programacion.programacion_semanal_v2 ps ON ps.id=pi.programacion_id
+                  WHERE pi.orden_mantenimiento_id=o.id AND ps.estado='CERRADA'
+                    AND (COALESCE(pi.finalizado,false) OR COALESCE(pi.anulado,false))
+                ) AS has_closed_resolved,
                 EXISTS(SELECT 1 FROM programacion.programacion_item_v2 pi
                        WHERE pi.orden_mantenimiento_id=o.id) AS has_programming
               FROM programacion.orden_mantenimiento o
@@ -434,7 +440,9 @@ def sync_month(*, year: int, month: int, trigger: str) -> dict[str, Any]:
                         elif order["periodo"] < period:
                             # Los cierres de octubre son inmutables. El estado
                             # actualizado del backlog sí pertenece a noviembre.
-                            if item["estado"] == "PENDIENTE" and not order["backlog_id"] and _status(order["estado"]) not in ("FINALIZADA","ANULADA"):
+                            if (item["estado"] == "PENDIENTE" and not order["backlog_id"]
+                                    and not order["has_closed_resolved"]
+                                    and _status(order["estado"]) not in ("FINALIZADA","ANULADA")):
                                 conn.execute(text("""
                                   INSERT INTO programacion.backlog_v2(
                                     orden_mantenimiento_id,semana_origen_inicio,semana_origen_fin,
