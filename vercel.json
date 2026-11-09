@@ -68,11 +68,5 @@
       "src": "/(.*)",
       "dest": "/index.html"
     }
-  ],
-  "crons": [
-    {
-      "path": "/api/v2/sheet-sync/cron",
-      "schedule": "0 11 * * *"
-    }
   ]
 }
