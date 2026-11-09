@@ -431,11 +431,9 @@ def sync_month(*, year: int, month: int, trigger: str) -> dict[str, Any]:
                                 """), {"state": "ABIERTO" if new == "PENDIENTE" else new, "id": order["id"]})
                                 counts["estados_cambiados"] += 1
                                 _write_change(conn,run_id,period,item,"CAMBIO_ESTADO",order["id"],before=old,after=new)
-                        elif order["has_closed"]:
-                            if _status(order["estado"]) != item["estado"]:
-                                counts["conflictos"] += 1
-                                warnings.append(f"{ot}: cierre histórico protegido; estado de origen diferente")
                         elif order["periodo"] < period:
+                            # Los cierres de octubre son inmutables. El estado
+                            # actualizado del backlog sí pertenece a noviembre.
                             if item["estado"] == "PENDIENTE" and not order["backlog_id"] and _status(order["estado"]) not in ("FINALIZADA","ANULADA"):
                                 conn.execute(text("""
                                   INSERT INTO programacion.backlog_v2(
@@ -459,6 +457,10 @@ def sync_month(*, year: int, month: int, trigger: str) -> dict[str, Any]:
                                 """), {"id": order["backlog_id"]})
                                 counts["backlog_conciliado"] += 1
                                 _write_change(conn,run_id,period,item,"BACKLOG_FINALIZADO_ORIGEN",order["id"])
+                        elif order["has_closed"]:
+                            if _status(order["estado"]) != item["estado"]:
+                                counts["conflictos"] += 1
+                                warnings.append(f"{ot}: cierre histórico protegido; estado de origen diferente")
 
                 old_status = prior_snapshots.get(ot)
                 if old_status != item["estado"]:
