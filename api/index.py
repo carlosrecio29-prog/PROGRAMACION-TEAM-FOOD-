@@ -146,20 +146,27 @@ def sheet_sync_manual(year:int=Query(...,ge=2020,le=2100),month:int=Query(...,ge
         raise HTTPException(503,str(exc)) from exc
 
 
-@app.get("/api/v2/sheet-sync/cron")
-def sheet_sync_cron(request:Request):
-    # Vercel Cron ejecuta GET con Authorization: Bearer CRON_SECRET.
-    secret=os.environ.get("CRON_SECRET","")
-    supplied=request.headers.get("Authorization","")
-    if not secret or not hmac.compare_digest(supplied,f"Bearer {secret}"):
-        raise HTTPException(401,"No autorizado")
-    today=datetime.now(ZoneInfo("America/Bogota")).date()
-    if today < date(2026,11,1):
-        return {"ok":True,"estado":"OMITIDA"}
+class SheetSyncPushRequest(BaseModel):
+    year: int = Field(ge=2026, le=2100)
+    month: int = Field(ge=1, le=12)
+    values: list[list[str]] = Field(min_length=2, max_length=15000)
+
+
+@app.post("/api/v2/sheet-sync/push")
+def sheet_sync_push(request: Request, body: SheetSyncPushRequest):
+    # Complementa la validación del middleware: solo el activador firmado.
+    secret = os.environ.get("SHEET_SYNC_SECRET", "")
+    supplied = request.headers.get("Authorization", "")
+    if len(secret) < 32 or not hmac.compare_digest(supplied, f"Bearer {secret}"):
+        raise HTTPException(401, "Sincronización no autorizada.")
+    today = datetime.now(ZoneInfo("America/Bogota")).date()
+    if (body.year, body.month) != (today.year, today.month):
+        raise HTTPException(422, "La sincronización automática solo permite el mes actual.")
     try:
-        return sync_month(year=today.year,month=today.month,trigger="CRON")
+        return sync_month(year=body.year, month=body.month,
+                          trigger="CRON", values=body.values)
     except SheetSyncError as exc:
-        raise HTTPException(503,str(exc)) from exc
+        raise HTTPException(503, str(exc)) from exc
 
 
 @app.get("/api/v2/operation-exclusions")
