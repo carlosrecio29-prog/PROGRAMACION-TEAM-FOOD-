@@ -568,7 +568,7 @@ def get_progress(year: int, month: int) -> dict[str, Any]:
               FROM (
                 SELECT * FROM mapped_completed
                 UNION ALL
-                SELECT * FROM source_backlog_completed
+                SELECT especialidad,orden_mantenimiento_id,hh,fuente,prioridad FROM source_backlog_completed
               ) monthly_completed
               WHERE orden_mantenimiento_id IS NOT NULL
               ORDER BY especialidad,orden_mantenimiento_id,prioridad
