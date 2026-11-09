@@ -399,6 +399,16 @@ def get_progress(year: int, month: int) -> dict[str, Any]:
                     WHERE snp.orden_mantenimiento_id=b.orden_mantenimiento_id
                       AND ps.semana_inicio >= :begin AND ps.semana_inicio < :end
                   )
+                  OR (
+                    b.estado_seguimiento='FINALIZADA'
+                    AND b.finalizado_en::date >= :begin
+                    AND EXISTS (
+                      SELECT 1 FROM programacion.google_sheet_ot_estado_v2 gs
+                      WHERE gs.periodo=:begin
+                        AND gs.numero_ot=upper(btrim(o.numero_ot))
+                        AND gs.estado='FINALIZADA' AND gs.es_operacion=false
+                    )
+                  )
                 )
             ),
             base_universe AS (
@@ -514,6 +524,29 @@ def get_progress(year: int, month: int) -> dict[str, Any]:
                 AND upper(btrim(COALESCE(o.estado,''))) LIKE 'FINALIZ%'
                 AND NOT COALESCE(p.es_operacion,false)
             ),
+            source_backlog_completed AS (
+              SELECT o.especialidad,
+                     o.id AS orden_mantenimiento_id,
+                     o.numero_ot,
+                     CASE WHEN p.numero_personas_efectivo IS NOT NULL
+                                AND COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min) IS NOT NULL
+                          THEN round(COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min)
+                                     / 60.0 * p.numero_personas_efectivo,2)
+                          ELSE NULL
+                     END AS hh,
+                     'ESTADO_ORIGEN'::text AS fuente,
+                     5 AS prioridad
+              FROM programacion.backlog_v2 b
+              JOIN programacion.orden_mantenimiento o ON o.id=b.orden_mantenimiento_id
+              LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
+              JOIN programacion.google_sheet_ot_estado_v2 gs
+                ON gs.periodo=:begin AND gs.numero_ot=upper(btrim(o.numero_ot))
+                AND gs.estado='FINALIZADA' AND gs.es_operacion=false
+              WHERE :begin >= DATE '2026-11-01'
+                AND b.estado_seguimiento='FINALIZADA'
+                AND b.finalizado_en::date >= :begin
+                AND NOT COALESCE(p.es_operacion,false)
+            ),
             mapped_completed AS (
               SELECT
                 c.especialidad,
@@ -532,7 +565,11 @@ def get_progress(year: int, month: int) -> dict[str, Any]:
             completed_unique AS (
               SELECT DISTINCT ON (especialidad,orden_mantenimiento_id)
                      especialidad,orden_mantenimiento_id,hh,fuente
-              FROM mapped_completed
+              FROM (
+                SELECT * FROM mapped_completed
+                UNION ALL
+                SELECT * FROM source_backlog_completed
+              ) monthly_completed
               WHERE orden_mantenimiento_id IS NOT NULL
               ORDER BY especialidad,orden_mantenimiento_id,prioridad
             ),
