@@ -303,6 +303,9 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
               ? `Último intento: ${when(sheetSync.ultima.terminado_en)} · ${sheetSync.ultima.estado} · ${number(sheetSync.ultima.ots_validas)} OT revisadas · ${number(sheetSync.ultima.estados_cambiados)} cambios · ${number(sheetSync.ultima.conflictos)} conflictos`
               : "Sin sincronizaciones registradas para este mes."}
           </small>
+          {accessRole === "admin" && sheetSync?.configurado && !sheetSync?.cron_configurado && (
+            <p className="v2-warning">El botón manual está disponible, pero el cron diario necesita configurar CRON_SECRET en Vercel.</p>
+          )}
           {accessRole === "admin" && !sheetSync?.configurado && (
             <p className="v2-warning">La conexión todavía requiere configurar en Vercel una cuenta de servicio de Google con acceso de lector a BASE DE DATOS.</p>
           )}
