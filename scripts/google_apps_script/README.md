@@ -36,11 +36,12 @@ Marca el entorno **Production**, configura como *Sensitive/Encrypted* cuando est
 No se necesita `GOOGLE_SHEETS_SERVICE_ACCOUNT_JSON` ni `CRON_SECRET` (claves del diseño anterior). No activamos Vercel Cron.
 
 ## 5. Probar
-1. En Apps Script, menú de funciones, ejecuta **`cekProbarAhora`**. Da los permisos a tu cuenta si se solicitan.
-2. Comprueba en **Ejecuciones** que aparezca el ID de sincronización, sin fallas.
-3. Entra a CEK Global MTTO como administrador → **Seguimiento de programación** → pulsa **Sincronizar ahora**.
-4. Verifica la bitácora: OT revisadas, cambios, conflictos, y confirma que octubre siga igual.
-5. Cuando ambas pruebas funcionen, ejecuta **`cekInstalarTriggerDiario`** una vez desde Apps Script. Verifica el activador en el panel «Desencadenadores».
+1. Ejecuta primero **`cekVerificarFuente`**. Es **solo lectura**: muestra por especialidad cuántas filas, OT únicas, repetidas y OPERACIÓN encontró, sin modificar la aplicación.
+2. Confirma que el resultado corresponde al mes esperado. Si no corresponde, **no ejecutes** la prueba de envío.
+3. Después ejecuta **`cekProbarAhora`** y autoriza Apps Script si Google te lo solicita. Esta función **sí** actualiza el seguimiento real de noviembre.
+4. Comprueba en **Ejecuciones** que aparezca el ID de sincronización sin errores.
+5. Entra a CEK Global MTTO como administrador → **Seguimiento de programación** → pulsa **Sincronizar ahora**.
+6. Verifica la bitácora, duplicados y cierres históricos. Luego ejecuta **`cekInstalarTriggerDiario`** una sola vez y revisa el panel «Desencadenadores».
 
 El activador se programa en torno a **06:00 America/Bogota**, con tolerancia temporal de Google, aproximadamente ±15 minutos. Una sincronización manual no reemplaza la ejecución diaria.
 
