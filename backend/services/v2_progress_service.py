@@ -326,6 +326,11 @@ def get_progress(year: int, month: int) -> dict[str, Any]:
               JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
               WHERE o.periodo=:begin
                 AND NOT COALESCE(p.es_operacion,false)
+                AND NOT EXISTS (
+                  SELECT 1 FROM programacion.google_sheet_ot_estado_v2 gs
+                  WHERE gs.periodo=:begin AND gs.numero_ot=upper(btrim(o.numero_ot))
+                    AND gs.es_operacion=true
+                )
                 -- Mantener el cálculo histórico hasta octubre. Desde noviembre,
                 -- las OT anuladas quedan fuera del universo mensual programable.
                 AND (
@@ -352,6 +357,11 @@ def get_progress(year: int, month: int) -> dict[str, Any]:
               JOIN programacion.orden_mantenimiento o ON o.id=b.orden_mantenimiento_id
               JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
               WHERE NOT COALESCE(p.es_operacion,false)
+                AND NOT EXISTS (
+                  SELECT 1 FROM programacion.google_sheet_ot_estado_v2 gs
+                  WHERE gs.periodo=:begin AND gs.numero_ot=upper(btrim(o.numero_ot))
+                    AND gs.es_operacion=true
+                )
                 AND COALESCE(
                   b.primera_semana_origen_inicio,
                   b.semana_origen_inicio,
