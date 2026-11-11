@@ -128,7 +128,7 @@ def _parse_rows(values: list[list[Any]], period: date) -> tuple[dict[str, dict[s
 def _read_sheet_apps_script(year: int, month: int) -> list[list[Any]]:
     # Apps Script se ejecuta bajo la cuenta que ya puede leer el Google Sheet.
     # Solo Vercel conoce URL del Web App y secreto; nada va al navegador.
-    import requests
+    from urllib.request import Request, urlopen
 
     url = os.environ.get("APPS_SCRIPT_WEBAPP_URL", "").strip()
     secret = os.environ.get("SHEET_SYNC_SECRET", "").strip()
@@ -139,12 +139,20 @@ def _read_sheet_apps_script(year: int, month: int) -> list[list[Any]]:
     if not re.fullmatch(r"https://script\.google\.com/macros/s/[A-Za-z0-9_-]+/exec", url):
         raise SheetSyncError("La URL de Google Apps Script no tiene formato de despliegue válido.")
     try:
-        response = requests.post(
-            url, json={"action": "snapshot", "year": year, "month": month, "secret": secret},
-            timeout=(5, 35), allow_redirects=True,
+        payload = json.dumps({
+            "action": "snapshot", "year": year, "month": month, "secret": secret,
+        }).encode("utf-8")
+        request = Request(
+            url,
+            data=payload,
+            headers={"Content-Type": "application/json", "Accept": "application/json"},
+            method="POST",
         )
-        response.raise_for_status()
-        result = response.json()
+        with urlopen(request, timeout=35) as response:
+            raw = response.read(25 * 1024 * 1024 + 1)
+        if len(raw) > 25 * 1024 * 1024:
+            raise ValueError("Respuesta de Apps Script demasiado grande")
+        result = json.loads(raw.decode("utf-8"))
         if not isinstance(result, dict) or result.get("ok") is not True:
             raise ValueError("Respuesta rechazada por Apps Script")
         if result.get("year") != year or result.get("month") != month:
