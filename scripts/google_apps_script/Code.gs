@@ -5,7 +5,7 @@
  *
  * RECOMENDADO: crear proyecto Apps Script independiente/privado (no vinculado\n * al Sheet compartido) para proteger las propiedades frente a otros editores.\n *\n * CONFIGURACIÓN (Propiedades del script):
  *   SHEET_SYNC_SECRET: token aleatorio idéntico al de Vercel (mínimo 32 caracteres)
- *   CEK_API_URL: https://programacion-team-food-cek-global.vercel.app
+ *   CEK_API_URL: https://programacion-team-food.vercel.app
  *
  * Web App: ejecutar como "Yo"; acceso "Cualquier persona" (URL no pública).
  * El contenido de la hoja NO se revela sin validar SHEET_SYNC_SECRET.
@@ -78,20 +78,31 @@ function cekJson_(data) {
  * El token se envía en el CUERPO HTTPS, nunca en la URL.
  */
 function doPost(e) {
+  let body;
   try {
-    const body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
-    const cfg = cekProps_();
-    if (body.action !== 'snapshot' || !body.secret ||
-        body.secret !== cfg.secret) {
-      return cekJson_({ok: false, error: 'No autorizado'});
-    }
+    body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+  } catch (err) {
+    return cekJson_({ok: false, code: 'INVALID_JSON', error: 'Formato de solicitud incorrecto'});
+  }
+  // La consulta manual NO requiere CEK_API_URL, que se usa solo para el trigger diario.
+  const secret = PropertiesService.getScriptProperties().getProperty('SHEET_SYNC_SECRET') || '';
+  if (secret.length < 32) {
+    return cekJson_({ok: false, code: 'MISSING_SECRET',
+                     error: 'Falta SHEET_SYNC_SECRET en Propiedades del script'});
+  }
+  if (body.action !== 'snapshot' || !body.secret || body.secret !== secret) {
+    return cekJson_({ok: false, code: 'UNAUTHORIZED', error: 'No autorizado'});
+  }
+  try {
     const year = Number(body.year);
     const month = Number(body.month);
     const rows = cekSnapshot_(year, month);
     return cekJson_({ok: true, year: year, month: month, values: rows});
   } catch (err) {
-    // No incluir secretos ni contenido de las órdenes en el mensaje.
-    return cekJson_({ok: false, error: 'Error al leer BASE DE DATOS. Revise las ejecuciones de Apps Script.'});
+    // Registrar solo el tipo de error; no claves privadas ni contenidos de las órdenes.
+    console.error('cekSnapshot_ falló: ' + (err && err.name || 'Error'));
+    return cekJson_({ok: false, code: 'SHEET_READ_ERROR',
+                     error: 'No fue posible leer BASE DE DATOS; revisa Ejecuciones de Apps Script'});
   }
 }
 

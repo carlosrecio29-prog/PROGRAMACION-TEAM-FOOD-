@@ -150,7 +150,7 @@ def test_apps_script_pull_fails_safely_on_invalid_json(monkeypatch):
             return b"<html>Authorization required</html>"
 
     monkeypatch.setattr("urllib.request.urlopen", lambda request, timeout: Response())
-    with pytest.raises(SheetSyncError, match="Apps Script no respond"):
+    with pytest.raises(SheetSyncError, match="no devolvió JSON"):
         _read_sheet_apps_script(2026, 11)
 
 def test_apps_script_pull_fails_closed_without_secret(monkeypatch):
@@ -169,4 +169,109 @@ def test_apps_script_pull_rejects_unsafe_urls(monkeypatch):
     monkeypatch.setenv("SHEET_SYNC_SECRET", "A" * 48)
     monkeypatch.setenv("APPS_SCRIPT_WEBAPP_URL", "https://evil.invalid/macros/s/foo/exec")
     with pytest.raises(SheetSyncError, match="URL"):
+        _read_sheet_apps_script(2026, 11)
+
+
+def test_apps_script_rejected_secret_has_specific_error(monkeypatch):
+    import json
+    from backend.services.v2_sheet_sync_service import _read_sheet_apps_script
+
+    monkeypatch.setenv("SHEET_SYNC_SECRET", "S" * 48)
+    monkeypatch.setenv(
+        "APPS_SCRIPT_WEBAPP_URL",
+        "https://script.google.com/macros/s/AKfycbMockDeploy/exec",
+    )
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self, size):
+            return json.dumps({"ok": False, "error": "No autorizado"}).encode("utf-8")
+
+    monkeypatch.setattr("urllib.request.urlopen", lambda request, timeout: Response())
+    with pytest.raises(SheetSyncError, match="SHEET_SYNC_SECRET"):
+        _read_sheet_apps_script(2026, 11)
+
+
+def test_apps_script_read_only_probe_does_not_write_db(monkeypatch):
+    from backend.services import v2_sheet_sync_service as sync
+    monkeypatch.setattr(sync, "_read_sheet_apps_script", lambda year, month: [
+        HEADERS,
+        source_row(),
+        source_row(ot="OT-15002-26", specialty="MEC", status="FINALIZADA"),
+    ])
+    monkeypatch.setattr(sync, "get_engine", lambda: (_ for _ in ()).throw(
+        AssertionError("El diagnóstico no debe abrir conexión con Supabase")
+    ))
+    status = sync.probe_sheet_source(2026, 11)
+    assert status["ok"] is True
+    assert status["ots_unicas_validas"] == 2
+    assert status["filas"] == 2
+    assert status["conflictos"] == 0
+
+
+def test_apps_script_403_has_permission_guidance(monkeypatch):
+    from urllib.error import HTTPError
+    from backend.services.v2_sheet_sync_service import _read_sheet_apps_script
+
+    monkeypatch.setenv("SHEET_SYNC_SECRET", "S" * 48)
+    monkeypatch.setenv(
+        "APPS_SCRIPT_WEBAPP_URL",
+        "https://script.google.com/macros/s/AKfycbMockDeploy/exec",
+    )
+
+    def forbidden(request, timeout):
+        raise HTTPError(request.full_url, 403, "Forbidden", {}, None)
+
+    monkeypatch.setattr("urllib.request.urlopen", forbidden)
+    with pytest.raises(SheetSyncError, match="Cualquier persona"):
+        _read_sheet_apps_script(2026, 11)
+
+
+def test_apps_script_missing_property_reports_configuration(monkeypatch):
+    import json
+    from backend.services.v2_sheet_sync_service import _read_sheet_apps_script
+
+    monkeypatch.setenv("SHEET_SYNC_SECRET", "S" * 48)
+    monkeypatch.setenv(
+        "APPS_SCRIPT_WEBAPP_URL",
+        "https://script.google.com/macros/s/AKfycbMockDeploy/exec",
+    )
+
+    class Response:
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+        def read(self, size):
+            return json.dumps({"ok": False, "code": "MISSING_SECRET"}).encode("utf-8")
+
+    monkeypatch.setattr("urllib.request.urlopen", lambda request, timeout: Response())
+    with pytest.raises(SheetSyncError, match="no tiene SHEET_SYNC_SECRET"):
+        _read_sheet_apps_script(2026, 11)
+
+
+def test_apps_script_old_generic_response_includes_configuration_hints(monkeypatch):
+    import json
+    from backend.services.v2_sheet_sync_service import _read_sheet_apps_script
+
+    monkeypatch.setenv("SHEET_SYNC_SECRET", "S" * 48)
+    monkeypatch.setenv(
+        "APPS_SCRIPT_WEBAPP_URL",
+        "https://script.google.com/macros/s/AKfycbMockDeploy/exec",
+    )
+
+    class Response:
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+        def read(self, size):
+            return json.dumps({
+                "ok": False,
+                "error": "Error al leer BASE DE DATOS. Revise las ejecuciones de Apps Script.",
+            }).encode("utf-8")
+
+    monkeypatch.setattr("urllib.request.urlopen", lambda request, timeout: Response())
+    with pytest.raises(SheetSyncError, match="CEK_API_URL"):
         _read_sheet_apps_script(2026, 11)
