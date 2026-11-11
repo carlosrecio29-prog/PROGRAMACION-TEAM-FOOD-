@@ -136,7 +136,7 @@ async def admin_write_guard(request: Request, call_next):
 
     # Receptor firmado para el trigger de Google Apps Script.
     # No se habilitan otras mutaciones anónimas.
-    if path == "/api/v2/sheet-sync/push" and method == "POST":
+    if path in {"/api/v2/sheet-sync/push", "/api/v2/sheet-sync/heartbeat"} and method == "POST":
         secret = os.environ.get("SHEET_SYNC_SECRET", "")
         supplied = request.headers.get("Authorization", "")
         if len(secret) >= 32 and hmac.compare_digest(supplied, f"Bearer {secret}"):
