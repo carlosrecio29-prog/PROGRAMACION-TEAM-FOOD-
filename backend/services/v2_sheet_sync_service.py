@@ -219,27 +219,179 @@ def _read_sheet_apps_script(year: int, month: int) -> list[list[Any]]:
     return values
 
 
-def probe_sheet_source(year: int, month: int) -> dict[str, Any]:
-    # Comprobación explícitamente de solo lectura: no insertar auditoría ni actualizar órdenes.
+def _period_today() -> date:
+    return datetime.now(ZoneInfo("America/Bogota")).date().replace(day=1)
+
+
+def _validate_active_period(year: int, month: int) -> date:
+    if not (2026 <= year <= 2100 and 1 <= month <= 12):
+        raise SheetSyncError("El período solicitado no es válido.")
     period = date(year, month, 1)
-    today = datetime.now(ZoneInfo("America/Bogota")).date().replace(day=1)
-    if period < date(2026, 11, 1) or period > today:
-        raise SheetSyncError("La prueba solo está permitida desde noviembre de 2026 hasta el mes actual.")
-    values = _read_sheet_apps_script(year, month)
-    selected, warnings, stats = _parse_rows(values, period)
-    if len(selected) > 10000:
-        raise SheetSyncError("El mes tiene demasiadas OT; no se permite procesarlo automáticamente.")
+    if period != _period_today() or period < date(2026, 11, 1):
+        raise SheetSyncError("Solo es posible actualizar el mes actual a partir de noviembre de 2026.")
+    return period
+
+
+def _agent_state(conn, period: date) -> dict[str, Any]:
+    row = conn.execute(text("""
+      SELECT ultimo_contacto, ultimo_preflight, preflight_periodo, preflight_resumen,
+             (ultimo_contacto > now()-interval '20 minutes') AS agente_activo,
+             (preflight_periodo=:period AND
+              ultimo_preflight > now()-interval '36 hours' AND
+              COALESCE((preflight_resumen->>'unicas')::int,0)>0) AS fuente_verificada
+      FROM programacion.google_sheet_sync_agent_v2 WHERE id=1
+    """), {"period": period}).mappings().first()
+    return dict(row) if row else {"agente_activo": False, "fuente_verificada": False}
+
+
+def probe_sheet_source(year: int, month: int) -> dict[str, Any]:
+    """Sólo consulta el latido del agente; jamás solicita a Google ni modifica Supabase."""
+    period = _validate_active_period(year, month)
+    with get_engine().connect() as conn:
+        agent = _agent_state(conn, period)
+    if not agent.get("agente_activo"):
+        raise SheetSyncError(
+            "Google Apps Script aún no se ha conectado con CEK Global MTTO. "
+            "Copia la última versión de Code.gs y ejecuta cekActivarSincronizacion "
+            "una sola vez desde su editor."
+        )
+    if not agent.get("fuente_verificada"):
+        raise SheetSyncError(
+            "El agente está conectado, pero no verificó las filas de BASE DE DATOS. "
+            "En Apps Script ejecuta cekVerificarServidor y revisa Ejecuciones."
+        )
+    preview = agent.get("preflight_resumen") or {}
     return {
-        "ok": True,
-        "periodo": str(period),
-        "hoja": "BASE DE DATOS",
-        "filas": stats.get("filas_periodo", 0),
-        "ots_unicas_validas": len(selected),
-        "filas_repetidas": stats.get("filas_repetidas", 0),
-        "conflictos": stats.get("duplicados_conflictivos", 0),
-        "advertencias": len(warnings),
-        "mensaje": "Lectura comprobada. Ninguna OT, HH o cierre fue modificado.",
+        "ok": True, "periodo": str(period), "hoja": "BASE DE DATOS",
+        "filas": int(preview.get("filas", 0)),
+        "ots_unicas_validas": int(preview.get("unicas", 0)),
+        "filas_repetidas": int(preview.get("repetidas", 0)),
+        "conflictos": int(preview.get("conflictos", 0)),
+        "operaciones": int(preview.get("operaciones", 0)),
+        "por_especialidad": preview.get("porEspecialidad") or {},
+        "agente_conectado": True,
+        "mensaje": "Agente y fuente conectados; no se modificaron órdenes ni cierres.",
     }
+
+
+def record_agent_heartbeat(year: int, month: int, stats: dict[str, Any]) -> dict[str, Any]:
+    period = _validate_active_period(year, month)
+    filas = int(stats.get("filas") or 0)
+    unicas = int(stats.get("unicas") or 0)
+    if not (0 < unicas <= filas <= 15000):
+        raise SheetSyncError("La fuente de datos no superó la validación de volumen.")
+    preview = {
+        "filas": filas,
+        "unicas": unicas,
+        "repetidas": int(stats.get("repetidas") or 0),
+        "operaciones": int(stats.get("operaciones") or 0),
+        "conflictos": int(stats.get("conflictos") or 0),
+        "porEspecialidad": {
+            str(k)[:10]: int(v)
+            for k, v in (stats.get("porEspecialidad") or {}).items()
+            if k in SPECIALTIES and isinstance(v, int) and 0 <= v <= 15000
+        },
+    }
+    with get_engine().begin() as conn:
+        conn.execute(text("""
+          INSERT INTO programacion.google_sheet_sync_agent_v2(
+            id,ultimo_contacto,ultimo_preflight,preflight_periodo,preflight_resumen,actualizado_en)
+          VALUES (1,now(),now(),:period,CAST(:stats AS jsonb),now())
+          ON CONFLICT (id) DO UPDATE SET
+            ultimo_contacto=now(),ultimo_preflight=now(),
+            preflight_periodo=EXCLUDED.preflight_periodo,
+            preflight_resumen=EXCLUDED.preflight_resumen,actualizado_en=now()
+        """), {"period":period,"stats":json.dumps(preview)})
+    return {"ok": True, "agente_conectado": True, "periodo": str(period)}
+
+
+def pending_sheet_sync_requests() -> dict[str, Any]:
+    period = _period_today()
+    with get_engine().connect() as conn:
+        requests = [
+            {"id":int(row["id"]),"year":period.year,"month":period.month}
+            for row in conn.execute(text("""
+              SELECT id FROM programacion.google_sheet_sync_request_v2
+              WHERE periodo=:period AND estado='PENDIENTE'
+              ORDER BY solicitado_en ASC LIMIT 3
+            """), {"period":period}).mappings()
+        ]
+    return {"ok":True,"requests":requests}
+
+
+def queue_manual_sheet_sync(year: int, month: int) -> dict[str, Any]:
+    period = _validate_active_period(year, month)
+    with get_engine().begin() as conn:
+        closure = conn.execute(text("""
+          SELECT estado FROM programacion.cierre_mensual_v2 WHERE periodo=:period
+        """), {"period":period}).scalar()
+        if closure is not None and str(closure).upper() != "ABIERTO":
+            raise SheetSyncError("El mes está cerrado. No se alterarán sus datos históricos.")
+        agent = _agent_state(conn, period)
+        if not agent.get("agente_activo") or not agent.get("fuente_verificada"):
+            raise SheetSyncError(
+                "El agente de Google Apps Script no está activo o no verificó BASE DE DATOS. "
+                "Ejecuta cekActivarSincronizacion en el editor de Apps Script."
+            )
+        request_id = conn.execute(text("""
+          INSERT INTO programacion.google_sheet_sync_request_v2(periodo,estado)
+          VALUES (:period,'PENDIENTE')
+          ON CONFLICT (periodo) WHERE (estado='PENDIENTE')
+          DO UPDATE SET actualizado_en=now()
+          RETURNING id
+        """), {"period": period}).scalar_one()
+    return {
+        "ok": True, "estado": "PENDIENTE", "solicitud_id": int(request_id),
+        "periodo": str(period),
+        "mensaje": "Solicitud enviada. Apps Script la procesará en su siguiente revisión (aprox. 5 minutos).",
+    }
+
+
+def get_sheet_request_status(year: int, month: int) -> dict[str, Any]:
+    period = date(year,month,1)
+    with get_engine().connect() as conn:
+        row = conn.execute(text("""
+          SELECT id,estado,solicitado_en,actualizado_en,terminado_en,
+                 resumen,error_resumido
+          FROM programacion.google_sheet_sync_request_v2
+          WHERE periodo=:period ORDER BY id DESC LIMIT 1
+        """), {"period":period}).mappings().first()
+    return dict(row) if row else {}
+
+
+def ensure_pending_sheet_request(request_id: int, period: date) -> None:
+    with get_engine().connect() as conn:
+        match = conn.execute(text("""
+          SELECT 1 FROM programacion.google_sheet_sync_request_v2
+          WHERE id=:id AND periodo=:period AND estado='PENDIENTE'
+        """), {"id":request_id,"period":period}).first()
+    if not match:
+        raise SheetSyncError("La solicitud ya se procesó, no existe o no corresponde al período.")
+
+
+def complete_sheet_request(request_id: int, period: date, result: dict[str, Any]) -> None:
+    with get_engine().begin() as conn:
+        conn.execute(text("""
+          UPDATE programacion.google_sheet_sync_request_v2
+             SET estado='COMPLETADA',actualizado_en=now(),terminado_en=now(),
+                 sincronizacion_id=:run,resumen=CAST(:summary AS jsonb)
+           WHERE id=:id AND periodo=:period AND estado='PENDIENTE'
+        """), {"id":request_id,"period":period,
+               "run":result.get("sincronizacion_id"),
+               "summary":json.dumps({k:result.get(k) for k in (
+                   "ots_validas","estados_cambiados","nuevas",
+                   "backlog_conciliado","conflictos","filas_periodo"
+               )})})
+
+
+def error_sheet_request(request_id: int, period: date, message: str) -> None:
+    with get_engine().begin() as conn:
+        conn.execute(text("""
+          UPDATE programacion.google_sheet_sync_request_v2
+             SET estado='ERROR',actualizado_en=now(),terminado_en=now(),
+                 error_resumido=:message
+           WHERE id=:id AND periodo=:period AND estado='PENDIENTE'
+        """), {"id":request_id,"period":period,"message":str(message)[:400]})
 
 def _lookup_plan(plans: dict[str, dict[str, Any]], plan: str) -> dict[str, Any] | None:
     return plans.get(_norm(plan))
@@ -676,11 +828,22 @@ def sync_status(year: int, month: int) -> dict[str, Any]:
           FROM programacion.google_sheet_sync_run_v2
           WHERE periodo=:period ORDER BY iniciado_en DESC,id DESC LIMIT 10
         """), {"period":period}).mappings()]
+        agent = _agent_state(conn,period)
+        request = conn.execute(text("""
+          SELECT id,estado,solicitado_en,actualizado_en,terminado_en,resumen,error_resumido
+          FROM programacion.google_sheet_sync_request_v2
+          WHERE periodo=:period ORDER BY id DESC LIMIT 1
+        """), {"period":period}).mappings().first()
+    ready = len(os.environ.get("SHEET_SYNC_SECRET","")) >= 32
     return {
-      "configurado": bool(os.environ.get("APPS_SCRIPT_WEBAPP_URL")) and len(os.environ.get("SHEET_SYNC_SECRET","")) >= 32,
-      "cron_configurado": len(os.environ.get("SHEET_SYNC_SECRET","")) >= 32,
-      "origen": "BASE DE DATOS · Google Apps Script",
-      "horario": "≈06:00 America/Bogota (activador de Apps Script)",
+      "configurado": ready,
+      "cron_configurado": bool(agent.get("agente_activo")),
+      "agente_activo": bool(agent.get("agente_activo")),
+      "fuente_verificada": bool(agent.get("fuente_verificada")),
+      "agente_ultimo_contacto": agent.get("ultimo_contacto"),
+      "ultima_solicitud": dict(request) if request else None,
+      "origen": "BASE DE DATOS · Google Apps Script PUSH",
+      "horario": "≈06:00 America/Bogota + solicitudes cada 5 minutos",
       "periodo": str(period), "ultima": rows[0] if rows else None,
       "historial": rows,
     }
