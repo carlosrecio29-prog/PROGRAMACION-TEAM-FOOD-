@@ -275,3 +275,97 @@ def test_apps_script_old_generic_response_includes_configuration_hints(monkeypat
     monkeypatch.setattr("urllib.request.urlopen", lambda request, timeout: Response())
     with pytest.raises(SheetSyncError, match="CEK_API_URL"):
         _read_sheet_apps_script(2026, 11)
+
+
+def test_push_only_probe_uses_agent_without_google_or_writes(monkeypatch):
+    from backend.services import v2_sheet_sync_service as service
+
+    monkeypatch.setattr(service, "_period_today", lambda: date(2026, 11, 1))
+    monkeypatch.setattr(service, "_agent_state", lambda conn, period: {
+        "agente_activo": True, "fuente_verificada": True,
+        "preflight_resumen": {
+            "filas": 1320, "unicas": 1280, "repetidas": 40,
+            "conflictos": 2, "operaciones": 150,
+            "porEspecialidad": {"ELE": 400, "MEC": 400, "MET": 320, "SER": 200},
+        },
+    })
+    monkeypatch.setattr(service, "_read_sheet_apps_script", lambda *args: (
+        _ for _ in ()).throw(AssertionError("No se debe llamar Google Web App")
+    ))
+
+    class Engine:
+        def connect(self):
+            class Conn:
+                def __enter__(self): return self
+                def __exit__(self, *args): return False
+                def execute(self, *args): raise AssertionError("Prueba no debe escribir SQL")
+            return Conn()
+
+    monkeypatch.setattr(service, "get_engine", lambda: Engine())
+    result = service.probe_sheet_source(2026, 11)
+    assert result["ok"] is True
+    assert result["ots_unicas_validas"] == 1280
+    assert result["conflictos"] == 2
+
+
+def test_manual_sync_creates_pending_request_only_after_agent_check(monkeypatch):
+    from backend.services import v2_sheet_sync_service as service
+
+    monkeypatch.setattr(service, "_period_today", lambda: date(2026, 11, 1))
+    monkeypatch.setattr(service, "_agent_state", lambda conn, period: {
+        "agente_activo": True, "fuente_verificada": True,
+    })
+
+    commands = []
+    class Result:
+        def __init__(self, value): self.value = value
+        def scalar(self): return self.value
+        def scalar_one(self): return self.value
+
+    class Engine:
+        def begin(self):
+            class Conn:
+                def __enter__(self): return self
+                def __exit__(self, *args): return False
+                def execute(self, statement, params):
+                    q = str(statement)
+                    commands.append(q)
+                    if "SELECT estado FROM programacion.cierre_mensual_v2" in q:
+                        return Result(None)
+                    if "INSERT INTO programacion.google_sheet_sync_request_v2" in q:
+                        return Result(14)
+                    raise AssertionError("SQL inesperado (podría modificar órdenes): " + q)
+            return Conn()
+
+    monkeypatch.setattr(service, "get_engine", lambda: Engine())
+    result = service.queue_manual_sheet_sync(2026, 11)
+    assert result["estado"] == "PENDIENTE"
+    assert result["solicitud_id"] == 14
+    assert not any("orden_mantenimiento" in q for q in commands)
+
+
+def test_manual_sync_protects_closed_month_even_with_connected_agent(monkeypatch):
+    from backend.services import v2_sheet_sync_service as service
+    monkeypatch.setattr(service, "_period_today", lambda: date(2026, 11, 1))
+
+    class Result:
+        def scalar(self): return "CERRADO"
+
+    class Engine:
+        def begin(self):
+            class Conn:
+                def __enter__(self): return self
+                def __exit__(self, *args): return False
+                def execute(self, statement, params): return Result()
+            return Conn()
+
+    monkeypatch.setattr(service, "get_engine", lambda: Engine())
+    with pytest.raises(SheetSyncError, match="cerrado"):
+        service.queue_manual_sheet_sync(2026, 11)
+
+
+def test_manual_sync_forbids_prior_month_even_if_agent_ready(monkeypatch):
+    from backend.services import v2_sheet_sync_service as service
+    monkeypatch.setattr(service, "_period_today", lambda: date(2026, 11, 1))
+    with pytest.raises(SheetSyncError, match="mes actual"):
+        service.queue_manual_sheet_sync(2026, 10)
