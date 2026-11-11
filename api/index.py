@@ -53,7 +53,7 @@ from backend.services.v2_week_tracking_service import (
 )
 from backend.services.v2_manual_tracking_service import get_week_tracking, record_week_tracking, set_manual_status
 from backend.services.v2_operation_exclusion_service import get_operation_exclusions
-from backend.services.v2_sheet_sync_service import SheetSyncError, sync_month, sync_status
+from backend.services.v2_sheet_sync_service import SheetSyncError, sync_month, sync_status, probe_sheet_source
 from backend.services.v2_progress_service import get_progress, export_progress_pdf
 from backend.services.v2_monthly_close_service import (
     V2MonthlyCloseError, get_monthly_close, close_month,
@@ -133,6 +133,18 @@ def sheet_sync_status(request:Request,year:int=Query(...,ge=2020,le=2100),month:
         return sync_status(year,month)
     except SQLAlchemyError as exc:
         raise HTTPException(503,"No se pudo consultar el historial de sincronizaciones.") from exc
+
+
+@app.get("/api/v2/sheet-sync/check")
+def sheet_sync_check(request: Request, year: int = Query(..., ge=2026, le=2100),
+                     month: int = Query(..., ge=1, le=12)):
+    # Lee Google Sheets pero NUNCA modifica Supabase, auditoría ni programación.
+    if not request_is_admin(request):
+        raise HTTPException(403, "Solo el administrador puede verificar la conexión.")
+    try:
+        return probe_sheet_source(year, month)
+    except SheetSyncError as exc:
+        raise HTTPException(503, str(exc)) from exc
 
 
 @app.post("/api/v2/sheet-sync")
