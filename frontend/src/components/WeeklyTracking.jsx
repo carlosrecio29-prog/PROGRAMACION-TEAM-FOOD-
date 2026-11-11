@@ -8,6 +8,7 @@ import {
   uploadV2WeekTracking,
   saveV2ManualTrackingStatus,
   getSheetSyncStatus,
+  checkSheetSyncConnection,
   syncGoogleSheetNow,
 } from "../api";
 import Badge from "../shared/Badge";
@@ -76,6 +77,8 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
   const [savingManual, setSavingManual] = useState(null);
   const [sheetSync, setSheetSync] = useState(null);
   const [syncingSheet, setSyncingSheet] = useState(false);
+  const [checkingSheet, setCheckingSheet] = useState(false);
+  const [sheetProbe, setSheetProbe] = useState(null);
 
   const week = weeks[Math.min(weekIndex, weeks.length - 1)] || weeks[0];
 
@@ -122,9 +125,27 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
   }
 
   useEffect(() => {
+    setSheetProbe(null);
     loadMonthlyProgress();
     loadSheetSyncStatus();
   }, [year, month, accessRole]);
+
+  async function checkSheetConnection() {
+    try {
+      setCheckingSheet(true);
+      setSheetProbe(null);
+      setError("");
+      setMessage("");
+      const result = await checkSheetSyncConnection(year, month);
+      setSheetProbe(result);
+      setMessage(`Conexión verificada sin modificar OT: ${number(result.filas)} filas del mes, ${number(result.ots_unicas_validas)} OT únicas válidas y ${number(result.conflictos)} OT con datos contradictorios. Ya puedes sincronizar.`);
+    } catch (cause) {
+      setSheetProbe({ok: false});
+      setError(cause.message || "No fue posible comprobar la conexión con Google Apps Script.");
+    } finally {
+      setCheckingSheet(false);
+    }
+  }
 
   async function syncSheets() {
     try {
@@ -311,12 +332,20 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
           )}
         </div>
         {accessRole === "admin" ? (
-          <button type="button" className="v2-primary" disabled={syncingSheet || !sheetSync?.configurado}
-            onClick={syncSheets}>
-            {syncingSheet ? "Sincronizando cuatro especialidades..." : "Sincronizar ahora"}
-          </button>
+          <div className="weekly-tracking-upload-actions">
+            <button type="button" disabled={checkingSheet || syncingSheet || !sheetSync?.configurado}
+              onClick={checkSheetConnection}>
+              {checkingSheet ? "Comprobando conexión..." : "Probar conexión (sin modificar)"}
+            </button>
+            <button type="button" className="v2-primary"
+              disabled={syncingSheet || checkingSheet || !sheetSync?.configurado || !sheetProbe?.ok}
+              title={!sheetProbe?.ok ? "Primero comprueba la conexión sin modificar datos" : "Sincroniza las OT de noviembre"}
+              onClick={syncSheets}>
+              {syncingSheet ? "Sincronizando cuatro especialidades..." : "Sincronizar ahora"}
+            </button>
+          </div>
         ) : (
-          <small>El botón de sincronización solo está disponible para el administrador.</small>
+          <small>La verificación y la sincronización solo están disponibles para el administrador.</small>
         )}
       </section>
 
