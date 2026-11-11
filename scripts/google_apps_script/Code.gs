@@ -53,7 +53,8 @@ function cekSnapshot_(year, month) {
     if (!row[2]) continue;
     const explicitYear = String(row[10] || '').trim();
     if (/^20\d{2}$/.test(explicitYear) && Number(explicitYear) !== year) continue;
-    items.push(row.concat([i + 1]));
+    // El modelo Pydantic de la API admite exclusivamente celdas de texto.
+    items.push(row.concat([String(i + 1)]));
     if (items.length > CEK_MAX_ROWS) throw new Error('El mes supera el límite permitido de filas.');
   }
   if (items.length < 2) throw new Error('No hay órdenes en el mes seleccionado.');
