@@ -126,18 +126,20 @@ def _parse_rows(values: list[list[Any]], period: date) -> tuple[dict[str, dict[s
 
 
 def _read_sheet_apps_script(year: int, month: int) -> list[list[Any]]:
-    # Apps Script se ejecuta bajo la cuenta que ya puede leer el Google Sheet.
-    # Solo Vercel conoce URL del Web App y secreto; nada va al navegador.
+    # La lectura utiliza exclusivamente Apps Script; no altera ninguna OT.
+    # Las credenciales viajan en el cuerpo POST HTTPS, nunca al navegador.
+    from urllib.error import HTTPError, URLError
     from urllib.request import Request, urlopen
 
     url = os.environ.get("APPS_SCRIPT_WEBAPP_URL", "").strip()
     secret = os.environ.get("SHEET_SYNC_SECRET", "").strip()
-    if not url or not secret or len(secret) < 32:
+    if not url or len(secret) < 32:
         raise SheetSyncError(
-            "Falta configurar APPS_SCRIPT_WEBAPP_URL y SHEET_SYNC_SECRET en Vercel."
+            "Faltan APPS_SCRIPT_WEBAPP_URL o SHEET_SYNC_SECRET en Vercel. "
+            "Ambas deben estar en Production y requieren un nuevo despliegue."
         )
     if not re.fullmatch(r"https://script\.google\.com/macros/s/[A-Za-z0-9_-]+/exec", url):
-        raise SheetSyncError("La URL de Google Apps Script no tiene formato de despliegue válido.")
+        raise SheetSyncError("La URL de Google Apps Script en Vercel no es una implementación /exec válida.")
     try:
         payload = json.dumps({
             "action": "snapshot", "year": year, "month": month, "secret": secret,
@@ -150,21 +152,83 @@ def _read_sheet_apps_script(year: int, month: int) -> list[list[Any]]:
         )
         with urlopen(request, timeout=35) as response:
             raw = response.read(25 * 1024 * 1024 + 1)
-        if len(raw) > 25 * 1024 * 1024:
-            raise ValueError("Respuesta de Apps Script demasiado grande")
-        result = json.loads(raw.decode("utf-8"))
-        if not isinstance(result, dict) or result.get("ok") is not True:
-            raise ValueError("Respuesta rechazada por Apps Script")
-        if result.get("year") != year or result.get("month") != month:
-            raise ValueError("Período incorrecto en la respuesta de Apps Script")
-        values = result.get("values")
-        if not isinstance(values, list) or not values or len(values) > 15000:
-            raise ValueError("Respuesta de datos incompleta o excesiva")
-        return values
-    except Exception as exc:
+    except HTTPError as exc:
+        if exc.code in (401, 403):
+            detail = ("Google impide consultar el Web App. En Apps Script publica la aplicación "
+                      "como 'Ejecutar como yo' y 'Cualquier persona', y vuelve a implementar.")
+        elif exc.code in (404, 410):
+            detail = ("La implementación de Google Apps Script no existe o fue reemplazada. "
+                      "Actualiza APPS_SCRIPT_WEBAPP_URL en Vercel con la dirección /exec vigente.")
+        else:
+            detail = (f"Google Apps Script devolvió HTTP {exc.code}. "
+                      "Revisa la implementación y las ejecuciones de Apps Script.")
+        raise SheetSyncError(detail) from exc
+    except (TimeoutError, URLError) as exc:
         raise SheetSyncError(
-            "Apps Script no respondió con datos válidos. Revisa su despliegue, permisos y Propiedades del script."
+            "No se pudo establecer la conexión HTTPS con Google Apps Script. "
+            "Revisa el despliegue del Web App y vuelve a probar la conexión."
         ) from exc
+
+    if len(raw) > 25 * 1024 * 1024:
+        raise SheetSyncError("El archivo de Google Sheets es demasiado grande para esta consulta.")
+    try:
+        result = json.loads(raw.decode("utf-8"))
+    except (ValueError, UnicodeError) as exc:
+        raise SheetSyncError(
+            "Google no devolvió JSON; probablemente mostró una página de acceso o autorización. "
+            "Publica el Apps Script como aplicación web, 'Ejecutar como yo', "
+            "con acceso 'Cualquier persona' y copia su URL /exec en Vercel."
+        ) from exc
+    if not isinstance(result, dict):
+        raise SheetSyncError("Apps Script respondió con un formato incorrecto; revisa la versión implementada.")
+    if result.get("ok") is not True:
+        code = str(result.get("code") or "").strip().upper()
+        error = str(result.get("error") or "").strip().lower()
+        if code == "UNAUTHORIZED" or "no autorizado" in error:
+            raise SheetSyncError(
+                "La clave de sincronización no coincide. Configura exactamente el mismo "
+                "SHEET_SYNC_SECRET en Propiedades del script y en Vercel Production."
+            )
+        if code in ("SHEET_READ_ERROR", "SOURCE_READ_ERROR") or "base de datos" in error:
+            raise SheetSyncError(
+                "Apps Script pudo recibir la solicitud, pero no leer BASE DE DATOS. "
+                "Revisa los permisos de la cuenta que ejecuta el script, el nombre de la pestaña "
+                "y el registro de Ejecuciones en Apps Script."
+            )
+        raise SheetSyncError(
+            "Apps Script rechazó la solicitud. Revisa sus propiedades, autorizaciones y Ejecuciones."
+        )
+    if result.get("year") != year or result.get("month") != month:
+        raise SheetSyncError("Apps Script devolvió un período diferente del solicitado; no se aplicarán cambios.")
+    values = result.get("values")
+    if not isinstance(values, list) or not values or len(values) > 15000:
+        raise SheetSyncError(
+            "Apps Script no devolvió filas válidas de BASE DE DATOS. Revisa la fuente y el período."
+        )
+    return values
+
+
+def probe_sheet_source(year: int, month: int) -> dict[str, Any]:
+    # Comprobación explícitamente de solo lectura: no insertar auditoría ni actualizar órdenes.
+    period = date(year, month, 1)
+    today = datetime.now(ZoneInfo("America/Bogota")).date().replace(day=1)
+    if period < date(2026, 11, 1) or period > today:
+        raise SheetSyncError("La prueba solo está permitida desde noviembre de 2026 hasta el mes actual.")
+    values = _read_sheet_apps_script(year, month)
+    selected, warnings, stats = _parse_rows(values, period)
+    if len(selected) > 10000:
+        raise SheetSyncError("El mes tiene demasiadas OT; no se permite procesarlo automáticamente.")
+    return {
+        "ok": True,
+        "periodo": str(period),
+        "hoja": "BASE DE DATOS",
+        "filas": stats.get("filas_periodo", 0),
+        "ots_unicas_validas": len(selected),
+        "filas_repetidas": stats.get("filas_repetidas", 0),
+        "conflictos": stats.get("duplicados_conflictivos", 0),
+        "advertencias": len(warnings),
+        "mensaje": "Lectura comprobada. Ninguna OT, HH o cierre fue modificado.",
+    }
 
 def _lookup_plan(plans: dict[str, dict[str, Any]], plan: str) -> dict[str, Any] | None:
     return plans.get(_norm(plan))
