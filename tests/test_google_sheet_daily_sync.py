@@ -87,7 +87,7 @@ def test_transport_preserves_original_base_de_datos_row_number():
 
 
 def test_apps_script_pull_uses_private_post(monkeypatch):
-    import requests
+    import json
     from backend.services.v2_sheet_sync_service import _read_sheet_apps_script
 
     monkeypatch.setenv("SHEET_SYNC_SECRET", "S" * 48)
@@ -98,26 +98,60 @@ def test_apps_script_pull_uses_private_post(monkeypatch):
     captured = {}
 
     class Response:
-        def raise_for_status(self):
-            pass
+        def __enter__(self):
+            return self
 
-        def json(self):
-            return {
+        def __exit__(self, *args):
+            return False
+
+        def read(self, size):
+            return json.dumps({
                 "ok": True, "year": 2026, "month": 11,
                 "values": [HEADERS, source_row()],
-            }
+            }).encode("utf-8")
 
-    def fake_post(url, **kwargs):
-        captured.update({"url": url, **kwargs})
+    def fake_urlopen(request, timeout):
+        captured.update({
+            "url": request.full_url,
+            "method": request.get_method(),
+            "payload": json.loads(request.data),
+            "content_type": request.get_header("Content-type"),
+            "timeout": timeout,
+        })
         return Response()
 
-    monkeypatch.setattr(requests, "post", fake_post)
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
     rows = _read_sheet_apps_script(2026, 11)
     assert len(rows) == 2
+    assert captured["method"] == "POST"
+    assert captured["content_type"] == "application/json"
     assert "S" * 48 not in captured["url"]
-    assert captured["json"]["secret"] == "S" * 48
-    assert captured["json"]["action"] == "snapshot"
+    assert captured["payload"]["secret"] == "S" * 48
+    assert captured["payload"]["action"] == "snapshot"
 
+
+def test_apps_script_pull_fails_safely_on_invalid_json(monkeypatch):
+    from backend.services.v2_sheet_sync_service import _read_sheet_apps_script
+
+    monkeypatch.setenv("SHEET_SYNC_SECRET", "S" * 48)
+    monkeypatch.setenv(
+        "APPS_SCRIPT_WEBAPP_URL",
+        "https://script.google.com/macros/s/AKfycbMockDeploy/exec",
+    )
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self, size):
+            return b"<html>Authorization required</html>"
+
+    monkeypatch.setattr("urllib.request.urlopen", lambda request, timeout: Response())
+    with pytest.raises(SheetSyncError, match="Apps Script no respond"):
+        _read_sheet_apps_script(2026, 11)
 
 def test_apps_script_pull_fails_closed_without_secret(monkeypatch):
     from backend.services.v2_sheet_sync_service import _read_sheet_apps_script
