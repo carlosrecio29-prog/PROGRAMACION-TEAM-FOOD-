@@ -163,7 +163,7 @@ def _read_sheet_apps_script(year: int, month: int) -> list[list[Any]]:
             detail = (f"Google Apps Script devolvió HTTP {exc.code}. "
                       "Revisa la implementación y las ejecuciones de Apps Script.")
         raise SheetSyncError(detail) from exc
-    except (TimeoutError, URLError) as exc:
+    except (TimeoutError, URLError, OSError) as exc:
         raise SheetSyncError(
             "No se pudo establecer la conexión HTTPS con Google Apps Script. "
             "Revisa el despliegue del Web App y vuelve a probar la conexión."
@@ -184,16 +184,27 @@ def _read_sheet_apps_script(year: int, month: int) -> list[list[Any]]:
     if result.get("ok") is not True:
         code = str(result.get("code") or "").strip().upper()
         error = str(result.get("error") or "").strip().lower()
+        if code == "MISSING_SECRET":
+            raise SheetSyncError(
+                "Google Apps Script no tiene SHEET_SYNC_SECRET en Propiedades del script. "
+                "Configúralo y publica una nueva versión del Web App."
+            )
         if code == "UNAUTHORIZED" or "no autorizado" in error:
             raise SheetSyncError(
                 "La clave de sincronización no coincide. Configura exactamente el mismo "
                 "SHEET_SYNC_SECRET en Propiedades del script y en Vercel Production."
             )
-        if code in ("SHEET_READ_ERROR", "SOURCE_READ_ERROR") or "base de datos" in error:
+        if code in ("SHEET_READ_ERROR", "SOURCE_READ_ERROR"):
             raise SheetSyncError(
                 "Apps Script pudo recibir la solicitud, pero no leer BASE DE DATOS. "
-                "Revisa los permisos de la cuenta que ejecuta el script, el nombre de la pestaña "
+                "Revisa el acceso de tu cuenta al documento, la pestaña BASE DE DATOS "
                 "y el registro de Ejecuciones en Apps Script."
+            )
+        if "base de datos" in error:
+            raise SheetSyncError(
+                "La versión actual de Apps Script informó un error interno. "
+                "Comprueba SHEET_SYNC_SECRET y CEK_API_URL en Propiedades del script, "
+                "los permisos del documento y que hayas implementado la última versión de Code.gs."
             )
         raise SheetSyncError(
             "Apps Script rechazó la solicitud. Revisa sus propiedades, autorizaciones y Ejecuciones."
