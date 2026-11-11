@@ -2,15 +2,15 @@
 
 ## 1. Crear un script privado para leer Google Sheets
 1. Desde tu cuenta de Google abre https://script.google.com/home/projects/create y crea un proyecto independiente llamado **CEK Global MTTO Sync**.
-2. Reemplaza su `Code.gs` por el contenido de [Code.gs](./Code.gs) y guarda.
-3. El script utiliza `SpreadsheetApp.openById` para leer tu hoja, por lo que no es necesario vincularlo directamente al libro.
+2. Reemplaza su `Code.gs` por el contenido de [Code.gs](./Code.gs) y guarda. Si ya publicaste el Web App, entra en **Implementar → Gestionar implementaciones → Editar → Nueva versión → Implementar** para que la URL /exec ejecute el código actualizado.
+3. El script utiliza `SpreadsheetApp.openById` para leer tu hoja, por lo que no es necesario vincularlo directamente al libro. La lectura manual usa solamente `SHEET_SYNC_SECRET`; `CEK_API_URL` es necesario para el trigger diario.
 4. Se recomienda un proyecto **privado independiente** para que otros editores del Google Sheets no puedan ver las claves del script.
 5. Solo consulta `BASE DE DATOS`; no modifica la hoja ni lee las pestañas por especialidad.
 
 ## 2. Configurar el secreto y destino
 En Apps Script, **Configuración del proyecto → Propiedades del script**:
 - `SHEET_SYNC_SECRET`: genera una clave privada aleatoria de al menos 32 caracteres (idealmente 48+ con gestor de contraseñas).
-- `CEK_API_URL`: `https://programacion-team-food-cek-global.vercel.app`
+- `CEK_API_URL`: `https://programacion-team-food.vercel.app`
 
 No compartas la clave privada en chats, capturas, Github, Google Sheets ni con usuarios de solo lectura. Ten presente que otras personas con acceso de editor al proyecto de Apps Script podrían acceder a sus propiedades; limita el acceso de editores.
 
@@ -52,3 +52,6 @@ El activador se programa en torno a **06:00 America/Bogota**, con tolerancia tem
 - El sistema solo registra avances provisionales en semanas abiertas. Los cierres aprobados permanecen protegidos.
 - Si el Web App cambia de implementación, actualiza `APPS_SCRIPT_WEBAPP_URL` en Vercel.
 - Si sospechas filtración de `SHEET_SYNC_SECRET`, genera otro y actualízalo en ambas plataformas.
+
+## Diagnóstico sin riesgo
+En la aplicación, botón **Probar conexión (sin modificar)**. Se consulta el Apps Script con la clave de Vercel y se muestran los conteos sin escribir en Supabase. Solo después de que el resultado sea correcto se habilita **Sincronizar ahora**. Si responde que la clave no coincide, actualiza `SHEET_SYNC_SECRET` en ambos entornos sin enviarla por chat. Si responde que no fue posible leer la hoja, vuelve a autorizar Apps Script y revisa su registro de Ejecuciones.
