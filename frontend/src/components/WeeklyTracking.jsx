@@ -138,10 +138,10 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
       setMessage("");
       const result = await checkSheetSyncConnection(year, month);
       setSheetProbe(result);
-      setMessage(`Conexión verificada sin modificar OT: ${number(result.filas)} filas del mes, ${number(result.ots_unicas_validas)} OT únicas válidas y ${number(result.conflictos)} OT con datos contradictorios. Ya puedes sincronizar.`);
+      setMessage(`Agente Google conectado. BASE DE DATOS: ${number(result.filas)} filas, ${number(result.ots_unicas_validas)} OT únicas y ${number(result.conflictos)} conflictos. Comprobación sin modificar órdenes.`);
     } catch (cause) {
       setSheetProbe({ok: false});
-      setError(cause.message || "No fue posible comprobar la conexión con Google Apps Script.");
+      setError(cause.message || "El agente de Google Apps Script no se ha conectado.");
     } finally {
       setCheckingSheet(false);
     }
@@ -153,9 +153,10 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
       setError("");
       setMessage("");
       const result = await syncGoogleSheetNow(year, month);
-      await Promise.all([load(), loadMonthlyProgress(), loadSheetSyncStatus(), onChanged?.()]);
+      await loadSheetSyncStatus();
+      setSheetProbe(null);
       setMessage(
-        `Google Sheets · BASE DE DATOS sincronizada: ${number(result.ots_validas)} OT revisadas, ${number(result.estados_cambiados)} estados actualizados, ${number(result.nuevas)} OT nuevas, ${number(result.backlog_conciliado)} movimientos en backlog y ${number(result.conflictos)} situaciones por revisar. No se modificaron cierres históricos.`
+        `Solicitud #${result.solicitud_id} registrada. Google Apps Script enviará los datos del mes en su próxima revisión (aproximadamente cada 5 minutos). No se han modificado todavía las OT.`
       );
     } catch (cause) {
       setError(cause.message || "No se pudo sincronizar Google Sheets.");
@@ -164,6 +165,31 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
       setSyncingSheet(false);
     }
   }
+  // Actualizar automáticamente el panel cuando Apps Script resuelva la solicitud.
+  useEffect(() => {
+    if (accessRole !== "admin" || sheetSync?.ultima_solicitud?.estado !== "PENDIENTE") return;
+    let live = true;
+    const timer = setInterval(async () => {
+      try {
+        const result = await getSheetSyncStatus(year, month);
+        if (!live) return;
+        setSheetSync(result);
+        const request = result?.ultima_solicitud;
+        if (request?.estado === "COMPLETADA") {
+          await Promise.all([load(), loadMonthlyProgress(), onChanged?.()]);
+          setMessage(
+            `Sincronización completada: ${number(request.resumen?.ots_validas)} OT revisadas, ${number(request.resumen?.estados_cambiados)} estados actualizados, ${number(request.resumen?.conflictos)} conflictos. Los cierres históricos siguen intactos.`
+          );
+        } else if (request?.estado === "ERROR") {
+          setError(request.error_resumido || "La sincronización no pudo completarse.");
+        }
+      } catch {
+        // Si falla el estado, la solicitud permanece en cola en el servidor.
+      }
+    }, 12000);
+    return () => {live = false; clearInterval(timer);};
+  }, [year, month, accessRole, sheetSync?.ultima_solicitud?.id, sheetSync?.ultima_solicitud?.estado]);
+
   useEffect(() => {
     setFile(null);
     setMessage("");
@@ -318,28 +344,34 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
         <div>
           <span className="v2-kicker">SINCRONIZACIÓN DIARIA · SOLO LECTURA</span>
           <h3>Google Apps Script · BASE DE DATOS</h3>
-          <p>Un activador de Google Apps Script revisa las cuatro especialidades aproximadamente a las 6:00 a. m. (Colombia). El botón manual consulta la misma fuente; las programaciones y los cierres aprobados no se modifican.</p>
+          <p>Google Apps Script envía las órdenes a CEK Global MTTO: una actualización diaria alrededor de las 6:00 a. m. (Colombia) y revisión de solicitudes manuales cada 5 minutos. No se requiere que Vercel acceda a Google.</p>
           <small>
             {sheetSync?.ultima
               ? `Último intento: ${when(sheetSync.ultima.terminado_en)} · ${sheetSync.ultima.estado} · ${number(sheetSync.ultima.ots_validas)} OT revisadas · ${number(sheetSync.ultima.estados_cambiados)} cambios · ${number(sheetSync.ultima.conflictos)} conflictos`
               : "Sin sincronizaciones registradas para este mes."}
           </small>
-          {accessRole === "admin" && sheetSync?.configurado && !sheetSync?.cron_configurado && (
-            <p className="v2-warning">Configura el activador diario desde Extensiones → Apps Script para habilitar las actualizaciones automáticas.</p>
+          {accessRole === "admin" && sheetSync?.configurado && !sheetSync?.agente_activo && (
+            <p className="v2-warning">El agente de Google aún no está conectado. Copia Code.gs actualizado y ejecuta cekActivarSincronizacion una vez desde el editor de Apps Script.</p>
           )}
           {accessRole === "admin" && !sheetSync?.configurado && (
-            <p className="v2-warning">Falta configurar APPS_SCRIPT_WEBAPP_URL y SHEET_SYNC_SECRET en Vercel y desplegar el script desde Google Sheets. No necesitas Google Cloud ni tarjeta bancaria.</p>
+            <p className="v2-warning">Falta SHEET_SYNC_SECRET en Vercel Production. Usa la misma clave privada configurada en Propiedades del script.</p>
+          )}
+          {sheetSync?.ultima_solicitud?.estado === "PENDIENTE" && (
+            <p className="v2-warning">Solicitud #{sheetSync.ultima_solicitud.id} pendiente. Apps Script la procesará en su próxima revisión; puedes permanecer en esta pantalla.</p>
+          )}
+          {sheetSync?.ultima_solicitud?.estado === "ERROR" && (
+            <p className="v2-warning">La última solicitud falló: {sheetSync.ultima_solicitud.error_resumido || "revisa el registro de Apps Script"}.</p>
           )}
         </div>
         {accessRole === "admin" ? (
           <div className="weekly-tracking-upload-actions">
             <button type="button" disabled={checkingSheet || syncingSheet || !sheetSync?.configurado}
               onClick={checkSheetConnection}>
-              {checkingSheet ? "Comprobando conexión..." : "Probar conexión (sin modificar)"}
+              {checkingSheet ? "Comprobando agente..." : "Comprobar agente (sin modificar)"}
             </button>
             <button type="button" className="v2-primary"
-              disabled={syncingSheet || checkingSheet || !sheetSync?.configurado || !sheetProbe?.ok}
-              title={!sheetProbe?.ok ? "Primero comprueba la conexión sin modificar datos" : "Sincroniza las OT de noviembre"}
+              disabled={syncingSheet || checkingSheet || !sheetSync?.configurado || !sheetProbe?.ok || sheetSync?.ultima_solicitud?.estado === "PENDIENTE"}
+              title={!sheetProbe?.ok ? "Primero comprueba el agente sin modificar las órdenes" : "Registra una solicitud; Apps Script enviará las OT en 5 minutos"}
               onClick={syncSheets}>
               {syncingSheet ? "Sincronizando cuatro especialidades..." : "Sincronizar ahora"}
             </button>

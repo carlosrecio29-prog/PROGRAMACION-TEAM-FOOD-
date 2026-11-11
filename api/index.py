@@ -53,7 +53,11 @@ from backend.services.v2_week_tracking_service import (
 )
 from backend.services.v2_manual_tracking_service import get_week_tracking, record_week_tracking, set_manual_status
 from backend.services.v2_operation_exclusion_service import get_operation_exclusions
-from backend.services.v2_sheet_sync_service import SheetSyncError, sync_month, sync_status, probe_sheet_source
+from backend.services.v2_sheet_sync_service import (
+    SheetSyncError, sync_month, sync_status, probe_sheet_source,
+    queue_manual_sheet_sync, pending_sheet_sync_requests, record_agent_heartbeat,
+    ensure_pending_sheet_request, complete_sheet_request, error_sheet_request,
+)
 from backend.services.v2_progress_service import get_progress, export_progress_pdf
 from backend.services.v2_monthly_close_service import (
     V2MonthlyCloseError, get_monthly_close, close_month,
@@ -148,37 +152,84 @@ def sheet_sync_check(request: Request, year: int = Query(..., ge=2026, le=2100),
 
 
 @app.post("/api/v2/sheet-sync")
-def sheet_sync_manual(year:int=Query(...,ge=2020,le=2100),month:int=Query(...,ge=1,le=12)):
-    # admin_write_guard verifica la sesión de administrador para POST.
-    if date(year,month,1) < date(2026,11,1):
-        raise HTTPException(422,"La sincronización comienza en noviembre de 2026 para proteger los cierres anteriores.")
+def sheet_sync_manual(year:int=Query(...,ge=2026,le=2100),month:int=Query(...,ge=1,le=12)):
+    # Sólo administrador (middleware), sin llamar Apps Script por POST.
+    # Crear solicitud en cola y esperar el próximo trigger de Apps Script.
     try:
-        return sync_month(year=year,month=month,trigger="MANUAL")
+        return queue_manual_sheet_sync(year,month)
     except SheetSyncError as exc:
         raise HTTPException(503,str(exc)) from exc
+
+
+def _sheet_agent_authorized(request: Request) -> None:
+    secret = os.environ.get("SHEET_SYNC_SECRET", "")
+    supplied = request.headers.get("Authorization", "")
+    if len(secret) < 32 or not hmac.compare_digest(supplied,f"Bearer {secret}"):
+        raise HTTPException(401, "Agente de Google Apps Script no autorizado.")
+
+
+@app.get("/api/v2/sheet-sync/pending")
+def sheet_sync_pending(request: Request):
+    # Apps Script consulta solicitudes firmadas con el token, sin datos de órdenes.
+    _sheet_agent_authorized(request)
+    return pending_sheet_sync_requests()
+
+
+class SheetAgentHeartbeat(BaseModel):
+    year: int = Field(ge=2026,le=2100)
+    month: int = Field(ge=1,le=12)
+    filas: int = Field(ge=1,le=15000)
+    unicas: int = Field(ge=1,le=15000)
+    repetidas: int = Field(default=0,ge=0,le=15000)
+    operaciones: int = Field(default=0,ge=0,le=15000)
+    conflictos: int = Field(default=0,ge=0,le=15000)
+    porEspecialidad: dict[str,int] = Field(default_factory=dict)
+
+
+@app.post("/api/v2/sheet-sync/heartbeat")
+def sheet_sync_heartbeat(request: Request, body: SheetAgentHeartbeat):
+    _sheet_agent_authorized(request)
+    try:
+        return record_agent_heartbeat(body.year,body.month,body.model_dump())
+    except SheetSyncError as exc:
+        raise HTTPException(422,str(exc)) from exc
 
 
 class SheetSyncPushRequest(BaseModel):
     year: int = Field(ge=2026, le=2100)
     month: int = Field(ge=1, le=12)
     values: list[list[str]] = Field(min_length=2, max_length=15000)
+    request_id: int | None = Field(default=None, ge=1)
 
 
 @app.post("/api/v2/sheet-sync/push")
 def sheet_sync_push(request: Request, body: SheetSyncPushRequest):
-    # Complementa la validación del middleware: solo el activador firmado.
-    secret = os.environ.get("SHEET_SYNC_SECRET", "")
-    supplied = request.headers.get("Authorization", "")
-    if len(secret) < 32 or not hmac.compare_digest(supplied, f"Bearer {secret}"):
-        raise HTTPException(401, "Sincronización no autorizada.")
-    today = datetime.now(ZoneInfo("America/Bogota")).date()
+    # Apps Script envía los datos; Vercel no tiene que entrar en la app web de Google.
+    _sheet_agent_authorized(request)
+    today=datetime.now(ZoneInfo("America/Bogota")).date()
     if (body.year, body.month) != (today.year, today.month):
-        raise HTTPException(422, "La sincronización automática solo permite el mes actual.")
+        raise HTTPException(422, "El agente solo puede enviar el mes actual.")
+    period=date(body.year,body.month,1)
+    if body.request_id is not None:
+        try:
+            ensure_pending_sheet_request(body.request_id,period)
+        except SheetSyncError as exc:
+            raise HTTPException(409,str(exc)) from exc
     try:
-        return sync_month(year=body.year, month=body.month,
-                          trigger="CRON", values=body.values)
+        result = sync_month(
+            year=body.year, month=body.month,
+            trigger="MANUAL" if body.request_id is not None else "CRON",
+            values=body.values,
+        )
+        if not result.get("ok"):
+            raise SheetSyncError(result.get("mensaje") or "Sincronización simultánea; se reintentará.")
+        if body.request_id is not None:
+            complete_sheet_request(body.request_id,period,result)
+        return result
     except SheetSyncError as exc:
-        raise HTTPException(503, str(exc)) from exc
+        if body.request_id is not None:
+            error_sheet_request(body.request_id,period,str(exc))
+        raise HTTPException(503,str(exc)) from exc
 
 
 @app.get("/api/v2/operation-exclusions")
