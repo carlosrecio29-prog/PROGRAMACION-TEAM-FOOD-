@@ -1,197 +1,216 @@
 /**
- * CEK Global MTTO · Google Apps Script
- * Sin Google Cloud Console, tarjeta ni APIs avanzadas.
- * Fuente ÚNICA: BASE DE DATOS (A:M).
+ * CEK Global MTTO · Sincronización SOLO ENVÍO Google Apps Script → Vercel.
+ * No depende de publicar un Web App ni de solicitudes POST de Vercel hacia Google.
+ * Sin Google Cloud ni tarjeta. No comparte secretos en URLs, GitHub ni logs.
  *
- * RECOMENDADO: crear proyecto Apps Script independiente/privado (no vinculado\n * al Sheet compartido) para proteger las propiedades frente a otros editores.\n *\n * CONFIGURACIÓN (Propiedades del script):
- *   SHEET_SYNC_SECRET: token aleatorio idéntico al de Vercel (mínimo 32 caracteres)
- *   CEK_API_URL: https://programacion-team-food.vercel.app
- *
- * Web App: ejecutar como "Yo"; acceso "Cualquier persona" (URL no pública).
- * El contenido de la hoja NO se revela sin validar SHEET_SYNC_SECRET.
+ * Una vez pegado: ejecutar cekActivarSincronizacion (solicitará autorización).
+ * El botón de CEK Global MTTO encola solicitudes que procesa este script cada 5 min.
+ * La actualización diaria de todo el mes se ejecuta cerca de las 6 a. m. Bogotá.
  */
 const CEK_SPREADSHEET_ID = '1Or0L7epumDQUsUuLjb4FXt-7FRbC16pJ8-b0VwROwdo';
 const CEK_SHEET_TITLE = 'BASE DE DATOS';
+const CEK_API_URL = 'https://programacion-team-food.vercel.app';
 const CEK_TZ = 'America/Bogota';
-const CEK_MONTHS = [
-  'ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO',
-  'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'
-];
-const CEK_SPECIALTIES = ['ELE', 'MEC', 'MET', 'SER'];
+const CEK_MONTHS = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO',
+                    'JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+const CEK_SPECIALTIES = ['ELE','MEC','MET','SER'];
 const CEK_MAX_ROWS = 15000;
 
-function cekProps_() {
-  const p = PropertiesService.getScriptProperties();
-  const secret = p.getProperty('SHEET_SYNC_SECRET') || '';
-  const appUrl = (p.getProperty('CEK_API_URL') || '').replace(/\/+$/, '');
-  if (secret.length < 32) throw new Error('Configure SHEET_SYNC_SECRET con 32 o más caracteres.');
-  if (!/^https:\/\/[a-z0-9.-]+(?:\:[0-9]+)?$/i.test(appUrl)) {
-    throw new Error('Configure CEK_API_URL con un origen HTTPS, sin rutas.');
+function cekSecret_() {
+  const secret = PropertiesService.getScriptProperties().getProperty('SHEET_SYNC_SECRET') || '';
+  if (secret.length < 32) {
+    throw new Error('Falta SHEET_SYNC_SECRET en Propiedades del script (mínimo 32 caracteres).');
   }
-  return { secret: secret, appUrl: appUrl };
+  return secret;
 }
-
-function cekNormalizar_(value) {
-  return String(value || '')
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .trim().toUpperCase();
+function cekNorm_(value) {
+  return String(value || '').normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '').trim().toUpperCase();
 }
-
+function cekTiempo_() {
+  const now = new Date();
+  return {
+    year: Number(Utilities.formatDate(now, CEK_TZ, 'yyyy')),
+    month: Number(Utilities.formatDate(now, CEK_TZ, 'M'))
+  };
+}
 function cekSnapshot_(year, month) {
   if (!Number.isInteger(year) || year < 2026 || year > 2100 ||
       !Number.isInteger(month) || month < 1 || month > 12) {
-    throw new Error('Período de sincronización inválido.');
+    throw new Error('Periodo inválido.');
   }
   const book = SpreadsheetApp.openById(CEK_SPREADSHEET_ID);
   const sheet = book.getSheetByName(CEK_SHEET_TITLE);
-  if (!sheet) throw new Error('No se encuentra la pestaña BASE DE DATOS.');
-  const lastRow = sheet.getLastRow();
-  if (lastRow < 2) throw new Error('BASE DE DATOS no contiene órdenes.');
-  const values = sheet.getRange(1, 1, lastRow, 13).getDisplayValues();
-  const header = values[0].concat(['__ORIGINAL_ROW']);
-  const items = [header];
-
-  const monthName = CEK_MONTHS[month - 1];
-  for (let i = 1; i < values.length; i++) {
-    const row = values[i];
-    if (cekNormalizar_(row[0]) !== monthName) continue;
-    if (CEK_SPECIALTIES.indexOf(cekNormalizar_(row[3])) < 0) continue;
+  if (!sheet) throw new Error('No existe BASE DE DATOS en la hoja maestra.');
+  const count = sheet.getLastRow();
+  if (count < 2) throw new Error('BASE DE DATOS sin filas.');
+  const raw = sheet.getRange(1, 1, count, 13).getDisplayValues();
+  const items = [raw[0].concat(['__ORIGINAL_ROW'])];
+  const target = CEK_MONTHS[month - 1];
+  for (let i = 1; i < raw.length; i++) {
+    const row = raw[i];
+    if (cekNorm_(row[0]) !== target || CEK_SPECIALTIES.indexOf(cekNorm_(row[3])) < 0) continue;
     if (!row[2]) continue;
-    // AÑO puede estar vacío. Las OT heredadas -25/-24 siguen siendo elegibles
-    // si se encuentran explícitamente dentro del mes seleccionado.
     const explicitYear = String(row[10] || '').trim();
-    if (/^20\d\d$/.test(explicitYear) && Number(explicitYear) !== year) continue;
+    if (/^20\d{2}$/.test(explicitYear) && Number(explicitYear) !== year) continue;
     items.push(row.concat([i + 1]));
-    if (items.length > CEK_MAX_ROWS) throw new Error('Demasiadas filas del período; revisar límite CEK_MAX_ROWS.');
+    if (items.length > CEK_MAX_ROWS) throw new Error('El mes supera el límite permitido de filas.');
   }
-  if (items.length <= 1) throw new Error('No se encontraron OT para el período solicitado.');
+  if (items.length < 2) throw new Error('No hay órdenes en el mes seleccionado.');
   return items;
 }
-
-function cekJson_(data) {
-  return ContentService.createTextOutput(JSON.stringify(data))
-    .setMimeType(ContentService.MimeType.JSON);
+function cekResumen_(values, year, month) {
+  const seen = Object.create(null);
+  const conflicting = Object.create(null);
+  const summary = {
+    year: year, month: month, filas: values.length - 1,
+    unicas: 0, repetidas: 0, conflictos: 0, operaciones: 0,
+    porEspecialidad: {}
+  };
+  for (let i = 1; i < values.length; i++) {
+    const row = values[i];
+    const ot = cekNorm_(row[2]);
+    const spec = cekNorm_(row[3]);
+    const status = cekNorm_(row[7]);
+    const signature = [spec, cekNorm_(row[4]), cekNorm_(row[12]), status].join('|');
+    if (seen[ot]) {
+      summary.repetidas++;
+      if (seen[ot] !== signature) conflicting[ot] = true;
+    } else {
+      summary.unicas++;
+      seen[ot] = signature;
+    }
+    summary.porEspecialidad[spec] = (summary.porEspecialidad[spec] || 0) + 1;
+    const plan = cekNorm_(row[12]).replace(/^\d+\s*[-–—:._/|]+\s*/, '');
+    if (/^OPERACION(?:\b|\s|[-–—:._/|])/.test(plan)) summary.operaciones++;
+  }
+  summary.conflictos = Object.keys(conflicting).length;
+  return summary;
 }
-
-/**
- * La aplicación llama este Web App mediante POST para el botón manual.
- * El token se envía en el CUERPO HTTPS, nunca en la URL.
- */
-function doPost(e) {
+function cekApi_(path, method, payload) {
+  const options = {
+    method: method,
+    headers: {'Authorization': 'Bearer ' + cekSecret_()},
+    contentType: 'application/json',
+    muteHttpExceptions: true,
+    followRedirects: true
+  };
+  if (payload !== undefined) options.payload = JSON.stringify(payload);
+  const response = UrlFetchApp.fetch(CEK_API_URL + path, options);
+  const code = response.getResponseCode();
   let body;
   try {
-    body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+    body = JSON.parse(response.getContentText() || '{}');
   } catch (err) {
-    return cekJson_({ok: false, code: 'INVALID_JSON', error: 'Formato de solicitud incorrecto'});
+    throw new Error('La API CEK Global MTTO devolvió una respuesta no JSON (HTTP ' + code + ').');
   }
-  // La consulta manual NO requiere CEK_API_URL, que se usa solo para el trigger diario.
-  const secret = PropertiesService.getScriptProperties().getProperty('SHEET_SYNC_SECRET') || '';
-  if (secret.length < 32) {
-    return cekJson_({ok: false, code: 'MISSING_SECRET',
-                     error: 'Falta SHEET_SYNC_SECRET en Propiedades del script'});
+  if (code < 200 || code >= 300 || !body.ok) {
+    // No registrar payload, token ni número de OT en errores.
+    const reason = (body && body.detail && String(body.detail).slice(0, 180)) ||
+                   ('HTTP ' + code);
+    throw new Error('No se pudo comunicar con CEK Global MTTO: ' + reason);
   }
-  if (body.action !== 'snapshot' || !body.secret || body.secret !== secret) {
-    return cekJson_({ok: false, code: 'UNAUTHORIZED', error: 'No autorizado'});
-  }
+  return body;
+}
+
+/** Sólo lee el origen; no escribe OT, H-H ni cierres. */
+function cekVerificarFuente() {
+  const date = cekTiempo_();
+  const counts = cekResumen_(cekSnapshot_(date.year, date.month), date.year, date.month);
+  console.log('BASE DE DATOS · Verificación sólo lectura: ' + JSON.stringify(counts));
+  return counts;
+}
+
+/** Valida lectura de la fuente y conexión con el servidor SIN actualizar las OT. */
+function cekVerificarServidor() {
+  const report = cekVerificarFuente();
+  const result = cekApi_('/api/v2/sheet-sync/heartbeat', 'post', report);
+  console.log('Servidor CEK Global MTTO conectado. No se alteraron OT. Mes: ' + result.periodo);
+  return report;
+}
+
+function cekEnviarMes_(year, month, requestId) {
+  const rows = cekSnapshot_(year, month);
+  const body = {year: year, month: month, values: rows};
+  if (requestId) body.request_id = requestId;
+  const result = cekApi_('/api/v2/sheet-sync/push', 'post', body);
+  console.log('Sincronización completada. Solicitud: ' + (requestId || 'diaria') +
+              '; OT válidas: ' + result.ots_validas +
+              '; estados modificados: ' + result.estados_cambiados);
+  return result;
+}
+
+/** El activador de cada cinco minutos procesa las solicitudes del administrador. */
+function cekAtenderSolicitudes() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(1000)) return;
   try {
-    const year = Number(body.year);
-    const month = Number(body.month);
-    const rows = cekSnapshot_(year, month);
-    return cekJson_({ok: true, year: year, month: month, values: rows});
-  } catch (err) {
-    // Registrar solo el tipo de error; no claves privadas ni contenidos de las órdenes.
-    console.error('cekSnapshot_ falló: ' + (err && err.name || 'Error'));
-    return cekJson_({ok: false, code: 'SHEET_READ_ERROR',
-                     error: 'No fue posible leer BASE DE DATOS; revisa Ejecuciones de Apps Script'});
+    cekVerificarServidor();
+    const response = cekApi_('/api/v2/sheet-sync/pending', 'get');
+    const pending = response.requests || [];
+    pending.forEach(function(item) {
+      const today = cekTiempo_();
+      if (item.year !== today.year || item.month !== today.month) return;
+      cekEnviarMes_(item.year, item.month, item.id);
+    });
+    if (!pending.length) console.log('CEK Global MTTO conectado; ninguna solicitud pendiente.');
+  } finally {
+    lock.releaseLock();
   }
 }
 
-function doGet() {
-  return cekJson_({ok: false, error: 'No autorizado'});
-}
-
-/**
- * Sincronización automática push: Google Sheets → API CEK Global MTTO.
- * Se invoca mediante activador de reloj, aproximadamente a las 06:00.
- */
+/** Sincronización diaria de las cuatro especialidades, aproximadamente a las 06:00. */
 function cekSincronizacionDiaria() {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(1000)) return;
   try {
-    const cfg = cekProps_();
-    const now = new Date();
-    const year = Number(Utilities.formatDate(now, CEK_TZ, 'yyyy'));
-    const month = Number(Utilities.formatDate(now, CEK_TZ, 'M'));
-    const snapshot = cekSnapshot_(year, month);
-    const response = UrlFetchApp.fetch(cfg.appUrl + '/api/v2/sheet-sync/push', {
-      method: 'post',
-      contentType: 'application/json',
-      headers: {'Authorization': 'Bearer ' + cfg.secret},
-      payload: JSON.stringify({year: year, month: month, values: snapshot}),
-      muteHttpExceptions: true,
-      followRedirects: true,
-    });
-    const status = response.getResponseCode();
-    const output = JSON.parse(response.getContentText() || '{}');
-    if (status < 200 || status >= 300 || !output.ok) {
-      throw new Error('La API CEK Global MTTO rechazó la sincronización (HTTP ' + status + ').');
-    }
-    console.log('Sincronización registrada, ID: ' + output.sincronizacion_id +
-                ', OT válidas: ' + output.ots_validas);
+    const today = cekTiempo_();
+    cekVerificarServidor();
+    cekEnviarMes_(today.year, today.month, null);
   } finally {
     lock.releaseLock();
   }
 }
 
 /**
- * Ejecutar UNA sola vez desde el editor Apps Script.
- * Elimina exclusivamente triggers anteriores de cekSincronizacionDiaria.
- * Apps Script puede ejecutar ±15 min respecto de las 6:00 a. m.
+ * ACTIVAR UNA SOLA VEZ DESDE APPS SCRIPT.
+ * Instala trigger de 5 minutos para solicitudes + trigger diario 06:00 Bogotá.
+ * Antes verifica hoja, permisos y token sin tocar OT.
  */
-function cekInstalarTriggerDiario() {
-  cekProps_();
-  ScriptApp.getProjectTriggers()
-    .filter(function(t) { return t.getHandlerFunction() === 'cekSincronizacionDiaria'; })
-    .forEach(function(t) { ScriptApp.deleteTrigger(t); });
+function cekActivarSincronizacion() {
+  cekVerificarServidor();
+  const names = [
+    'cekAtenderSolicitudes', 'cekSincronizacionDiaria',
+    'cekInstalarTriggerDiario'
+  ];
+  ScriptApp.getProjectTriggers().forEach(function(t) {
+    if (names.indexOf(t.getHandlerFunction()) >= 0) {
+      ScriptApp.deleteTrigger(t);
+    }
+  });
+  ScriptApp.newTrigger('cekAtenderSolicitudes')
+    .timeBased().everyMinutes(5).create();
   ScriptApp.newTrigger('cekSincronizacionDiaria')
-    .timeBased()
-    .atHour(6)
-    .nearMinute(0)
-    .everyDays(1)
-    .inTimezone(CEK_TZ)
-    .create();
-  console.log('Activador diario configurado alrededor de las 06:00 de Colombia.');
+    .timeBased().atHour(6).nearMinute(0).everyDays(1)
+    .inTimezone(CEK_TZ).create();
+  console.log('Activado: solicitudes cada 5 min y actualización diaria cerca de las 06:00 Colombia.');
 }
 
-/**
- * PREFLIGHT de solo lectura: antes de aplicar cualquier estado en Supabase.
- * Informa volumen por especialidad, duplicados y cantidad de operaciones;
- * no envía ninguna orden a la aplicación.
- */
-function cekVerificarFuente() {
-  const today = new Date();
-  const year = Number(Utilities.formatDate(today, CEK_TZ, 'yyyy'));
-  const month = Number(Utilities.formatDate(today, CEK_TZ, 'M'));
-  const values = cekSnapshot_(year, month);
-  const seen = {};
-  const stats = {periodo: year + '-' + String(month).padStart(2, '0'),
-                 filas: values.length - 1, unicas: 0, repetidas: 0,
-                 porEspecialidad: {}, operaciones: 0};
-  for (let i = 1; i < values.length; i++) {
-    const r = values[i];
-    const ot = cekNormalizar_(r[2]);
-    const spec = cekNormalizar_(r[3]);
-    stats.porEspecialidad[spec] = (stats.porEspecialidad[spec] || 0) + 1;
-    if (seen[ot]) stats.repetidas++;
-    else { seen[ot] = true; stats.unicas++; }
-    const plan = cekNormalizar_(r[12]).replace(/^\d+\s*[-–—:._/|]+\s*/, '');
-    if (/^OPERACION(?:\b|\s|[-–—:._/|])/.test(plan)) stats.operaciones++;
-  }
-  console.log(JSON.stringify(stats));
-  return stats;
+/** Compatibilidad con versiones anteriores. */
+function cekInstalarTriggerDiario() {
+  cekActivarSincronizacion();
 }
 
-/** Ejecutar después del preflight, desde Apps Script, para probar el envío. */
+/** Prueba segura: NO actualizar OT, solo confirmar conexión. */
 function cekProbarAhora() {
-  cekSincronizacionDiaria();
+  return cekVerificarServidor();
+}
+
+/** Funciones Web App antiguas inhabilitadas: no se usa POST desde Vercel. */
+function doGet() {
+  return ContentService.createTextOutput(JSON.stringify({ok: false, error: 'Servicio deshabilitado; utiliza el agente de salida'}))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+function doPost() {
+  return doGet();
 }
