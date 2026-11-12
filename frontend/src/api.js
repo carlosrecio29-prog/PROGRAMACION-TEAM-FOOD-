@@ -260,6 +260,11 @@ export async function bootstrapV2Backlog(file, year, month, movedBy = "") {
   }));
 }
 
+export async function getSheetFinalizedOutsideProgramming(year, month, specialty) {
+  const qs = new URLSearchParams({year, month, specialty});
+  return check(await fetch(`/api/v2/sheet-sync/outside-programming?${qs}`, {cache: "no-store"}));
+}
+
 export async function getSheetSyncStatus(year, month) {
   return check(await fetch(`/api/v2/sheet-sync/status?${new URLSearchParams({year,month})}`, {cache:"no-store"}));
 }
