@@ -369,3 +369,43 @@ def test_manual_sync_forbids_prior_month_even_if_agent_ready(monkeypatch):
     monkeypatch.setattr(service, "_period_today", lambda: date(2026, 11, 1))
     with pytest.raises(SheetSyncError, match="mes actual"):
         service.queue_manual_sheet_sync(2026, 10)
+
+
+def test_recently_ended_unclosed_week_is_eligible_for_sheet_tracking():
+    """The 5–11 Nov week must remain eligible on 12 Nov until formally closed."""
+    from backend.services.v2_sheet_sync_service import _week_snapshots
+
+    seen = []
+
+    class Results:
+        def __init__(self, rows):
+            self.rows = rows
+
+        def scalars(self):
+            return self
+
+        def all(self):
+            return self.rows
+
+        def mappings(self):
+            return self
+
+    class FakeConn:
+        def execute(self, sql, params):
+            query = str(sql)
+            seen.append((query, params))
+            if "SELECT id FROM programacion.programacion_semanal_v2" in query:
+                assert "semana_fin >= (:today - INTERVAL '7 days')" in query
+                assert "estado <> 'CERRADA'" in query
+                assert params["today"] == date(2026, 11, 12)
+                return Results([49])
+            if "FROM programacion.programacion_item_v2 pi" in query:
+                assert params["week"] == 49
+                return Results([])
+            raise AssertionError("Unexpected query against the live database")
+
+    # Empty programming items mean no snapshot write during this test.
+    written = _week_snapshots(FakeConn(), date(2026, 11, 1),
+                              date(2026, 11, 12), {}, "MANUAL")
+    assert written == 0
+    assert len(seen) == 2
