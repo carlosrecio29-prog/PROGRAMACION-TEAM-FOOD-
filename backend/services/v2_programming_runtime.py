@@ -99,6 +99,45 @@ def _reconcile_weekly_pending(conn, date_from: date, specialty: str) -> dict[str
             AND ps.estado='CERRADA'
             AND ps.semana_fin < :week_start
             AND ps.semana_fin >= date_trunc('month',CAST(:week_start AS date))::date
+
+          UNION
+
+          -- Sheets FINALIZADA but not scheduled in any November week:
+          -- register as resolved OUTSIDE programming, not as a completed
+          -- job in a previously closed week. This is based on the latest
+          -- month-state snapshot; do not invent a completion date.
+          SELECT DISTINCT
+            o.id AS order_id,
+            upper(btrim(o.numero_ot)) AS numero_ot
+          FROM programacion.google_sheet_ot_estado_v2 gs
+          JOIN programacion.orden_mantenimiento o
+            ON upper(btrim(o.numero_ot))=gs.numero_ot
+           AND o.especialidad=:specialty
+          JOIN programacion.activo a ON a.id=o.activo_id
+          WHERE gs.periodo=date_trunc('month',CAST(:week_start AS date))::date
+            AND gs.especialidad=:specialty
+            AND gs.estado='FINALIZADA'
+            AND gs.es_operacion=false
+            AND upper(btrim(gs.activo_codigo))=upper(btrim(a.codigo))
+            AND upper(btrim(gs.plan_trabajo))=upper(btrim(o.plan_clave_software))
+            AND EXISTS (
+              SELECT 1 FROM programacion.programacion_semanal_v2 prior_week
+              WHERE prior_week.especialidad=:specialty
+                AND prior_week.estado='CERRADA'
+                AND prior_week.semana_fin<:week_start
+                AND prior_week.semana_fin>=date_trunc('month',CAST(:week_start AS date))::date
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM programacion.programacion_item_v2 scheduled_item
+              JOIN programacion.programacion_semanal_v2 scheduled_week
+                ON scheduled_week.id=scheduled_item.programacion_id
+              JOIN programacion.orden_mantenimiento scheduled_order
+                ON scheduled_order.id=scheduled_item.orden_mantenimiento_id
+              WHERE scheduled_week.especialidad=:specialty
+                AND scheduled_week.semana_inicio>=date_trunc('month',CAST(:week_start AS date))::date
+                AND scheduled_week.semana_inicio<(date_trunc('month',CAST(:week_start AS date))::date + INTERVAL '1 month')
+                AND upper(btrim(scheduled_order.numero_ot))=gs.numero_ot
+            )
         ),
         flags AS (
           SELECT
@@ -252,6 +291,35 @@ def get_week_programming(*, date_from: date, date_to: date, specialty: str) -> d
                 AND ps.semana_fin < :date_from
                 AND ps.semana_fin >= date_trunc('month',CAST(:date_from AS date))::date
                 AND COALESCE(snp.orden_mantenimiento_id,o.id) IS NOT NULL
+
+              UNION
+
+              -- Do not offer FINALIZADA OT from BASE DE DATOS again in week 2+.
+              -- Existing current-week selections remain visible for review.
+              SELECT DISTINCT o.id
+              FROM programacion.google_sheet_ot_estado_v2 gs
+              JOIN programacion.orden_mantenimiento o
+                ON upper(btrim(o.numero_ot))=gs.numero_ot
+               AND o.especialidad=:specialty
+              JOIN programacion.activo a ON a.id=o.activo_id
+              WHERE gs.periodo=date_trunc('month',CAST(:date_from AS date))::date
+                AND gs.especialidad=:specialty
+                AND gs.estado='FINALIZADA'
+                AND gs.es_operacion=false
+                AND upper(btrim(gs.activo_codigo))=upper(btrim(a.codigo))
+                AND upper(btrim(gs.plan_trabajo))=upper(btrim(o.plan_clave_software))
+                AND EXISTS (
+                  SELECT 1 FROM programacion.programacion_semanal_v2 prior_week
+                  WHERE prior_week.especialidad=:specialty
+                    AND prior_week.estado='CERRADA'
+                    AND prior_week.semana_fin<:date_from
+                    AND prior_week.semana_fin>=date_trunc('month',CAST(:date_from AS date))::date
+                )
+                AND NOT EXISTS (
+                  SELECT 1 FROM programacion.programacion_item_v2 current_selection
+                  WHERE current_selection.orden_mantenimiento_id=o.id
+                    AND current_selection.programacion_id=CAST(:programming_id AS bigint)
+                )
             ),
             moved_to_backlog_before_week AS (
               SELECT DISTINCT pi.orden_mantenimiento_id
@@ -506,6 +574,48 @@ def save_week_programming(*, date_from: date, date_to: date, specialty: str, ord
                 f"Las OT {examples} están clasificadas como OPERACIÓN en "
                 "BASE DE DATOS o en exclusiones. Retíralas de la selección; "
                 "no se alterarán cierres históricos ni H-H ya aprobadas."
+            )
+
+        # A completed OT in BASE DE DATOS must not be reprogrammed
+        # after the first confirmed weekly close, even if nobody uploaded
+        # a Lista de Calendario with "no programadas". Preserve current
+        # selections until the user explicitly edits that week.
+        finalized_source = conn.execute(text("""
+            SELECT DISTINCT o.numero_ot
+            FROM programacion.orden_mantenimiento o
+            JOIN programacion.activo a ON a.id=o.activo_id
+            JOIN programacion.google_sheet_ot_estado_v2 gs
+              ON gs.numero_ot=upper(btrim(o.numero_ot))
+            WHERE o.id=ANY(CAST(:ids AS bigint[]))
+              AND o.especialidad=:specialty
+              AND gs.periodo=date_trunc('month',CAST(:date_from AS date))::date
+              AND gs.especialidad=:specialty
+              AND gs.estado='FINALIZADA'
+              AND gs.es_operacion=false
+              AND upper(btrim(gs.activo_codigo))=upper(btrim(a.codigo))
+              AND upper(btrim(gs.plan_trabajo))=upper(btrim(o.plan_clave_software))
+              AND EXISTS (
+                SELECT 1 FROM programacion.programacion_semanal_v2 prior_week
+                WHERE prior_week.especialidad=:specialty
+                  AND prior_week.estado='CERRADA'
+                  AND prior_week.semana_fin<:date_from
+                  AND prior_week.semana_fin>=date_trunc('month',CAST(:date_from AS date))::date
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM programacion.programacion_item_v2 own
+                WHERE own.programacion_id=CAST(:current_id AS bigint)
+                  AND own.orden_mantenimiento_id=o.id
+              )
+            ORDER BY o.numero_ot LIMIT 10
+        """), {
+            "ids":unique_ids,"specialty":specialty,
+            "date_from":date_from,"current_id":current_id,
+        }).scalars().all()
+        if finalized_source:
+            raise V2ProgrammingError(
+                f"La OT {finalized_source[0] or 'SIN ASIGNAR'} ya figura FINALIZADA "
+                "en BASE DE DATOS. Se descuenta del pendiente de semanas siguientes "
+                "y no debe programarse otra vez."
             )
 
         previous_ids: list[int] = []
