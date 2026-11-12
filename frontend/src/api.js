@@ -435,6 +435,21 @@ export async function downloadV2ProgressPdf(year, month, programmingId = null) {
 export async function getV2WeekClosure(programmingId) {
   return check(await fetch(`/api/v2/programming/${programmingId}/closure`));
 }
+export async function previewV2WeekClosureFromApi(programmingId) {
+  return check(await fetch(`/api/v2/programming/${programmingId}/preview-close-api`, {cache:"no-store"}));
+}
+export async function closeV2WeekFromApi(programmingId, expectedSyncId, acceptMissing, manualResolutions=[]) {
+  return check(await fetch(`/api/v2/programming/${programmingId}/close-api`, {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({
+      expected_sync_id: expectedSyncId,
+      accept_missing: Boolean(acceptMissing),
+      manual_resolutions: manualResolutions,
+    }),
+  }));
+}
+
 export async function previewV2WeekClosure(programmingId, file) {
   const form = new FormData();
   form.append("file", file);
