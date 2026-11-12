@@ -4,7 +4,9 @@ import {
   getV2WeekProgramming,
   getV2WeekClosure,
   previewV2WeekClosure,
+  previewV2WeekClosureFromApi,
   uploadV2WeekClosure,
+  closeV2WeekFromApi,
   downloadV2ProgressPdf,
   getV2ProgressPdfUrl,
 } from "../api";
@@ -69,6 +71,7 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
   const [closure, setClosure] = useState(null);
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
+  const [previewMode, setPreviewMode] = useState("excel");
   const [acceptMissing, setAcceptMissing] = useState(false);
   const [manualResolutions, setManualResolutions] = useState({});
   const problemRows = (preview?.rows || []).filter(row => row.finalizado === null && !row.anulado);
@@ -125,6 +128,7 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
   }, [month]);
   useEffect(() => {
     setPreview(null);
+    setPreviewMode("excel");
     setAcceptMissing(false);
     setManualResolutions({});
     setFile(null);
@@ -145,8 +149,34 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
       setManualResolutions({});
       const result = await previewV2WeekClosure(id, file);
       setPreview(result);
+      setPreviewMode("excel");
     } catch (e) {
       setError(e.message || "No se pudo comparar el calendario.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function previewFromApi() {
+    const id=programming?.programming?.id;
+    if (!id) {
+      setError("Primero guarda la programación de la especialidad y la semana.");
+      return;
+    }
+    try {
+      setUploading(true);
+      setError("");
+      setMessage("");
+      setPreview(null);
+      setAcceptMissing(false);
+      setManualResolutions({});
+      const result=await previewV2WeekClosureFromApi(id);
+      setPreview(result);
+      setPreviewMode("api");
+      setFile(null);
+      setMessage("Vista previa lista con los estados de BASE DE DATOS sincronizados; todavía no se cerró la semana.");
+    } catch (e) {
+      setError(e.message || "No se pudo consultar el cierre desde API.");
     } finally {
       setUploading(false);
     }
@@ -175,12 +205,12 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
       );
       return;
     }
-    if (!file) {
-      setError("Selecciona el archivo Excel del calendario/PMP actualizado.");
+    if (previewMode !== "api" && !file) {
+      setError("Selecciona el Excel o primero compara los estados desde la API.");
       return;
     }
     if (!preview || Number(preview.programming?.id) !== Number(id)) {
-      setError("Primero compara el Excel con las OT guardadas; el cierre no se ha procesado.");
+      setError("Primero compara la fuente elegida con las OT guardadas; no se ha procesado el cierre.");
       return;
     }
     if (unresolvedNoOtRows.length > 0) {
@@ -198,7 +228,7 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
       return;
     }
     if (conflictingRows.length > 0) {
-      setError(`El Excel tiene ${conflictingRows.length} OT con conflicto. Revisa el detalle resaltado; no se envían a backlog como si estuvieran ausentes.`);
+      setError(`La fuente tiene ${conflictingRows.length} OT con conflicto. Revisa el detalle resaltado; no se envían a backlog como si estuvieran ausentes.`);
       return;
     }
     if (closure?.programming?.estado === "CERRADA") {
@@ -218,7 +248,11 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
           comentario: String(value.comentario || "").trim() || null,
         };
       });
-      const result = await uploadV2WeekClosure(id, file, "", resolutions);
+      const result = previewMode === "api"
+        ? await closeV2WeekFromApi(
+            id, Number(preview.api_source?.sync_id), String(preview.api_source?.fingerprint || ""), acceptMissing, resolutions
+          )
+        : await uploadV2WeekClosure(id, file, "", resolutions);
       setClosure(result);
       await load();
       const s = result.summary || {};
@@ -227,6 +261,7 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
       );
       setFile(null);
       setPreview(null);
+      setPreviewMode("excel");
       setAcceptMissing(false);
       setManualResolutions({});
     } catch (e) {
@@ -383,12 +418,12 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
             <div className="v2-section-head">
               <div>
                 <span className="v2-kicker">ACTUALIZAR ESTADO</span>
-                <h3>Cargar calendario/PMP para cerrar la semana</h3>
+                <h3>Cerrar la semana desde Google Sheets o Excel</h3>
                 <p>
-                  El archivo debe contener las columnas de la exportación del
-                  software, incluyendo Orden, Activo, PlanTrabajo y Estado. Las
-                  OT que no estén FINALIZADAS quedarán disponibles como BACKLOG
-                  para la siguiente semana.
+                  Puedes comparar directamente los estados de BASE DE DATOS ya
+                  sincronizados, sin cargar archivos. Las OT pendientes o sin
+                  validación se conservarán en backlog según el resultado confirmado.
+                  El cierre histórico de otras semanas nunca se modificará.
                 </p>
               </div>
               {closure?.programming?.estado === "CERRADA" ? (
@@ -404,18 +439,24 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
                 onChange={(e) => {
                   setFile(e.target.files?.[0] || null);
                   setPreview(null);
+                  setPreviewMode("excel");
                   setAcceptMissing(false);
                   setManualResolutions({});
                   setError("");
                 }}
               />
               <button type="button" className="v2-primary"
-                disabled={!file || uploading || closure?.programming?.estado === "CERRADA"}
-                onClick={previewWeek}>
-                {uploading ? "Comparando..." : "1. Comparar Excel (sin cerrar)"}
+                disabled={uploading || closure?.programming?.estado === "CERRADA"}
+                onClick={previewFromApi}>
+                {uploading ? "Consultando..." : "1. Comparar desde API (sin Excel)"}
               </button>
               <button type="button"
-                disabled={!file || !preview || uploading || closureBlocked ||
+                disabled={!file || uploading || closure?.programming?.estado === "CERRADA"}
+                onClick={previewWeek}>
+                {uploading ? "Comparando..." : "Comparar Excel"}
+              </button>
+              <button type="button"
+                disabled={!preview || (previewMode !== "api" && !file) || uploading || closureBlocked ||
                   closure?.programming?.estado === "CERRADA"}
                 onClick={closeWeek}>
                 {uploading ? "Procesando..." : "2. Confirmar cierre semanal"}
@@ -425,6 +466,18 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
               <div className="v2-panel" style={{ marginTop: 12 }}>
                 <span className="v2-kicker">VISTA PREVIA · NO MODIFICA LA BASE</span>
                 <h3>Conciliación de la programación #{preview.programming?.id}</h3>
+                {previewMode === "api" && (
+                  <div className="v2-success" role="status">
+                    Fuente: API Google Sheets · Última sincronización #{preview.api_source?.sync_id}
+                    {" · "}{when(preview.api_source?.sync_at)}
+                    {" · "}{number(preview.api_source?.from_month)} estados del mes
+                    {" · "}{number(preview.api_source?.historic_finalized)} finalizaciones históricas verificadas
+                    {" · "}{number(preview.api_source?.not_in_source)} sin validación en la fuente.
+                    No se han cambiado órdenes ni se ha cerrado la semana.
+                    Si acabas de modificar la programación, sincroniza Google Sheets antes de comparar;
+                    las OT sin evidencia histórica verificada se mostrarán como no encontradas.
+                  </div>
+                )}
                 <p><b>{preview.summary?.programmed}</b> OT programadas · <b>{preview.summary?.finalized}</b> finalizadas ·
                   <b> {preview.summary?.pending}</b> abiertas/pendientes ·
                   <b> {preview.summary?.annulled || 0}</b> anuladas ·
@@ -432,7 +485,7 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
                   <b> {preview.summary?.missing}</b> realmente no encontradas ·
                   <b> {preview.summary?.conflicts}</b> con conflicto de OT, equipo o plan ·
                   <b> {preview.summary?.blank_states}</b> sin estado.
-                  Archivo: {preview.summary?.calendar_rows} filas.</p>
+                  {previewMode === "api" ? "Fuente: API Google Sheets" : `Archivo: ${preview.summary?.calendar_rows} filas.`}</p>
                 <p>H-H: {fmt(preview.summary?.hh_programmed,2)} programadas · {fmt(preview.summary?.hh_finalized,2)} finalizadas ·
                   {fmt(preview.summary?.hh_pending,2)} pendientes. Cumplimiento estimado: {fmt(preview.summary?.compliance_pct,1)}%.</p>
                 {(preview.summary?.manual_resolved || 0) > 0 && (
@@ -484,12 +537,12 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
                     OT a revisar: {problemRows.map(row => row.numero_ot || "SIN OT").join(" · ")}
                   </div>}
                   <div className="v2-table-wrap"><table>
-                    <thead><tr><th>OT programada</th><th>Equipo</th><th>Plan</th><th>H-H</th><th>Estado en Excel</th><th>Estado aplicado</th><th>Coincidencia</th><th>Definir actividad</th><th>Comentario</th><th>Resultado</th></tr></thead>
+                    <thead><tr><th>OT programada</th><th>Equipo</th><th>Plan</th><th>H-H</th><th>Estado en {previewMode === "api" ? "API" : "Excel"}</th><th>Estado aplicado</th><th>Coincidencia</th><th>Definir actividad</th><th>Comentario</th><th>Resultado</th></tr></thead>
                     <tbody>{(preview.rows||[]).map((row,i)=>(
                       <tr key={i} style={row.finalizado === null && !row.anulado ? { background: "rgba(234, 179, 8, 0.12)" } : undefined}>
                         <td><b>{row.numero_ot || "SIN OT"}</b></td><td>{row.activo}</td><td>{row.plan}</td>
                         <td>{fmt(row.hh,2)}</td>
-                        <td>{row.estado_excel || (row.estado_manual ? "No figura en el Excel" : "NO ENCONTRADA")}</td>
+                        <td>{row.estado_excel || (row.estado_manual ? "No figura en la fuente" : "NO ENCONTRADA")}</td>
                         <td>
                           <b>{row.estado_efectivo || "SIN IDENTIFICAR"}</b>
                           {row.origen_estado === "MANUAL" && <small>Asignada en Seguimiento · Manual</small>}
