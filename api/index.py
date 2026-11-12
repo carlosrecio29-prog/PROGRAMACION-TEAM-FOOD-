@@ -55,6 +55,7 @@ from backend.services.v2_manual_tracking_service import get_week_tracking, recor
 from backend.services.v2_operation_exclusion_service import get_operation_exclusions
 from backend.services.v2_sheet_sync_service import (
     SheetSyncError, sync_month, sync_status, probe_sheet_source,
+    finalized_outside_monthly_programming,
     queue_manual_sheet_sync, pending_sheet_sync_requests, record_agent_heartbeat,
     ensure_pending_sheet_request, complete_sheet_request, error_sheet_request,
 )
@@ -137,6 +138,26 @@ def sheet_sync_status(request:Request,year:int=Query(...,ge=2020,le=2100),month:
         return sync_status(year,month)
     except SQLAlchemyError as exc:
         raise HTTPException(503,"No se pudo consultar el historial de sincronizaciones.") from exc
+
+
+@app.get("/api/v2/sheet-sync/outside-programming")
+def sheet_finalized_outside_programming(
+    request: Request,
+    year: int = Query(..., ge=2026, le=2100),
+    month: int = Query(..., ge=1, le=12),
+    specialty: str = Query(..., min_length=3, max_length=3),
+):
+    # Read-only monthly source observations; never assign them to a weekly closure.
+    if not request_is_admin(request):
+        raise HTTPException(403,"Solo el administrador puede consultar OT fuera de programación.")
+    try:
+        return finalized_outside_monthly_programming(
+            year=year, month=month, specialty=specialty,
+        )
+    except SheetSyncError as exc:
+        raise HTTPException(422,str(exc)) from exc
+    except SQLAlchemyError as exc:
+        raise HTTPException(503,"No fue posible consultar las OT fuera de programación.") from exc
 
 
 @app.get("/api/v2/sheet-sync/check")
