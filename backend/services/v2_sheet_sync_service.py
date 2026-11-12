@@ -413,7 +413,8 @@ def complete_sheet_request(request_id: int, period: date, result: dict[str, Any]
                "run":result.get("sincronizacion_id"),
                "summary":json.dumps({k:result.get(k) for k in (
                    "ots_validas","estados_cambiados","nuevas",
-                   "backlog_conciliado","conflictos","filas_periodo"
+                   "backlog_conciliado","conflictos","filas_periodo",
+                   "seguimientos_actualizados","historicos_verificados"
                )})})
 
 
@@ -903,6 +904,7 @@ def sync_month(*, year: int, month: int, trigger: str,
                        "backlog_conciliado": counts["backlog_conciliado"],
                        "operaciones": counts["operaciones"],
                        "seguimientos_actualizados": counts["seguimientos"],
+                       "historicos_verificados": counts["historicos_recibidos"],
                        "conflictos": counts["conflictos"], "advertencias": warnings[:80],
                        "omitidas_por_datos": len(warnings)}
             conn.execute(text("""
