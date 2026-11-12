@@ -725,8 +725,9 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
                 <span className="v2-kicker">HISTORIAL DE CARGAS</span>
                 <h3>Evolución de la semana</h3>
                 <p>
-                  Cada fila corresponde a una carga. El avance se calcula solo sobre la programación semanal;
-                  las OT no programadas se muestran aparte para no mezclar los indicadores.
+                  Cada fila representa una fotografía de avance semanal. Si una sincronización de Google Sheets
+                  no cambia ningún estado, se conserva la fotografía anterior para no duplicar H-H ni porcentajes.
+                  Todas las sincronizaciones, incluso sin novedades, se registran en la bitácora inferior.
                 </p>
               </div>
               <button type="button" className="weekly-tracking-close-link" onClick={onOpenClosure}>
@@ -789,6 +790,79 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
               </table>
             </div>
           </section>
+
+          {accessRole === "admin" && (
+            <section className="v2-panel" aria-label="Historial de sincronizaciones de Google Sheets">
+              <div className="v2-section-head">
+                <div>
+                  <span className="v2-kicker">BITÁCORA DE SINCRONIZACIÓN · MES</span>
+                  <h3>Actualizaciones de Google Sheets</h3>
+                  <p>
+                    Se muestran las últimas sincronizaciones del mes seleccionado, incluidas las que
+                    encontraron 0 cambios. Los conteos son del mes completo y no representan
+                    avances adicionales de esta semana.
+                  </p>
+                </div>
+              </div>
+              <div className="v2-table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Fecha de actualización</th>
+                      <th>Origen</th>
+                      <th>Resultado</th>
+                      <th>OT únicas revisadas</th>
+                      <th>Estados modificados</th>
+                      <th>Movimientos backlog</th>
+                      <th>Fotografías semanales</th>
+                      <th>Observación</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(sheetSync?.historial || []).map((run) => {
+                      const completed = run.estado === "COMPLETADA";
+                      const changed = number(run.estados_cambiados);
+                      const backlog = number(run.backlog_conciliado);
+                      const newOrders = number(run.ots_nuevas);
+                      const weekly = number(run.seguimientos_actualizados);
+                      const noChanges = completed && changed === 0 && backlog === 0 && newOrders === 0 && weekly === 0;
+                      return (
+                        <tr key={run.id}>
+                          <td><b>{when(run.terminado_en || run.iniciado_en)}</b></td>
+                          <td><b>{run.origen === "CRON" ? "Automática" : "Manual"}</b></td>
+                          <td>
+                            <Badge tone={completed ? "ok" : run.estado === "ERROR" ? "stop" : "warn"}>
+                              {completed ? "Completada" : run.estado === "ERROR" ? "Error" : "Omitida"}
+                            </Badge>
+                          </td>
+                          <td><b>{completed ? number(run.ots_validas) + " OT" : "—"}</b></td>
+                          <td><b>{completed ? changed + " OT" : "—"}</b></td>
+                          <td><b>{completed ? backlog : "—"}</b></td>
+                          <td><b>{completed ? weekly : "—"}</b></td>
+                          <td>
+                            {noChanges ? (
+                              <span>Sin novedades: la fuente se revisó correctamente.</span>
+                            ) : completed ? (
+                              <span>Datos conciliados con BASE DE DATOS.</span>
+                            ) : (
+                              <span>{run.error_resumido || "No se aplicaron cambios."}</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {!sheetSync?.historial?.length && (
+                      <tr>
+                        <td colSpan="8" className="v2-empty">
+                          Aún no hay sincronizaciones registradas para este mes.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
         </>
       )}
     </div>
