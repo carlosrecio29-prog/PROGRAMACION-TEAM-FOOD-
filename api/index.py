@@ -595,6 +595,7 @@ def v2_preview_close_week_api(request: Request, programming_id: int):
 
 class V2CloseFromApiRequest(BaseModel):
     expected_sync_id: int = Field(ge=1)
+    expected_fingerprint: str = Field(min_length=64,max_length=64)
     accept_missing: bool = False
     manual_resolutions: list[dict[str,Any]] = Field(default_factory=list)
     closed_by: str | None = Field(None,max_length=200)
@@ -608,6 +609,7 @@ def v2_close_week_api(request: Request, programming_id: int, body: V2CloseFromAp
         return close_week_from_api(
             programming_id=programming_id,
             expected_sync_id=body.expected_sync_id,
+            expected_fingerprint=body.expected_fingerprint,
             accept_missing=body.accept_missing,
             manual_resolutions=body.manual_resolutions,
             closed_by=body.closed_by,
