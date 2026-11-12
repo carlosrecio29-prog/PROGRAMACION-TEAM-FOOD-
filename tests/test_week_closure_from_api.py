@@ -81,6 +81,7 @@ def test_api_closure_calendar_only_uses_source_and_validated_historical_snapshot
     assert rows[2][-1] == "PENDIENTE"
     assert len(rows)==3
     assert meta["sync_id"]==20
+    assert len(meta["fingerprint"])==64
     assert meta["historic_finalized"]==1
     assert meta["from_month"]==1
     assert meta["not_in_source"]==1
@@ -101,16 +102,16 @@ def test_api_closure_rejects_previously_closed_week(monkeypatch):
 
 def test_api_close_requires_matching_sync_id(monkeypatch):
     monkeypatch.setattr(service,"_api_closure_calendar",
-                        lambda _: (b"fake",{"sync_id":21}))
+                        lambda _: (b"fake",{"sync_id":21,"fingerprint":"a"*64}))
     with pytest.raises(service.V2ClosureError,match="fuente cambió"):
-        service.close_week_from_api(programming_id=50,expected_sync_id=20)
+        service.close_week_from_api(programming_id=50,expected_sync_id=20,expected_fingerprint="a"*64)
 
 
 def test_api_close_requires_explicit_approval_of_missing(monkeypatch):
     monkeypatch.setattr(service,"_api_closure_calendar",
-                        lambda _: (b"fake",{"sync_id":20}))
+                        lambda _: (b"fake",{"sync_id":20,"fingerprint":"a"*64}))
     monkeypatch.setattr(service,"preview_week_closure",
                         lambda **_: {"summary":{"conflicts":0,"blank_states":0,"missing":3},
                                     "rows":[]})
     with pytest.raises(service.V2ClosureError,match="Autoriza expresamente"):
-        service.close_week_from_api(programming_id=50,expected_sync_id=20)
+        service.close_week_from_api(programming_id=50,expected_sync_id=20,expected_fingerprint="a"*64)
