@@ -442,7 +442,65 @@ def _write_change(conn, run_id: int, period: date, item: dict[str, Any], action:
            "action": action, "before": before, "after": after, "detail": detail})
 
 
-def _week_snapshots(conn, period: date, today: date, states: dict[str, dict[str, Any]], trigger: str) -> int:
+def _validate_historical_source(rows: list[dict[str, Any]], period: date) -> dict[str, dict[str, Any]]:
+    """Validate historical evidence for provisional *current* month tracking only.
+
+    This never writes into order status, backlog or old monthly/weekly closures.
+    A later observation from the same OT takes precedence over an older one.
+    """
+    if len(rows) > 2000:
+        raise SheetSyncError("Se recibieron demasiadas OT históricas.")
+    selected: dict[str, dict[str, Any]] = {}
+    conflicting: set[str] = set()
+    for row in rows:
+        ot = _norm(row.get("numero_ot"))
+        spec = _norm(row.get("especialidad"))
+        asset = _norm(row.get("activo_codigo"))
+        plan = str(row.get("plan_trabajo") or "").strip()
+        state = _status(row.get("estado"))
+        try:
+            origin = date(int(row.get("anio_fuente")), int(row.get("mes_fuente")), 1)
+        except (TypeError, ValueError, OverflowError):
+            continue
+        if not re.fullmatch(r"OT-[0-9]+-[0-9]{2,4}", ot):
+            continue
+        if origin >= period or spec not in SPECIALTIES or not asset or not plan:
+            continue
+        if state != "FINALIZADA" or _operation(plan):
+            continue
+        candidate = {"numero_ot":ot,"especialidad":spec,"activo_codigo":asset,
+                     "plan_trabajo":_norm(plan),"estado":"FINALIZADA",
+                     "mes_fuente":origin}
+        previous = selected.get(ot)
+        if not previous or previous["mes_fuente"] < origin:
+            selected[ot] = candidate
+        elif previous["mes_fuente"] == origin and any(
+            previous[key] != candidate[key]
+            for key in ("especialidad","activo_codigo","plan_trabajo","estado")
+        ):
+            conflicting.add(ot)
+    for ot in conflicting:
+        selected.pop(ot,None)
+    return selected
+
+
+def _compatible_historical_source(item: dict[str, Any], historic: dict[str, Any],
+                                  period: date) -> bool:
+    """Only an exact same asset, specialty and plan from older PMP can count."""
+    if not historic or item.get("order_period") is None or item["order_period"] >= period:
+        return False
+    if item.get("plan_operation"):
+        return False
+    return (
+        _norm(item.get("specialty")) == historic["especialidad"]
+        and _norm(item.get("activo_codigo")) == historic["activo_codigo"]
+        and _norm(item.get("plan_clave_software")) == historic["plan_trabajo"]
+        and historic["estado"] == "FINALIZADA"
+    )
+
+
+def _week_snapshots(conn, period: date, today: date, states: dict[str, dict[str, Any]],
+                    trigger: str, historical: dict[str, dict[str, Any]] | None = None) -> int:
     weeks = conn.execute(text("""
       SELECT id FROM programacion.programacion_semanal_v2
       WHERE semana_inicio >= :period
@@ -458,11 +516,15 @@ def _week_snapshots(conn, period: date, today: date, states: dict[str, dict[str,
     for week_id in weeks:
         items = conn.execute(text("""
           SELECT pi.id AS item_id,pi.orden_mantenimiento_id,pi.hh_programadas,
-                 o.numero_ot,a.area_codigo,ra.descripcion AS area_nombre,
+                 o.numero_ot,o.periodo AS order_period,o.especialidad AS specialty,
+                 o.plan_clave_software,a.codigo AS activo_codigo,
+                 COALESCE(p.es_operacion,false) AS plan_operation,
+                 a.area_codigo,ra.descripcion AS area_nombre,
                  sm.estado AS manual_status
           FROM programacion.programacion_item_v2 pi
           JOIN programacion.orden_mantenimiento o ON o.id=pi.orden_mantenimiento_id
           JOIN programacion.activo a ON a.id=o.activo_id
+          LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
           LEFT JOIN programacion.activo ra ON ra.codigo='BA-' || a.area_codigo
           LEFT JOIN programacion.seguimiento_estado_manual_v2 sm ON sm.programacion_item_id=pi.id
           WHERE pi.programacion_id=:week ORDER BY pi.id
@@ -483,7 +545,16 @@ def _week_snapshots(conn, period: date, today: date, states: dict[str, dict[str,
         for it in items:
             ot = _norm(it["numero_ot"])
             source = states.get(ot)
+            from_history = False
             status = source["estado"] if source and not source["operation"] else None
+            # A current-month observation takes precedence. A historic FINALIZADA
+            # is eligible only for an OT from an earlier period scheduled in
+            # this still-open week, with matching specialty, equipment and plan.
+            if source is None:
+                historic = (historical or {}).get(ot)
+                if historic and _compatible_historical_source(it, historic, period):
+                    status = "FINALIZADA"
+                    from_history = True
             manual = it["manual_status"]
             if manual in ("FINALIZADA", "PENDIENTE", "ANULADA"):
                 effective = manual
@@ -497,7 +568,9 @@ def _week_snapshots(conn, period: date, today: date, states: dict[str, dict[str,
                 "ot": it["numero_ot"], "area": it["area_codigo"], "area_name": it["area_nombre"],
                 "hh": float(it["hh_programadas"] or 0),
                 "status": status, "final": final,
-                "match": "GOOGLE_SHEETS_BASE_DE_DATOS" if source else "SIN_COINCIDENCIA",
+                "match": ("GOOGLE_SHEETS_BASE_DE_DATOS" if source
+                          else "GOOGLE_SHEETS_HISTORICO" if from_history
+                          else "SIN_COINCIDENCIA"),
                 "annulled": effective == "ANULADA",
             })
         # Evitar fotografías idénticas; conservar la precedencia de estados manuales.
