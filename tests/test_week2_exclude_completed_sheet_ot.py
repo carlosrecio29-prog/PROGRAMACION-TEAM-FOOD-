@@ -8,16 +8,18 @@ from backend.services.v2_programming_service import V2ProgrammingError
 
 class Result:
     def __init__(self, one=None, rows=None):
-        self.one = one
+        self._row = one
         self.rows = rows or []
     def mappings(self):
         return self
     def scalars(self):
         return self
     def first(self):
-        return self.one
+        return self._row
     def all(self):
         return self.rows
+    def one(self):
+        return self._row
 
 
 def test_week2_reconciliation_counts_finalized_outside_sheets(monkeypatch):
