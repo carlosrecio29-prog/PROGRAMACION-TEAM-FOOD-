@@ -277,6 +277,7 @@ def close_week_from_api(*, programming_id: int, expected_sync_id: int,
         programming_id=programming_id,content=content,
         filename="GOOGLE_SHEETS_API",closed_by=closed_by,
         manual_resolutions=manual_resolutions,
+        preserve_historical_orders=True,
     )
     result["api_source"]=source
     return result
@@ -456,6 +457,7 @@ def close_week_from_calendar(
     filename: str,
     closed_by: str | None = None,
     manual_resolutions: list[dict[str, Any]] | None = None,
+    preserve_historical_orders: bool = False,
 ) -> dict[str, Any]:
     calendar_rows = _parse_calendar(content)
 
@@ -637,9 +639,12 @@ def close_week_from_calendar(
                     ultimo_comentario_cierre_en=CASE WHEN :comment IS NULL THEN ultimo_comentario_cierre_en ELSE now() END,
                     actualizado_en=now()
                 WHERE id=:order_id
+                  AND (NOT :protect_previous OR periodo>=:current_period)
             """), {
                 "state": state, "comment": manual_comment,
                 "order_id": item["orden_mantenimiento_id"],
+                "protect_previous": preserve_historical_orders,
+                "current_period": programming["semana_inicio"].replace(day=1),
             })
             if annulled:
                 annulled_ids.append(int(item["orden_mantenimiento_id"]))
