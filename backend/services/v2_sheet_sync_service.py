@@ -622,7 +622,8 @@ def _week_snapshots(conn, period: date, today: date, states: dict[str, dict[str,
 
 
 def sync_month(*, year: int, month: int, trigger: str,
-               values: list[list[Any]] | None = None) -> dict[str, Any]:
+               values: list[list[Any]] | None = None,
+               historical_states: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     if trigger not in ("CRON", "MANUAL") or not (2020 <= year <= 2100 and 1 <= month <= 12):
         raise SheetSyncError("Parámetros de sincronización inválidos.")
     period = date(year, month, 1)
@@ -637,6 +638,7 @@ def sync_month(*, year: int, month: int, trigger: str,
         if not isinstance(snapshot, list) or not snapshot or len(snapshot) > 15000:
             raise SheetSyncError("La fotografía recibida está vacía o excede el límite seguro.")
         states, warnings, scan = _parse_rows(snapshot, period)
+        historical = _validate_historical_source(historical_states or [], period)
         if len(states) > 10000:
             raise SheetSyncError("La cantidad de OT supera el límite seguro por mes.")
     except SheetSyncError as exc:
@@ -889,8 +891,9 @@ def sync_month(*, year: int, month: int, trigger: str,
                   ON CONFLICT(periodo,plan_clave_software,especialidad)
                   DO UPDATE SET cantidad=EXCLUDED.cantidad,actualizado_en=now()
                 """), {"period": period, "plan": plan, "spec": spec, "quantity": quantity})
-            weekly_count = _week_snapshots(conn,period,today,states,trigger)
+            weekly_count = _week_snapshots(conn,period,today,states,trigger,historical)
             counts["seguimientos"] = weekly_count
+            counts["historicos_recibidos"] = len(historical)
             counts["conflictos"] += scan.get("duplicados_conflictivos",0)
             summary = {"fuente": "BASE DE DATOS", "periodo": str(period),
                        "filas_periodo": scan.get("filas_periodo",0),
