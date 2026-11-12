@@ -202,10 +202,12 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
           await Promise.all([load(), loadMonthlyProgress(), onChanged?.()]);
           const changed = number(request.resumen?.estados_cambiados);
           const backlog = number(request.resumen?.backlog_conciliado);
+          const weeksUpdated = number(request.resumen?.seguimientos_actualizados);
+          const historic = number(request.resumen?.historicos_verificados);
           setMessage(
-            changed === 0 && backlog === 0
-              ? `Sincronización completada: ${number(request.resumen?.ots_validas)} OT revisadas. BASE DE DATOS no presenta estados nuevos respecto de la última actualización; no se modificaron OT ni backlog.`
-              : `Sincronización completada: ${number(request.resumen?.ots_validas)} OT revisadas, ${changed} estados actualizados, ${backlog} cambios de backlog, ${number(request.resumen?.conflictos)} conflictos. Los cierres históricos siguen intactos.`
+            changed === 0 && backlog === 0 && weeksUpdated === 0
+              ? `Sincronización completada: ${number(request.resumen?.ots_validas)} OT revisadas sin cambios adicionales. Los cierres históricos siguen intactos.`
+              : `Sincronización completada: ${number(request.resumen?.ots_validas)} OT del mes revisadas, ${historic} estados FINALIZADA consultados en meses anteriores, ${weeksUpdated} seguimientos semanales actualizados y ${changed} cambios al maestro del mes. Sin modificar cierres históricos.`
           );
         } else if (request?.estado === "ERROR") {
           setError(request.error_resumido || "La sincronización no pudo completarse.");
@@ -568,6 +570,9 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
                         <td><b>{fmt(row.hh_programadas)}</b></td>
                         <td>
                           <span>{row.estado_calendario || (latest ? "Sin coincidencia" : "Aún sin carga")}</span>
+                          {row.coincidencia === "GOOGLE_SHEETS_HISTORICO" && (
+                            <small>Validada en BASE DE DATOS de un mes anterior; sin modificar cierres históricos</small>
+                          )}
                           {row.discrepancia_manual_excel && <small className="tracking-discrepancy">Difiere del estado manual</small>}
                         </td>
                         <td>
@@ -970,7 +975,11 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
                             {noChanges ? (
                               <span>Sin novedades: la fuente se revisó correctamente.</span>
                             ) : completed ? (
-                              <span>Datos conciliados con BASE DE DATOS.</span>
+                              <span>
+                                Datos conciliados con BASE DE DATOS.
+                                {number(run.resumen?.historicos_verificados) > 0 &&
+                                  ` ${number(run.resumen?.historicos_verificados)} finalizaciones históricas verificadas para programación abierta.`}
+                              </span>
                             ) : (
                               <span>{run.error_resumido || "No se aplicaron cambios."}</span>
                             )}
