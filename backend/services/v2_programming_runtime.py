@@ -576,6 +576,48 @@ def save_week_programming(*, date_from: date, date_to: date, specialty: str, ord
                 "no se alterarán cierres históricos ni H-H ya aprobadas."
             )
 
+        # A completed OT in BASE DE DATOS must not be reprogrammed
+        # after the first confirmed weekly close, even if nobody uploaded
+        # a Lista de Calendario with "no programadas". Preserve current
+        # selections until the user explicitly edits that week.
+        finalized_source = conn.execute(text("""
+            SELECT DISTINCT o.numero_ot
+            FROM programacion.orden_mantenimiento o
+            JOIN programacion.activo a ON a.id=o.activo_id
+            JOIN programacion.google_sheet_ot_estado_v2 gs
+              ON gs.numero_ot=upper(btrim(o.numero_ot))
+            WHERE o.id=ANY(CAST(:ids AS bigint[]))
+              AND o.especialidad=:specialty
+              AND gs.periodo=date_trunc('month',CAST(:date_from AS date))::date
+              AND gs.especialidad=:specialty
+              AND gs.estado='FINALIZADA'
+              AND gs.es_operacion=false
+              AND upper(btrim(gs.activo_codigo))=upper(btrim(a.codigo))
+              AND upper(btrim(gs.plan_trabajo))=upper(btrim(o.plan_clave_software))
+              AND EXISTS (
+                SELECT 1 FROM programacion.programacion_semanal_v2 prior_week
+                WHERE prior_week.especialidad=:specialty
+                  AND prior_week.estado='CERRADA'
+                  AND prior_week.semana_fin<:date_from
+                  AND prior_week.semana_fin>=date_trunc('month',CAST(:date_from AS date))::date
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM programacion.programacion_item_v2 own
+                WHERE own.programacion_id=CAST(:current_id AS bigint)
+                  AND own.orden_mantenimiento_id=o.id
+              )
+            ORDER BY o.numero_ot LIMIT 10
+        """), {
+            "ids":unique_ids,"specialty":specialty,
+            "date_from":date_from,"current_id":current_id,
+        }).scalars().all()
+        if finalized_source:
+            raise V2ProgrammingError(
+                f"La OT {finalized_source[0] or 'SIN ASIGNAR'} ya figura FINALIZADA "
+                "en BASE DE DATOS. Se descuenta del pendiente de semanas siguientes "
+                "y no debe programarse otra vez."
+            )
+
         previous_ids: list[int] = []
         previous_origins: set[int] = set()
         if current_id:
