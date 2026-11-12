@@ -353,7 +353,7 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
                   <h4><b>{number(row.completed_ot)}</b> de {number(row.total_ot)} OT</h4>
                   <p><b>{fmt(row.completed_hh)}</b> de {fmt(row.total_hh)} H-H</p>
                   <small>
-                    {number(row.scheduled_completed)} finalizadas programadas · {number(row.unplanned_completed)} fuera de programación
+                    {number(row.scheduled_completed)} finalizadas programadas · {number(row.unplanned_completed) + number(row.source_completed)} finalizadas fuera de programación (incluye Google Sheets)
                   </small>
                 </div>
               </article>
