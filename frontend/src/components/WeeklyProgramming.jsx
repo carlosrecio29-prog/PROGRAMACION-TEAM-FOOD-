@@ -38,7 +38,11 @@ function ActivityGroup({kind,rows,dashboard,editing,selected,closedWeek,filters,
         const chosen=selected.has(id)
         return <tr key={id} className={chosen?'v2-selected-row tf-programmed-highlight':'tf-unselected-activity'}>
           {kind==='backlog'&&<td><div className="v2-backlog-origin"><b>Backlog</b><small>{row.semana_origen_inicio||'Semana anterior'} {row.semana_origen_fin?'→ '+row.semana_origen_fin:''}</small></div></td>}
-          <td><b className={chosen?'tf-ot-programmed-underline':''}>{row.numero_ot||'SIN ASIGNAR'}</b>{chosen&&<small className="tf-programmed-note">✓ Seleccionada en esta semana</small>}</td>
+          <td>
+            <b className={chosen?'tf-ot-programmed-underline':''}>{row.numero_ot||'SIN ASIGNAR'}</b>
+            {row.excluida_operacion_fuente && <small><Badge tone="stop">OPERACIÓN EXCLUIDA</Badge></small>}
+            {chosen && <small className="tf-programmed-note">✓ Seleccionada en esta semana</small>}
+          </td>
           <td><Badge>{row.area_codigo||'—'}</Badge><small>{row.area_nombre||''}</small></td>
           <td><b>{row.activo_codigo}</b><small>{row.activo_descripcion}</small></td>
           <td><span className="v2-plan">{row.plan_trabajo}</span><small>{row.descripcion_grupo||''}</small></td>
@@ -46,7 +50,13 @@ function ActivityGroup({kind,rows,dashboard,editing,selected,closedWeek,filters,
           <td>{fmt(row.tiempo_min,0)} min</td>
           <td><b>{fmt(row.hh,1)}</b></td>
           <td>{editing
-            ? <button type="button" className={chosen?'v2-unselect':'v2-select'} onClick={()=>onToggle(row)}>{chosen?'Quitar':'Agregar'}</button>
+            ? <button type="button"
+                className={chosen?'v2-unselect':'v2-select'}
+                disabled={row.excluida_operacion_fuente && !chosen}
+                title={row.excluida_operacion_fuente && !chosen ? 'No programable: la fuente la clasifica como OPERACIÓN' : ''}
+                onClick={()=>onToggle(row)}>
+                {chosen?'Quitar':row.excluida_operacion_fuente?'Excluida':'Agregar'}
+              </button>
             : <span className={chosen?'tf-programmed-tag':'tf-not-programmed-tag'}>{chosen?'✓ Programada':'No seleccionada'}</span>}
           </td>
         </tr>
@@ -151,6 +161,9 @@ export default function WeeklyProgramming({year,month,dashboard}){
   ),[tracking,data?.programming?.id])
   const allRows=useMemo(()=>[...(data?.operating||[]),...(data?.stopped||[]),...(data?.backlog||[])],[data])
   const rowMap=useMemo(()=>new Map(allRows.map(row=>[Number(row.orden_mantenimiento_id),row])),[allRows])
+  const selectedOperations=useMemo(()=>allRows.filter(row=>
+    row.excluida_operacion_fuente === true && selected.has(Number(row.orden_mantenimiento_id))
+  ),[allRows,selected])
   const selectedRows=useMemo(()=>[...selected].map(id=>rowMap.get(Number(id))).filter(Boolean).sort((left,right)=>Number(left.requiere_parada)-Number(right.requiere_parada)||String(left.area_codigo||'').localeCompare(String(right.area_codigo||''))||String(left.numero_ot||'').localeCompare(String(right.numero_ot||''))),[selected,rowMap])
   const selectedHH=useMemo(()=>selectedRows.reduce((sum,row)=>sum+number(row.hh),0),[selectedRows])
   const target=number(data?.capacity?.target)
@@ -275,6 +288,18 @@ export default function WeeklyProgramming({year,month,dashboard}){
       </div>
     </section>
 
+    {selectedOperations.length > 0 && !closedWeek && (
+      <section className="v2-panel" role="alert">
+        <strong>OT seleccionadas que ahora están excluidas como OPERACIÓN</strong>
+        <p>
+          {selectedOperations.map(row=>row.numero_ot).join(', ')}.
+          Estas OT estaban guardadas con un plan anterior, pero BASE DE DATOS
+          las identifica como OPERACIÓN. En esta semana aún abierta pulsa
+          <strong> Modificar</strong>, utiliza <strong>Quitar</strong> y
+          guarda la programación. No se cambian los cierres aprobados.
+        </p>
+      </section>
+    )}
     <section className="tf-program-indicator-board" aria-label="Indicadores de programación semanal">
       <div className="tf-program-month-ref">
         <span>TOTAL PMP + BACKLOG · {SPEC_NAMES[specialty]}</span>

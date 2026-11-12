@@ -278,6 +278,19 @@ def get_week_programming(*, date_from: date, date_to: date, specialty: str) -> d
               p.id AS plan_trabajo_id,
               p.plan_trabajo,
               p.descripcion_grupo,
+              -- The saved original may differ from the authoritative Google
+              -- source; show legacy saved rows without silently changing them.
+              EXISTS (
+                SELECT 1 FROM programacion.google_sheet_ot_estado_v2 gs
+                WHERE gs.periodo=date_trunc('month',CAST(:date_from AS date))::date
+                  AND gs.numero_ot=upper(btrim(o.numero_ot))
+                  AND gs.es_operacion=true
+              ) OR EXISTS (
+                SELECT 1 FROM programacion.operacion_exclusion_detalle_v2 ex
+                WHERE ex.periodo=date_trunc('month',CAST(:date_from AS date))::date
+                  AND upper(btrim(ex.numero_ot))=upper(btrim(o.numero_ot))
+                  AND ex.motivo='OPERACION'
+              ) AS excluida_operacion_fuente,
               p.numero_personas_efectivo,
               p.tiempo_parada_efectivo_min,
               p.requiere_parada,
@@ -438,6 +451,41 @@ def save_week_programming(*, date_from: date, date_to: date, specialty: str, ord
         current_id = int(current["id"]) if current else None
         if current and current["estado"] == "CERRADA":
             raise V2ProgrammingError("Esta semana ya fue cerrada. Las OT pendientes deben programarse desde BACKLOG en una semana nueva.")
+
+        # Mandatory revalidation at the moment of saving. The old plan's
+        # es_operacion may be false even when the current Google source
+        # explicitly classifies the very same OT as OPERACIÓN. Do not allow
+        # a previously saved item to bypass this rule. Closed weeks above
+        # are never edited.
+        blocked_operations = conn.execute(text("""
+            SELECT DISTINCT o.numero_ot
+            FROM programacion.orden_mantenimiento o
+            LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
+            WHERE o.id=ANY(CAST(:ids AS bigint[]))
+              AND (
+                COALESCE(p.es_operacion,false)
+                OR EXISTS (
+                  SELECT 1 FROM programacion.google_sheet_ot_estado_v2 gs
+                  WHERE gs.periodo=date_trunc('month',CAST(:date_from AS date))::date
+                    AND gs.numero_ot=upper(btrim(o.numero_ot))
+                    AND gs.es_operacion=true
+                )
+                OR EXISTS (
+                  SELECT 1 FROM programacion.operacion_exclusion_detalle_v2 ex
+                  WHERE ex.periodo=date_trunc('month',CAST(:date_from AS date))::date
+                    AND upper(btrim(ex.numero_ot))=upper(btrim(o.numero_ot))
+                    AND ex.motivo='OPERACION'
+                )
+              )
+            ORDER BY o.numero_ot LIMIT 10
+        """), {"ids":unique_ids,"date_from":date_from}).scalars().all()
+        if blocked_operations:
+            examples=", ".join(str(ot) for ot in blocked_operations[:5])
+            raise V2ProgrammingError(
+                f"Las OT {examples} están clasificadas como OPERACIÓN en "
+                "BASE DE DATOS o en exclusiones. Retíralas de la selección; "
+                "no se alterarán cierres históricos ni H-H ya aprobadas."
+            )
 
         previous_ids: list[int] = []
         previous_origins: set[int] = set()
