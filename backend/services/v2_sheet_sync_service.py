@@ -414,7 +414,11 @@ def _week_snapshots(conn, period: date, today: date, states: dict[str, dict[str,
       SELECT id FROM programacion.programacion_semanal_v2
       WHERE semana_inicio >= :period
         AND semana_inicio < (:period + INTERVAL '1 month')
-        AND semana_inicio <= :today AND semana_fin >= :today
+        -- Actualizar la semana actual Y las recién terminadas que sigan abiertas:
+        -- los estados en BASE DE DATOS pueden cambiar después del último día.
+        -- Limitar a siete días posteriores evita reescribir semanas históricas.
+        AND semana_inicio <= :today
+        AND semana_fin >= (:today - INTERVAL '7 days')
         AND estado <> 'CERRADA'
     """), {"period": period, "today": today}).scalars().all()
     saved = 0
