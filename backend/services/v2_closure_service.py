@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from collections import defaultdict
+import hashlib
+import json
 from datetime import date, datetime, timezone
 from io import BytesIO
 from typing import Any
@@ -209,6 +211,19 @@ def _api_closure_calendar(programming_id: int) -> tuple[bytes, dict[str, Any]]:
         """), {"id":programming_id,"period":period}).mappings().all()
     if not rows:
         raise V2ClosureError("La semana no contiene órdenes programadas.")
+    # Ties the explicit administrator approval to the exact selected OT and
+    # source states seen in the preview, not only to the last sync run ID.
+    payload=[
+        [str(row["programacion_item_id"]),str(row["numero_ot"]),
+         str(row["activo_codigo"]),str(row["plan_clave_software"]),
+         str(row["fuente_estado"] or ""),str(row["fuente_activo"] or ""),
+         str(row["fuente_plan"] or ""),str(bool(row["fuente_operacion"])),
+         str(row["historico_finalizada"] or "")]
+        for row in rows
+    ]
+    fingerprint=hashlib.sha256(
+        json.dumps(payload,ensure_ascii=False,sort_keys=True).encode("utf-8")
+    ).hexdigest()
     document=Workbook()
     tab=document.active
     tab.title="API Google Sheets"
@@ -241,6 +256,7 @@ def _api_closure_calendar(programming_id: int) -> tuple[bytes, dict[str, Any]]:
     document.save(buffer)
     return buffer.getvalue(),{
         "source":"GOOGLE_SHEETS_API","sync_id":int(last_run["id"]),
+        "fingerprint":fingerprint,
         "sync_at":last_run["terminado_en"].isoformat(),
         "from_month":sources,"historic_finalized":histories,
         "not_in_source":missing,"programmed":len(rows),
@@ -255,13 +271,14 @@ def preview_week_closure_from_api(*, programming_id: int) -> dict[str, Any]:
 
 
 def close_week_from_api(*, programming_id: int, expected_sync_id: int,
+                        expected_fingerprint: str,
                         accept_missing: bool = False,
                         manual_resolutions: list[dict[str, Any]] | None = None,
                         closed_by: str | None = None) -> dict[str, Any]:
     content,source=_api_closure_calendar(programming_id)
-    if source["sync_id"]!=expected_sync_id:
+    if source["sync_id"]!=expected_sync_id or source["fingerprint"]!=expected_fingerprint:
         raise V2ClosureError(
-            "La fuente cambió después de la vista previa. Vuelve a comparar antes de confirmar."
+            "La programación o la fuente cambió después de la vista previa. Vuelve a comparar antes de confirmar."
         )
     preview=preview_week_closure(programming_id=programming_id,content=content)
     summary=preview["summary"]
