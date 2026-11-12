@@ -177,8 +177,12 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
         const request = result?.ultima_solicitud;
         if (request?.estado === "COMPLETADA") {
           await Promise.all([load(), loadMonthlyProgress(), onChanged?.()]);
+          const changed = number(request.resumen?.estados_cambiados);
+          const backlog = number(request.resumen?.backlog_conciliado);
           setMessage(
-            `Sincronización completada: ${number(request.resumen?.ots_validas)} OT revisadas, ${number(request.resumen?.estados_cambiados)} estados actualizados, ${number(request.resumen?.conflictos)} conflictos. Los cierres históricos siguen intactos.`
+            changed === 0 && backlog === 0
+              ? `Sincronización completada: ${number(request.resumen?.ots_validas)} OT revisadas. BASE DE DATOS no presenta estados nuevos respecto de la última actualización; no se modificaron OT ni backlog.`
+              : `Sincronización completada: ${number(request.resumen?.ots_validas)} OT revisadas, ${changed} estados actualizados, ${backlog} cambios de backlog, ${number(request.resumen?.conflictos)} conflictos. Los cierres históricos siguen intactos.`
           );
         } else if (request?.estado === "ERROR") {
           setError(request.error_resumido || "La sincronización no pudo completarse.");
