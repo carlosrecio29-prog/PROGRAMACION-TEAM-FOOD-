@@ -830,7 +830,7 @@ def sync_status(year: int, month: int) -> dict[str, Any]:
                  backlog_conciliado,exclusiones_operacion,seguimientos_actualizados,
                  conflictos,resumen,error_resumido
           FROM programacion.google_sheet_sync_run_v2
-          WHERE periodo=:period ORDER BY iniciado_en DESC,id DESC LIMIT 10
+          WHERE periodo=:period ORDER BY iniciado_en DESC,id DESC LIMIT 100
         """), {"period":period}).mappings()]
         agent = _agent_state(conn,period)
         request = conn.execute(text("""
