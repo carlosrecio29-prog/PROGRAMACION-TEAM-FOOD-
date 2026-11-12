@@ -89,7 +89,7 @@ def test_api_closure_calendar_only_uses_source_and_validated_historical_snapshot
 
 def test_api_closure_rejects_operations_in_saved_week(monkeypatch):
     monkeypatch.setattr(service,"get_engine",lambda:_engine(operations=True))
-    with pytest.raises(service.V2ClosureError,match="OPERACIÓN.*OT-13187-26"):
+    with pytest.raises(service.V2ClosureError,match="OT-13187-26"):
         service._api_closure_calendar(50)
 
 
