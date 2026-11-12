@@ -305,6 +305,39 @@ def record_agent_heartbeat(year: int, month: int, stats: dict[str, Any]) -> dict
     return {"ok": True, "agente_conectado": True, "periodo": str(period)}
 
 
+def eligible_historical_backlog_targets() -> dict[str, Any]:
+    """Read-only OT list for the Apps Script historical lookup.
+
+    Only older OT assigned to an *open* programming week in the current month
+    are eligible; never send or reopen officially closed programming weeks.
+    """
+    period = _period_today()
+    today = datetime.now(ZoneInfo("America/Bogota")).date()
+    with get_engine().connect() as conn:
+        targets = [dict(row) for row in conn.execute(text("""
+          SELECT DISTINCT upper(btrim(o.numero_ot)) AS numero_ot,
+                 o.especialidad, a.codigo AS activo_codigo,
+                 COALESCE(o.plan_clave_software,'') AS plan_trabajo
+          FROM programacion.programacion_item_v2 pi
+          JOIN programacion.programacion_semanal_v2 ps ON ps.id=pi.programacion_id
+          JOIN programacion.orden_mantenimiento o ON o.id=pi.orden_mantenimiento_id
+          JOIN programacion.activo a ON a.id=o.activo_id
+          LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
+          WHERE ps.semana_inicio>=:period
+            AND ps.semana_inicio<(:period + INTERVAL '1 month')
+            AND ps.semana_inicio<=:today
+            AND ps.semana_fin>=(:today - INTERVAL '7 days')
+            AND ps.estado <> 'CERRADA'
+            AND o.periodo<:period
+            AND COALESCE(p.es_operacion,false)=false
+          ORDER BY numero_ot
+          LIMIT 2001
+        """), {"period":period,"today":today}).mappings()]
+    if len(targets) > 2000:
+        raise SheetSyncError("Existen más de 2000 órdenes de backlog para validar. Requiere una revisión del alcance.")
+    return {"ok":True,"periodo":str(period),"targets":targets}
+
+
 def pending_sheet_sync_requests() -> dict[str, Any]:
     period = _period_today()
     with get_engine().connect() as conn:
