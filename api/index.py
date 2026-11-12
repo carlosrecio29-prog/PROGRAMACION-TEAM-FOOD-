@@ -58,6 +58,7 @@ from backend.services.v2_sheet_sync_service import (
     finalized_outside_monthly_programming,
     queue_manual_sheet_sync, pending_sheet_sync_requests, record_agent_heartbeat,
     ensure_pending_sheet_request, complete_sheet_request, error_sheet_request,
+    eligible_historical_backlog_targets,
 )
 from backend.services.v2_progress_service import get_progress, export_progress_pdf
 from backend.services.v2_monthly_close_service import (
@@ -189,6 +190,19 @@ def _sheet_agent_authorized(request: Request) -> None:
         raise HTTPException(401, "Agente de Google Apps Script no autorizado.")
 
 
+@app.get("/api/v2/sheet-sync/historical-targets")
+def sheet_sync_historical_targets(request: Request):
+    # Read-only eligibility list. The signed agent will look up older source months;
+    # no official closure or original order is ever updated by this endpoint.
+    _sheet_agent_authorized(request)
+    try:
+        return eligible_historical_backlog_targets()
+    except SheetSyncError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except SQLAlchemyError as exc:
+        raise HTTPException(503, "No fue posible consultar backlog pendiente.") from exc
+
+
 @app.get("/api/v2/sheet-sync/pending")
 def sheet_sync_pending(request: Request):
     # Apps Script consulta solicitudes firmadas con el token, sin datos de órdenes.
@@ -216,10 +230,21 @@ def sheet_sync_heartbeat(request: Request, body: SheetAgentHeartbeat):
         raise HTTPException(422,str(exc)) from exc
 
 
+class HistoricalSheetState(BaseModel):
+    numero_ot: str = Field(min_length=9, max_length=30)
+    especialidad: str = Field(min_length=3, max_length=3)
+    activo_codigo: str = Field(min_length=2, max_length=100)
+    plan_trabajo: str = Field(min_length=2, max_length=500)
+    estado: str = Field(min_length=8, max_length=30)
+    mes_fuente: int = Field(ge=1, le=12)
+    anio_fuente: int = Field(ge=2020, le=2100)
+
+
 class SheetSyncPushRequest(BaseModel):
     year: int = Field(ge=2026, le=2100)
     month: int = Field(ge=1, le=12)
     values: list[list[str]] = Field(min_length=2, max_length=15000)
+    historicos: list[HistoricalSheetState] = Field(default_factory=list, max_length=2000)
     request_id: int | None = Field(default=None, ge=1)
 
 
@@ -241,6 +266,7 @@ def sheet_sync_push(request: Request, body: SheetSyncPushRequest):
             year=body.year, month=body.month,
             trigger="MANUAL" if body.request_id is not None else "CRON",
             values=body.values,
+            historical_states=[item.model_dump() for item in body.historicos],
         )
         if not result.get("ok"):
             raise SheetSyncError(result.get("mensaje") or "Sincronización simultánea; se reintentará.")

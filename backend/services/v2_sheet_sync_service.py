@@ -305,6 +305,39 @@ def record_agent_heartbeat(year: int, month: int, stats: dict[str, Any]) -> dict
     return {"ok": True, "agente_conectado": True, "periodo": str(period)}
 
 
+def eligible_historical_backlog_targets() -> dict[str, Any]:
+    """Read-only OT list for the Apps Script historical lookup.
+
+    Only older OT assigned to an *open* programming week in the current month
+    are eligible; never send or reopen officially closed programming weeks.
+    """
+    period = _period_today()
+    today = datetime.now(ZoneInfo("America/Bogota")).date()
+    with get_engine().connect() as conn:
+        targets = [dict(row) for row in conn.execute(text("""
+          SELECT DISTINCT upper(btrim(o.numero_ot)) AS numero_ot,
+                 o.especialidad, a.codigo AS activo_codigo,
+                 COALESCE(o.plan_clave_software,'') AS plan_trabajo
+          FROM programacion.programacion_item_v2 pi
+          JOIN programacion.programacion_semanal_v2 ps ON ps.id=pi.programacion_id
+          JOIN programacion.orden_mantenimiento o ON o.id=pi.orden_mantenimiento_id
+          JOIN programacion.activo a ON a.id=o.activo_id
+          LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
+          WHERE ps.semana_inicio>=:period
+            AND ps.semana_inicio<(:period + INTERVAL '1 month')
+            AND ps.semana_inicio<=:today
+            AND ps.semana_fin>=(:today - INTERVAL '7 days')
+            AND ps.estado <> 'CERRADA'
+            AND o.periodo<:period
+            AND COALESCE(p.es_operacion,false)=false
+          ORDER BY numero_ot
+          LIMIT 2001
+        """), {"period":period,"today":today}).mappings()]
+    if len(targets) > 2000:
+        raise SheetSyncError("Existen más de 2000 órdenes de backlog para validar. Requiere una revisión del alcance.")
+    return {"ok":True,"periodo":str(period),"targets":targets}
+
+
 def pending_sheet_sync_requests() -> dict[str, Any]:
     period = _period_today()
     with get_engine().connect() as conn:
@@ -380,7 +413,8 @@ def complete_sheet_request(request_id: int, period: date, result: dict[str, Any]
                "run":result.get("sincronizacion_id"),
                "summary":json.dumps({k:result.get(k) for k in (
                    "ots_validas","estados_cambiados","nuevas",
-                   "backlog_conciliado","conflictos","filas_periodo"
+                   "backlog_conciliado","conflictos","filas_periodo",
+                   "seguimientos_actualizados","historicos_verificados"
                )})})
 
 
@@ -409,7 +443,65 @@ def _write_change(conn, run_id: int, period: date, item: dict[str, Any], action:
            "action": action, "before": before, "after": after, "detail": detail})
 
 
-def _week_snapshots(conn, period: date, today: date, states: dict[str, dict[str, Any]], trigger: str) -> int:
+def _validate_historical_source(rows: list[dict[str, Any]], period: date) -> dict[str, dict[str, Any]]:
+    """Validate historical evidence for provisional *current* month tracking only.
+
+    This never writes into order status, backlog or old monthly/weekly closures.
+    A later observation from the same OT takes precedence over an older one.
+    """
+    if len(rows) > 2000:
+        raise SheetSyncError("Se recibieron demasiadas OT históricas.")
+    selected: dict[str, dict[str, Any]] = {}
+    conflicting: set[str] = set()
+    for row in rows:
+        ot = _norm(row.get("numero_ot"))
+        spec = _norm(row.get("especialidad"))
+        asset = _norm(row.get("activo_codigo"))
+        plan = str(row.get("plan_trabajo") or "").strip()
+        state = _status(row.get("estado"))
+        try:
+            origin = date(int(row.get("anio_fuente")), int(row.get("mes_fuente")), 1)
+        except (TypeError, ValueError, OverflowError):
+            continue
+        if not re.fullmatch(r"OT-[0-9]+-[0-9]{2,4}", ot):
+            continue
+        if origin >= period or spec not in SPECIALTIES or not asset or not plan:
+            continue
+        if state != "FINALIZADA" or _operation(plan):
+            continue
+        candidate = {"numero_ot":ot,"especialidad":spec,"activo_codigo":asset,
+                     "plan_trabajo":_norm(plan),"estado":"FINALIZADA",
+                     "mes_fuente":origin}
+        previous = selected.get(ot)
+        if not previous or previous["mes_fuente"] < origin:
+            selected[ot] = candidate
+        elif previous["mes_fuente"] == origin and any(
+            previous[key] != candidate[key]
+            for key in ("especialidad","activo_codigo","plan_trabajo","estado")
+        ):
+            conflicting.add(ot)
+    for ot in conflicting:
+        selected.pop(ot,None)
+    return selected
+
+
+def _compatible_historical_source(item: dict[str, Any], historic: dict[str, Any],
+                                  period: date) -> bool:
+    """Only an exact same asset, specialty and plan from older PMP can count."""
+    if not historic or item.get("order_period") is None or item["order_period"] >= period:
+        return False
+    if item.get("plan_operation"):
+        return False
+    return (
+        _norm(item.get("specialty")) == historic["especialidad"]
+        and _norm(item.get("activo_codigo")) == historic["activo_codigo"]
+        and _norm(item.get("plan_clave_software")) == historic["plan_trabajo"]
+        and historic["estado"] == "FINALIZADA"
+    )
+
+
+def _week_snapshots(conn, period: date, today: date, states: dict[str, dict[str, Any]],
+                    trigger: str, historical: dict[str, dict[str, Any]] | None = None) -> int:
     weeks = conn.execute(text("""
       SELECT id FROM programacion.programacion_semanal_v2
       WHERE semana_inicio >= :period
@@ -425,11 +517,15 @@ def _week_snapshots(conn, period: date, today: date, states: dict[str, dict[str,
     for week_id in weeks:
         items = conn.execute(text("""
           SELECT pi.id AS item_id,pi.orden_mantenimiento_id,pi.hh_programadas,
-                 o.numero_ot,a.area_codigo,ra.descripcion AS area_nombre,
+                 o.numero_ot,o.periodo AS order_period,o.especialidad AS specialty,
+                 o.plan_clave_software,a.codigo AS activo_codigo,
+                 COALESCE(p.es_operacion,false) AS plan_operation,
+                 a.area_codigo,ra.descripcion AS area_nombre,
                  sm.estado AS manual_status
           FROM programacion.programacion_item_v2 pi
           JOIN programacion.orden_mantenimiento o ON o.id=pi.orden_mantenimiento_id
           JOIN programacion.activo a ON a.id=o.activo_id
+          LEFT JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
           LEFT JOIN programacion.activo ra ON ra.codigo='BA-' || a.area_codigo
           LEFT JOIN programacion.seguimiento_estado_manual_v2 sm ON sm.programacion_item_id=pi.id
           WHERE pi.programacion_id=:week ORDER BY pi.id
@@ -450,7 +546,16 @@ def _week_snapshots(conn, period: date, today: date, states: dict[str, dict[str,
         for it in items:
             ot = _norm(it["numero_ot"])
             source = states.get(ot)
+            from_history = False
             status = source["estado"] if source and not source["operation"] else None
+            # A current-month observation takes precedence. A historic FINALIZADA
+            # is eligible only for an OT from an earlier period scheduled in
+            # this still-open week, with matching specialty, equipment and plan.
+            if source is None:
+                historic = (historical or {}).get(ot)
+                if historic and _compatible_historical_source(it, historic, period):
+                    status = "FINALIZADA"
+                    from_history = True
             manual = it["manual_status"]
             if manual in ("FINALIZADA", "PENDIENTE", "ANULADA"):
                 effective = manual
@@ -464,7 +569,9 @@ def _week_snapshots(conn, period: date, today: date, states: dict[str, dict[str,
                 "ot": it["numero_ot"], "area": it["area_codigo"], "area_name": it["area_nombre"],
                 "hh": float(it["hh_programadas"] or 0),
                 "status": status, "final": final,
-                "match": "GOOGLE_SHEETS_BASE_DE_DATOS" if source else "SIN_COINCIDENCIA",
+                "match": ("GOOGLE_SHEETS_BASE_DE_DATOS" if source
+                          else "GOOGLE_SHEETS_HISTORICO" if from_history
+                          else "SIN_COINCIDENCIA"),
                 "annulled": effective == "ANULADA",
             })
         # Evitar fotografías idénticas; conservar la precedencia de estados manuales.
@@ -516,7 +623,8 @@ def _week_snapshots(conn, period: date, today: date, states: dict[str, dict[str,
 
 
 def sync_month(*, year: int, month: int, trigger: str,
-               values: list[list[Any]] | None = None) -> dict[str, Any]:
+               values: list[list[Any]] | None = None,
+               historical_states: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     if trigger not in ("CRON", "MANUAL") or not (2020 <= year <= 2100 and 1 <= month <= 12):
         raise SheetSyncError("Parámetros de sincronización inválidos.")
     period = date(year, month, 1)
@@ -531,6 +639,7 @@ def sync_month(*, year: int, month: int, trigger: str,
         if not isinstance(snapshot, list) or not snapshot or len(snapshot) > 15000:
             raise SheetSyncError("La fotografía recibida está vacía o excede el límite seguro.")
         states, warnings, scan = _parse_rows(snapshot, period)
+        historical = _validate_historical_source(historical_states or [], period)
         if len(states) > 10000:
             raise SheetSyncError("La cantidad de OT supera el límite seguro por mes.")
     except SheetSyncError as exc:
@@ -783,8 +892,9 @@ def sync_month(*, year: int, month: int, trigger: str,
                   ON CONFLICT(periodo,plan_clave_software,especialidad)
                   DO UPDATE SET cantidad=EXCLUDED.cantidad,actualizado_en=now()
                 """), {"period": period, "plan": plan, "spec": spec, "quantity": quantity})
-            weekly_count = _week_snapshots(conn,period,today,states,trigger)
+            weekly_count = _week_snapshots(conn,period,today,states,trigger,historical)
             counts["seguimientos"] = weekly_count
+            counts["historicos_recibidos"] = len(historical)
             counts["conflictos"] += scan.get("duplicados_conflictivos",0)
             summary = {"fuente": "BASE DE DATOS", "periodo": str(period),
                        "filas_periodo": scan.get("filas_periodo",0),
@@ -794,6 +904,7 @@ def sync_month(*, year: int, month: int, trigger: str,
                        "backlog_conciliado": counts["backlog_conciliado"],
                        "operaciones": counts["operaciones"],
                        "seguimientos_actualizados": counts["seguimientos"],
+                       "historicos_verificados": counts["historicos_recibidos"],
                        "conflictos": counts["conflictos"], "advertencias": warnings[:80],
                        "omitidas_por_datos": len(warnings)}
             conn.execute(text("""

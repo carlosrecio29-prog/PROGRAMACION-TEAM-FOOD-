@@ -34,7 +34,7 @@ function cekTiempo_() {
     month: Number(Utilities.formatDate(now, CEK_TZ, 'M'))
   };
 }
-function cekSnapshot_(year, month) {
+function cekLeerDatos_(year, month, targets) {
   if (!Number.isInteger(year) || year < 2026 || year > 2100 ||
       !Number.isInteger(month) || month < 1 || month > 12) {
     throw new Error('Periodo inválido.');
@@ -47,8 +47,37 @@ function cekSnapshot_(year, month) {
   const raw = sheet.getRange(1, 1, count, 13).getDisplayValues();
   const items = [raw[0].concat(['__ORIGINAL_ROW'])];
   const target = CEK_MONTHS[month - 1];
+  const needed = Object.create(null);
+  (targets || []).forEach(function(ot) {
+    const code = cekNorm_(ot.numero_ot);
+    if (code) needed[code] = ot;
+  });
+  const latestEarlier = Object.create(null);
   for (let i = 1; i < raw.length; i++) {
     const row = raw[i];
+    const rowMonth = CEK_MONTHS.indexOf(cekNorm_(row[0])) + 1;
+    const rowYear = Number(String(row[10] || '').trim());
+    const ot = cekNorm_(row[2]);
+    const previous = needed[ot];
+    if (previous && rowMonth > 0 && Number.isInteger(rowYear) &&
+        rowYear >= 2020 && (rowYear < year || (rowYear === year && rowMonth < month)) &&
+        cekNorm_(row[3]) === cekNorm_(previous.especialidad) &&
+        cekNorm_(row[4]) === cekNorm_(previous.activo_codigo) &&
+        cekNorm_(row[12]) === cekNorm_(previous.plan_trabajo)) {
+      const rank = rowYear * 12 + rowMonth;
+      const candidate = {
+        numero_ot: ot, especialidad: cekNorm_(row[3]),
+        activo_codigo: String(row[4]), plan_trabajo: String(row[12]),
+        estado: cekNorm_(row[7]), mes_fuente: rowMonth,
+        anio_fuente: rowYear, rank: rank, conflicto: false
+      };
+      const old = latestEarlier[ot];
+      if (!old || candidate.rank > old.rank) {
+        latestEarlier[ot] = candidate;
+      } else if (old.rank === rank && old.estado !== candidate.estado) {
+        old.conflicto = true;
+      }
+    }
     if (cekNorm_(row[0]) !== target || CEK_SPECIALTIES.indexOf(cekNorm_(row[3])) < 0) continue;
     if (!row[2]) continue;
     const explicitYear = String(row[10] || '').trim();
@@ -58,7 +87,24 @@ function cekSnapshot_(year, month) {
     if (items.length > CEK_MAX_ROWS) throw new Error('El mes supera el límite permitido de filas.');
   }
   if (items.length < 2) throw new Error('No hay órdenes en el mes seleccionado.');
-  return items;
+  const historicos = Object.keys(latestEarlier).map(function(ot) { return latestEarlier[ot]; })
+    .filter(function(item) {
+      const plan = cekNorm_(item.plan_trabajo).replace(/^\d+\s*[-–—:._/|]+\s*/, '');
+      return !item.conflicto && item.estado === 'FINALIZADA' &&
+             !/^OPERACION(?:\b|\s|[-–—:._/|])/.test(plan);
+    })
+    .map(function(item) {
+      return {
+        numero_ot: item.numero_ot, especialidad: item.especialidad,
+        activo_codigo: item.activo_codigo, plan_trabajo: item.plan_trabajo,
+        estado: item.estado, mes_fuente: item.mes_fuente,
+        anio_fuente: item.anio_fuente
+      };
+    });
+  return {values: items, historicos: historicos};
+}
+function cekSnapshot_(year, month) {
+  return cekLeerDatos_(year, month, []).values;
 }
 function cekResumen_(values, year, month) {
   const seen = Object.create(null);
@@ -131,8 +177,14 @@ function cekVerificarServidor() {
 }
 
 function cekEnviarMes_(year, month, requestId) {
-  const rows = cekSnapshot_(year, month);
-  const body = {year: year, month: month, values: rows};
+  // The signed API returns only prior-month OT actually scheduled in
+  // an unclosed week. Previous closures remain read-only.
+  const response = cekApi_('/api/v2/sheet-sync/historical-targets', 'get');
+  const loaded = cekLeerDatos_(year, month, response.targets || []);
+  const body = {year: year, month: month, values: loaded.values,
+                historicos: loaded.historicos};
+  console.log('Estados históricos finalizados detectados para programación abierta: ' +
+              loaded.historicos.length);
   if (requestId) body.request_id = requestId;
   const result = cekApi_('/api/v2/sheet-sync/push', 'post', body);
   console.log('Sincronización completada. Solicitud: ' + (requestId || 'diaria') +

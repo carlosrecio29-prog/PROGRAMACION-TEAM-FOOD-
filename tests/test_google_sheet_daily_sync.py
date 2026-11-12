@@ -481,3 +481,172 @@ def test_finalized_outside_monthly_programming_rejects_invalid_spec():
     )
     with pytest.raises(SheetSyncError, match="Especialidad inválida"):
         finalized_outside_monthly_programming(year=2026,month=11,specialty="ALL")
+
+
+def test_historical_finalized_matches_only_previous_month_equipment_plan():
+    from backend.services.v2_sheet_sync_service import (
+        _validate_historical_source, _compatible_historical_source,
+    )
+    historical = _validate_historical_source([
+        {
+            "numero_ot":"OT-12907-26", "especialidad":"ELE",
+            "activo_codigo":"BA-SI-IG-AA28",
+            "plan_trabajo":"48-RUTINA DE MANTENIMIENTO DE REFRIGERACION",
+            "estado":"FINALIZADA","anio_fuente":2026,"mes_fuente":10,
+        },
+        {
+            "numero_ot":"OT-12914-26", "especialidad":"ELE",
+            "activo_codigo":"BA-SI-IG-AA38",
+            "plan_trabajo":"48-RUTINA DE MANTENIMIENTO DE REFRIGERACION",
+            "estado":"FINALIZADA","anio_fuente":2026,"mes_fuente":10,
+        },
+        {
+            "numero_ot":"OT-8232-26", "especialidad":"ELE",
+            "activo_codigo":"BA-SI-EC-CL04",
+            "plan_trabajo":"135-RUTINA TRIMESTRAL PREVENTIVA (REALIZADO POR CONTRATISTA BOSCH)",
+            "estado":"FINALIZADA","anio_fuente":2026,"mes_fuente":10,
+        },
+        {
+            "numero_ot":"OT-13187-26","especialidad":"ELE",
+            "activo_codigo":"BA-SI-IG-MO01",
+            "plan_trabajo":"44-OPERACIÓN - RUTINA ELÉCTRICA SEMESTRAL MOTOR",
+            "estado":"FINALIZADA","anio_fuente":2026,"mes_fuente":10,
+        },
+        {
+            "numero_ot":"OT-50000-26","especialidad":"ELE",
+            "activo_codigo":"BA-SI-IG-AA50",
+            "plan_trabajo":"48-RUTINA DE MANTENIMIENTO DE REFRIGERACION",
+            "estado":"FINALIZADA","anio_fuente":2026,"mes_fuente":11,
+        },
+    ], date(2026,11,1))
+    assert set(historical) == {
+        "OT-12907-26", "OT-12914-26", "OT-8232-26",
+    }
+    item = {
+        "order_period":date(2026,10,1),
+        "plan_operation":False,
+        "specialty":"ELE",
+        "activo_codigo":"BA-SI-IG-AA28",
+        "plan_clave_software":"48-RUTINA DE MANTENIMIENTO DE REFRIGERACION",
+    }
+    assert _compatible_historical_source(item,historical["OT-12907-26"],date(2026,11,1))
+    assert not _compatible_historical_source({**item,"activo_codigo":"BA-SI-IG-AA99"},historical["OT-12907-26"],date(2026,11,1))
+    assert not _compatible_historical_source({**item,"order_period":date(2026,11,1)},historical["OT-12907-26"],date(2026,11,1))
+    assert not _compatible_historical_source({**item,"plan_operation":True},historical["OT-12907-26"],date(2026,11,1))
+
+
+def test_historical_source_counts_in_open_week_without_changing_closed_orders():
+    from backend.services.v2_sheet_sync_service import (
+        _validate_historical_source,_week_snapshots,
+    )
+    prior = _validate_historical_source([{
+        "numero_ot":"OT-12907-26", "especialidad":"ELE",
+        "activo_codigo":"BA-SI-IG-AA28",
+        "plan_trabajo":"48-RUTINA DE MANTENIMIENTO DE REFRIGERACION",
+        "estado":"FINALIZADA","anio_fuente":2026,"mes_fuente":10,
+    }],date(2026,11,1))
+    submitted = []
+    queries = []
+
+    class Result:
+        def __init__(self,rows=None,scalar_value=None):
+            self.rows=rows or []
+            self.value=scalar_value
+        def scalars(self): return self
+        def mappings(self): return self
+        def all(self): return self.rows
+        def first(self): return self.rows[0] if self.rows else None
+        def scalar_one(self): return self.value
+        def __iter__(self): return iter(self.rows)
+
+    class FakeConn:
+        def execute(self,statement,params=None):
+            sql=str(statement)
+            queries.append(sql)
+            if "SELECT id FROM programacion.programacion_semanal_v2" in sql:
+                assert "estado <> 'CERRADA'" in sql
+                return Result(rows=[50])
+            if "FROM programacion.programacion_item_v2 pi" in sql:
+                return Result(rows=[{
+                    "item_id":4728,"orden_mantenimiento_id":5483,
+                    "hh_programadas":2.0,"numero_ot":"OT-12907-26",
+                    "order_period":date(2026,10,1),"specialty":"ELE",
+                    "activo_codigo":"BA-SI-IG-AA28",
+                    "plan_clave_software":"48-RUTINA DE MANTENIMIENTO DE REFRIGERACION",
+                    "plan_operation":False,
+                    "area_codigo":"SI","area_nombre":"SERVICIO",
+                    "manual_status":None,
+                }])
+            if "SELECT id,archivo_nombre" in sql:
+                return Result(rows=[])
+            if "SELECT DISTINCT si.orden_mantenimiento_id" in sql:
+                return Result(rows=[])
+            if "INSERT INTO programacion.seguimiento_semanal_v2" in sql:
+                assert params["done"] == 1
+                assert params["hh_done"] == 2.0
+                return Result(scalar_value=88)
+            if "INSERT INTO programacion.seguimiento_semanal_item_v2" in sql:
+                submitted.extend(params)
+                return Result()
+            raise AssertionError("Unexpected SQL: "+sql[:150])
+
+    assert _week_snapshots(FakeConn(),date(2026,11,1),
+                           date(2026,11,12),{}, "MANUAL",prior) == 1
+    assert len(submitted)==1
+    assert submitted[0]["status"]=="FINALIZADA"
+    assert submitted[0]["final"] is True
+    assert submitted[0]["match"]=="GOOGLE_SHEETS_HISTORICO"
+    assert not any("UPDATE programacion.orden_mantenimiento" in q for q in queries)
+    assert not any("UPDATE programacion.programacion_item_v2" in q for q in queries)
+    assert not any("UPDATE programacion.cierre_mensual_v2" in q for q in queries)
+
+
+def test_current_month_source_takes_precedence_over_historical_status():
+    from backend.services.v2_sheet_sync_service import (
+        _validate_historical_source, _week_snapshots,
+    )
+    prior=_validate_historical_source([{
+        "numero_ot":"OT-12907-26","especialidad":"ELE",
+        "activo_codigo":"BA-SI-IG-AA28",
+        "plan_trabajo":"48-RUTINA DE MANTENIMIENTO DE REFRIGERACION",
+        "estado":"FINALIZADA","anio_fuente":2026,"mes_fuente":10,
+    }],date(2026,11,1))
+    class Result:
+        def __init__(self,rows=None): self.rows=rows or []
+        def scalars(self): return self
+        def mappings(self): return self
+        def all(self): return self.rows
+        def first(self): return self.rows[0] if self.rows else None
+        def __iter__(self): return iter(self.rows)
+    class Conn:
+        def __init__(self): self.values=[]
+        def execute(self,sql,params=None):
+            q=str(sql)
+            if "SELECT id FROM programacion.programacion_semanal_v2" in q:
+                return Result(rows=[50])
+            if "FROM programacion.programacion_item_v2 pi" in q:
+                return Result(rows=[{
+                    "item_id":1,"orden_mantenimiento_id":2,"hh_programadas":1,
+                    "numero_ot":"OT-12907-26","order_period":date(2026,10,1),
+                    "specialty":"ELE","activo_codigo":"BA-SI-IG-AA28",
+                    "plan_clave_software":"48-RUTINA DE MANTENIMIENTO DE REFRIGERACION",
+                    "plan_operation":False,"area_codigo":"SI",
+                    "area_nombre":"SERVICIO","manual_status":None,
+                }])
+            if "SELECT id,archivo_nombre" in q: return Result(rows=[])
+            if "SELECT DISTINCT si.orden_mantenimiento_id" in q: return Result(rows=[])
+            if "INSERT INTO programacion.seguimiento_semanal_v2" in q:
+                assert params["done"]==0
+                assert params["pending"]==1
+                return type("R",(),{"scalar_one":lambda _:7})()
+            if "INSERT INTO programacion.seguimiento_semanal_item_v2" in q:
+                self.values.extend(params)
+                return Result()
+            raise AssertionError("Unexpected SQL")
+    conn=Conn()
+    _week_snapshots(conn,date(2026,11,1),date(2026,11,12),{
+       "OT-12907-26":{"estado":"PENDIENTE","operation":False}
+    },"MANUAL",prior)
+    assert conn.values[0]["status"]=="PENDIENTE"
+    assert conn.values[0]["final"] is False
+    assert conn.values[0]["match"]=="GOOGLE_SHEETS_BASE_DE_DATOS"

@@ -32,3 +32,11 @@ Este sistema **no utiliza el Web App público de Apps Script** para leer órdene
 
 ### Seguridad
 No dar acceso de editor al proyecto privado de Apps Script a terceros. No compartir tokens por chat, capturas, URLs ni consola. El endpoint de envío requiere firma `Authorization: Bearer` y solo permite el mes actual. El panel sólo permite encolar solicitudes a administradores. La cola y los registros de agente viven en un esquema privado de Supabase.
+
+## Validación de OT de backlog de meses anteriores (desde noviembre 2026)
+
+La sincronización busca primero las órdenes del mes en `BASE DE DATOS`. Si una OT de un mes anterior está **programada en una semana de este mes que todavía no tiene cierre oficial**, el agente consulta la lista firmada de esas OT en `GET /api/v2/sheet-sync/historical-targets`, localiza el último estado registrado en meses anteriores de la misma hoja y envía sólo los estados `FINALIZADA` consistentes con OT, especialidad, código de equipo y plan de trabajo. Ejemplos: `OT-12907-26`, `OT-12914-26`, `OT-8232-26` que pertenecen a octubre/septiembre y están programadas en noviembre.
+
+El backend aplica esas finalizaciones **exclusivamente a una nueva fotografía de seguimiento de la semana abierta**. No cambia el estado del maestro del mes histórico, los cierres oficiales, las OT originales ni sus H-H programadas. Si una OT aparece en el mes actual, su estado del mes actual tiene prioridad; las actividades `OPERACIÓN` permanecen excluidas.
+
+**Para actualizar tu Apps Script privado una vez:** abre el archivo `Code.gs` de este repositorio, reemplaza el código en el editor de tu proyecto `CEK Global MTTO Sync`, y guarda con Ctrl+S. Los activadores instalados siguen funcionando con el código guardado; no necesitas crear otra implementación web, Google Cloud ni proporcionar tu contraseña. En CEK Global MTTO, usa `Comprobar agente` y `Sincronizar ahora`; tras finalizar aparecerá el nuevo seguimiento y el indicador semanal incluirá las OT históricas finalizadas válidas.
