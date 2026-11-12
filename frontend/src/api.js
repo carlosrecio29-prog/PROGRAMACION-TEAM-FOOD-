@@ -438,12 +438,13 @@ export async function getV2WeekClosure(programmingId) {
 export async function previewV2WeekClosureFromApi(programmingId) {
   return check(await fetch(`/api/v2/programming/${programmingId}/preview-close-api`, {cache:"no-store"}));
 }
-export async function closeV2WeekFromApi(programmingId, expectedSyncId, acceptMissing, manualResolutions=[]) {
+export async function closeV2WeekFromApi(programmingId, expectedSyncId, expectedFingerprint, acceptMissing, manualResolutions=[]) {
   return check(await fetch(`/api/v2/programming/${programmingId}/close-api`, {
     method: "POST",
     headers: {"Content-Type":"application/json"},
     body: JSON.stringify({
       expected_sync_id: expectedSyncId,
+      expected_fingerprint: expectedFingerprint,
       accept_missing: Boolean(acceptMissing),
       manual_resolutions: manualResolutions,
     }),
