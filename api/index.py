@@ -45,6 +45,7 @@ from backend.services.v2_programming_runtime import (
 )
 from backend.services.v2_closure_service import (
     V2ClosureError, get_week_closure, close_week_from_calendar, preview_week_closure,
+    preview_week_closure_from_api, close_week_from_api,
 )
 from backend.services.v2_backlog_service import get_accumulated_backlog
 from backend.services.v2_backlog_bootstrap_service import bootstrap_initial_backlog
@@ -578,6 +579,43 @@ def v2_manual_tracking_status(programming_id:int, programacion_item_id:int, body
 def v2_week_closure(programming_id:int):
     try:return get_week_closure(programming_id)
     except V2ClosureError as exc:raise HTTPException(404,str(exc)) from exc
+
+@app.get("/api/v2/programming/{programming_id}/preview-close-api")
+def v2_preview_close_week_api(request: Request, programming_id: int):
+    if not request_is_admin(request):
+        raise HTTPException(403,"Solo el administrador puede preparar el cierre por API.")
+    try:
+        return preview_week_closure_from_api(programming_id=programming_id)
+    except V2ClosureError as exc:
+        raise HTTPException(422,str(exc)) from exc
+    except SQLAlchemyError as exc:
+        raise HTTPException(503,"No se pudo consultar la fuente del cierre.") from exc
+
+
+class V2CloseFromApiRequest(BaseModel):
+    expected_sync_id: int = Field(ge=1)
+    accept_missing: bool = False
+    manual_resolutions: list[dict[str,Any]] = Field(default_factory=list)
+    closed_by: str | None = Field(None,max_length=200)
+
+
+@app.post("/api/v2/programming/{programming_id}/close-api")
+def v2_close_week_api(request: Request, programming_id: int, body: V2CloseFromApiRequest):
+    if not request_is_admin(request):
+        raise HTTPException(403,"Solo el administrador puede confirmar un cierre semanal.")
+    try:
+        return close_week_from_api(
+            programming_id=programming_id,
+            expected_sync_id=body.expected_sync_id,
+            accept_missing=body.accept_missing,
+            manual_resolutions=body.manual_resolutions,
+            closed_by=body.closed_by,
+        )
+    except V2ClosureError as exc:
+        raise HTTPException(422,str(exc)) from exc
+    except SQLAlchemyError as exc:
+        raise HTTPException(503,"La base de datos no pudo completar el cierre; no se aplicaron cambios parciales.") from exc
+
 
 @app.post("/api/v2/programming/{programming_id}/preview-close-file")
 async def v2_preview_close_week_file(
