@@ -409,3 +409,75 @@ def test_recently_ended_unclosed_week_is_eligible_for_sheet_tracking():
                               date(2026, 11, 12), {}, "MANUAL")
     assert written == 0
     assert len(seen) == 2
+
+
+def test_finalized_outside_monthly_programming_is_read_only(monkeypatch):
+    from backend.services import v2_sheet_sync_service as service
+
+    queries = []
+
+    class FakeMappingResult:
+        def mappings(self):
+            return self
+
+        def __iter__(self):
+            return iter([
+                {
+                    "numero_ot": "OT-10810-26", "plan_trabajo": "RUTINA",
+                    "activo_codigo": "BA-JB-001", "area_codigo": "JB",
+                    "observado_en": None,
+                    "periodo_origen": date(2026, 11, 1),
+                    "backlog_id": None, "backlog_estado": None,
+                    "total_fuera": 2,
+                },
+                {
+                    "numero_ot": "OT-16027-25", "plan_trabajo": "PLAN HEREDADO",
+                    "activo_codigo": "BA-JB-002", "area_codigo": "JB",
+                    "observado_en": None,
+                    "periodo_origen": date(2026, 9, 1),
+                    "backlog_id": 15, "backlog_estado": "FINALIZADA",
+                    "total_fuera": 2,
+                },
+            ])
+
+    class Connection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def execute(self, statement, params):
+            sql = str(statement)
+            queries.append(sql)
+            assert "gs.estado='FINALIZADA' AND gs.es_operacion=false" in sql
+            assert "NOT EXISTS" in sql
+            assert "programacion.programacion_item_v2" in sql
+            assert "SELECT" in sql and "UPDATE " not in sql and "INSERT " not in sql
+            assert params == {"period": date(2026,11,1), "spec": "ELE"}
+            return FakeMappingResult()
+
+    class Engine:
+        def connect(self):
+            return Connection()
+
+    monkeypatch.setattr(service, "get_engine", lambda: Engine())
+    result = service.finalized_outside_monthly_programming(
+        year=2026, month=11, specialty="ELE"
+    )
+    assert result["total"] == 2
+    assert result["del_mes"] == 1
+    assert result["arrastre"] == 1
+    assert result["sin_maestro"] == 0
+    assert result["rows"][1]["es_backlog"] is True
+    assert result["rows"][1]["periodo_origen"] == "2026-09-01"
+    assert result["recortado"] is False
+    assert len(queries) == 1
+
+
+def test_finalized_outside_monthly_programming_rejects_invalid_spec():
+    from backend.services.v2_sheet_sync_service import (
+        finalized_outside_monthly_programming,
+    )
+    with pytest.raises(SheetSyncError, match="Especialidad inválida"):
+        finalized_outside_monthly_programming(year=2026,month=11,specialty="ALL")
