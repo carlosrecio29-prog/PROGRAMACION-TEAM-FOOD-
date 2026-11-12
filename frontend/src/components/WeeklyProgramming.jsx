@@ -45,7 +45,16 @@ function ActivityGroup({kind,rows,dashboard,editing,selected,closedWeek,filters,
           </td>
           <td><Badge>{row.area_codigo||'—'}</Badge><small>{row.area_nombre||''}</small></td>
           <td><b>{row.activo_codigo}</b><small>{row.activo_descripcion}</small></td>
-          <td><span className="v2-plan">{row.plan_trabajo}</span><small>{row.descripcion_grupo||''}</small></td>
+          <td>
+            <span className="v2-plan">{row.plan_trabajo}</span>
+            {row.plan_diferente_fuente && (
+              <small><Badge tone="stop">Plan actual según BASE DE DATOS · OPERACIÓN</Badge></small>
+            )}
+            {row.plan_diferente_fuente && row.plan_trabajo_maestro && (
+              <small>En el maestro anterior: {row.plan_trabajo_maestro}</small>
+            )}
+            {!row.plan_diferente_fuente && <small>{row.descripcion_grupo||''}</small>}
+          </td>
           <td><b>{row.numero_personas_efectivo}</b></td>
           <td>{fmt(row.tiempo_min,0)} min</td>
           <td><b>{fmt(row.hh,1)}</b></td>
@@ -125,7 +134,16 @@ function SelectionSummary({rows,editing,onToggle,dashboard,trackingByOrder,close
           <td><span className={'tf-execution-state tf-execution-'+state}>{statusLabel}</span></td>
           <td><Badge>{row.area_codigo||'—'}</Badge><small>{row.area_nombre||''}</small></td>
           <td><b>{row.activo_codigo}</b><small>{row.activo_descripcion}</small></td>
-          <td><span className="v2-plan">{row.plan_trabajo}</span><small>{row.descripcion_grupo||''}</small></td>
+          <td>
+            <span className="v2-plan">{row.plan_trabajo}</span>
+            {row.plan_diferente_fuente && (
+              <small><Badge tone="stop">Plan actual según BASE DE DATOS · OPERACIÓN</Badge></small>
+            )}
+            {row.plan_diferente_fuente && row.plan_trabajo_maestro && (
+              <small>En el maestro anterior: {row.plan_trabajo_maestro}</small>
+            )}
+            {!row.plan_diferente_fuente && <small>{row.descripcion_grupo||''}</small>}
+          </td>
           <td><b>{row.numero_personas_efectivo}</b></td>
           <td>{fmt(row.tiempo_min,0)} min</td>
           <td><b>{fmt(row.hh,1)}</b></td>

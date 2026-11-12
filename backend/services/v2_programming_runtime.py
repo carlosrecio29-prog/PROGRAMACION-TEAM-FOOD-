@@ -276,7 +276,25 @@ def get_week_programming(*, date_from: date, date_to: date, specialty: str) -> d
               a.area_codigo,
               root.descripcion AS area_nombre,
               p.id AS plan_trabajo_id,
-              p.plan_trabajo,
+              -- Use the current month's Google source as the DISPLAY plan in
+              -- weeks that are still open. Preserve the original master plan
+              -- and never reinterpret already-closed historic programming.
+              CASE WHEN CAST(:is_closed AS boolean)=false
+                     AND gs_view.es_operacion=true
+                     AND gs_view.especialidad=o.especialidad
+                     AND upper(btrim(gs_view.activo_codigo))=upper(btrim(a.codigo))
+                     AND NULLIF(btrim(gs_view.plan_trabajo),'') IS NOT NULL
+                   THEN gs_view.plan_trabajo
+                   ELSE p.plan_trabajo
+              END AS plan_trabajo,
+              p.plan_trabajo AS plan_trabajo_maestro,
+              CASE WHEN CAST(:is_closed AS boolean)=false
+                     AND gs_view.es_operacion=true
+                     AND gs_view.especialidad=o.especialidad
+                     AND upper(btrim(gs_view.activo_codigo))=upper(btrim(a.codigo))
+                     AND NULLIF(btrim(gs_view.plan_trabajo),'') IS NOT NULL
+                     AND upper(btrim(gs_view.plan_trabajo))<>upper(btrim(COALESCE(o.plan_clave_software,p.plan_trabajo)))
+                   THEN true ELSE false END AS plan_diferente_fuente,
               p.descripcion_grupo,
               -- The saved original may differ from the authoritative Google
               -- source; show legacy saved rows without silently changing them.
@@ -370,6 +388,9 @@ def get_week_programming(*, date_from: date, date_to: date, specialty: str) -> d
             JOIN programacion.activo a ON a.id=o.activo_id
             LEFT JOIN programacion.activo root ON root.codigo='BA-'||a.area_codigo
             JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
+            LEFT JOIN programacion.google_sheet_ot_estado_v2 gs_view
+              ON gs_view.periodo=date_trunc('month',CAST(:date_from AS date))::date
+             AND gs_view.numero_ot=upper(btrim(o.numero_ot))
             LEFT JOIN programacion.backlog_v2 b
               ON b.orden_mantenimiento_id=o.id
              AND b.especialidad=:specialty
