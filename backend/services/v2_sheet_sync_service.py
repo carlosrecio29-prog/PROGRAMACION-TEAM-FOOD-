@@ -821,6 +821,95 @@ def sync_month(*, year: int, month: int, trigger: str,
         raise SheetSyncError("No se completó la sincronización; no se aplicaron cambios parciales.") from exc
 
 
+def finalized_outside_monthly_programming(*, year: int, month: int,
+                                        specialty: str) -> dict[str, Any]:
+    """Read-only list of Sheets-finalized OT absent from the month's scheduled OT.
+
+    The source has no reliable actual completion date. This is a monthly
+    classification, never a weekly closure, labor-hour adjustment, or KPI mutation.
+    """
+    if not (2026 <= year <= 2100 and 1 <= month <= 12):
+        raise SheetSyncError("Período inválido.")
+    spec = (specialty or "").strip().upper()
+    if spec not in SPECIALTIES:
+        raise SheetSyncError("Especialidad inválida.")
+    period = date(year,month,1)
+    if period < date(2026,11,1):
+        return {"periodo":str(period), "especialidad":spec, "total":0,
+                "del_mes":0,"arrastre":0,"sin_maestro":0,"rows":[],
+                "limite":2000,"recortado":False}
+    query = text("""
+      WITH source AS (
+        SELECT gs.numero_ot, gs.plan_trabajo, gs.activo_codigo, gs.observado_en,
+               o.id AS orden_mantenimiento_id, o.periodo AS periodo_origen,
+               b.id AS backlog_id, b.estado_seguimiento AS backlog_estado,
+               a.area_codigo
+        FROM programacion.google_sheet_ot_estado_v2 gs
+        LEFT JOIN LATERAL (
+          SELECT o2.id, o2.periodo, o2.activo_id
+          FROM programacion.orden_mantenimiento o2
+          WHERE upper(btrim(o2.numero_ot))=gs.numero_ot
+          ORDER BY (o2.periodo=gs.periodo) DESC, o2.periodo DESC, o2.id DESC
+          LIMIT 1
+        ) o ON true
+        LEFT JOIN programacion.backlog_v2 b ON b.orden_mantenimiento_id=o.id
+        LEFT JOIN programacion.activo a ON a.id=o.activo_id
+        WHERE gs.periodo=:period AND gs.especialidad=:spec
+          AND gs.estado='FINALIZADA' AND gs.es_operacion=false
+          AND NOT EXISTS (
+            SELECT 1 FROM programacion.programacion_item_v2 pi
+            JOIN programacion.programacion_semanal_v2 ps ON ps.id=pi.programacion_id
+            JOIN programacion.orden_mantenimiento po ON po.id=pi.orden_mantenimiento_id
+            WHERE ps.semana_inicio>=gs.periodo
+              AND ps.semana_inicio<(gs.periodo + INTERVAL '1 month')
+              AND ps.especialidad=gs.especialidad
+              AND upper(btrim(po.numero_ot))=gs.numero_ot
+          )
+      )
+      SELECT numero_ot,plan_trabajo,activo_codigo,observado_en,
+             periodo_origen,backlog_id,backlog_estado,area_codigo,
+             count(*) OVER()::int AS total_fuera
+      FROM source
+      ORDER BY numero_ot
+      LIMIT 2000
+    """)
+    with get_engine().connect() as conn:
+        raw = [dict(row) for row in conn.execute(query, {
+            "period":period,"spec":spec,
+        }).mappings()]
+    total = int(raw[0]["total_fuera"]) if raw else 0
+    rows = []
+    from_month=0
+    carried=0
+    no_master=0
+    for item in raw:
+        original=item["periodo_origen"]
+        if original == period:
+            from_month += 1
+        elif original is None:
+            no_master += 1
+        else:
+            carried += 1
+        rows.append({
+          "numero_ot":item["numero_ot"],
+          "plan_trabajo":item["plan_trabajo"],
+          "activo_codigo":item["activo_codigo"],
+          "area_codigo":item["area_codigo"],
+          "periodo_origen":original.isoformat() if original else None,
+          "es_backlog":item["backlog_id"] is not None,
+          "estado_backlog":item["backlog_estado"],
+          "observado_en":item["observado_en"],
+        })
+    return {
+      "periodo":str(period),"especialidad":spec,
+      "total":total,"del_mes":from_month,"arrastre":carried,
+      "sin_maestro":no_master,
+      "limite":2000,"recortado":total>len(rows),"rows":rows,
+      "fuente":"GOOGLE_SHEETS_BASE_DE_DATOS",
+      "nota":"Estado FINALIZADA observado en la fuente; no indica fecha real de ejecución ni cierre oficial.",
+    }
+
+
 def sync_status(year: int, month: int) -> dict[str, Any]:
     period = date(year,month,1)
     with get_engine().connect() as conn:

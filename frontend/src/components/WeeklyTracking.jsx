@@ -8,6 +8,7 @@ import {
   uploadV2WeekTracking,
   saveV2ManualTrackingStatus,
   getSheetSyncStatus,
+  getSheetFinalizedOutsideProgramming,
   checkSheetSyncConnection,
   syncGoogleSheetNow,
 } from "../api";
@@ -79,6 +80,10 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
   const [syncingSheet, setSyncingSheet] = useState(false);
   const [checkingSheet, setCheckingSheet] = useState(false);
   const [sheetProbe, setSheetProbe] = useState(null);
+  const [sourceOutside, setSourceOutside] = useState(null);
+  const [sourceOutsideLoading, setSourceOutsideLoading] = useState(false);
+  const [sourceOutsideError, setSourceOutsideError] = useState("");
+  const [showAllSourceOutside, setShowAllSourceOutside] = useState(false);
 
   const week = weeks[Math.min(weekIndex, weeks.length - 1)] || weeks[0];
 
@@ -129,6 +134,24 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
     loadMonthlyProgress();
     loadSheetSyncStatus();
   }, [year, month, accessRole]);
+
+  // Sólo consulta el estado de BASE DE DATOS. No ejecuta sincronización ni cierre.
+  useEffect(() => {
+    let cancelled = false;
+    setSourceOutside(null);
+    setSourceOutsideError("");
+    setShowAllSourceOutside(false);
+    if (accessRole !== "admin" || year < 2026 || (year === 2026 && month < 11)) {
+      setSourceOutsideLoading(false);
+      return () => { cancelled = true; };
+    }
+    setSourceOutsideLoading(true);
+    getSheetFinalizedOutsideProgramming(year, month, specialty)
+      .then(result => { if (!cancelled) setSourceOutside(result); })
+      .catch(cause => { if (!cancelled) setSourceOutsideError(cause.message || "No se pudo consultar las OT de Google Sheets."); })
+      .finally(() => { if (!cancelled) setSourceOutsideLoading(false); });
+    return () => { cancelled = true; };
+  }, [year, month, specialty, accessRole, sheetSync?.ultima?.id]);
 
   async function checkSheetConnection() {
     try {
@@ -330,7 +353,7 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
                   <h4><b>{number(row.completed_ot)}</b> de {number(row.total_ot)} OT</h4>
                   <p><b>{fmt(row.completed_hh)}</b> de {fmt(row.total_hh)} H-H</p>
                   <small>
-                    {number(row.scheduled_completed)} finalizadas programadas · {number(row.unplanned_completed)} fuera de programación
+                    {number(row.scheduled_completed)} finalizadas programadas · {number(row.unplanned_completed) + number(row.source_completed)} finalizadas fuera de programación (incluye Google Sheets)
                   </small>
                 </div>
               </article>
@@ -650,6 +673,110 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
               </div>
             )}
           </section>
+
+          {accessRole === "admin" && year >= 2026 && !(year === 2026 && month < 11) && (
+            <section className="v2-panel" aria-label="OT finalizadas fuera de la programación desde Google Sheets">
+              <div className="v2-section-head">
+                <div>
+                  <span className="v2-kicker">EJECUCIÓN FUERA DE PROGRAMACIÓN · GOOGLE SHEETS</span>
+                  <h3>OT finalizadas que no fueron programadas en el mes</h3>
+                  <p>
+                    Se consultan las OT únicas con estado FINALIZADA en BASE DE DATOS que no
+                    aparecen en ninguna programación de la especialidad durante este mes.
+                    No aumentan el cumplimiento de las OT programadas y no se asignan
+                    a una semana de ejecución sin una fecha real de finalización.
+                  </p>
+                </div>
+                {sourceOutside && <Badge tone="ok">{number(sourceOutside.total)} OT finalizadas</Badge>}
+              </div>
+
+              {sourceOutsideLoading ? (
+                <p className="v2-empty">Consultando las órdenes finalizadas de {SPEC_NAMES[specialty]}…</p>
+              ) : sourceOutsideError ? (
+                <p className="v2-warning">{sourceOutsideError}</p>
+              ) : sourceOutside ? (
+                <>
+                  <div className="weekly-tracking-unplanned-kpis">
+                    <article className="ok">
+                      <span>Finalizadas fuera del programa</span>
+                      <b>{number(sourceOutside.total)}</b>
+                      <small>En BASE DE DATOS · {SPEC_NAMES[specialty]}</small>
+                    </article>
+                    <article>
+                      <span>OT del mes</span>
+                      <b>{number(sourceOutside.del_mes)}</b>
+                      <small>No seleccionadas para programación mensual</small>
+                    </article>
+                    <article>
+                      <span>Órdenes heredadas</span>
+                      <b>{number(sourceOutside.arrastre)}</b>
+                      <small>Procedentes de meses anteriores</small>
+                    </article>
+                    <article>
+                      <span>OT sin maestro asociado</span>
+                      <b>{number(sourceOutside.sin_maestro)}</b>
+                      <small>Requieren conciliación si son diferentes de cero</small>
+                    </article>
+                  </div>
+                  <p>
+                    Este es un consolidado <strong>mensual</strong> de estados observados, no un cierre semanal.
+                    La fuente no informa la fecha efectiva en que se ejecutó cada OT.
+                    Las actividades OPERACIÓN están excluidas.
+                  </p>
+                  <div className="v2-table-wrap weekly-tracking-unplanned-table">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>OT</th>
+                          <th>Área</th>
+                          <th>Código de equipo</th>
+                          <th>Plan de trabajo</th>
+                          <th>Origen</th>
+                          <th>Estado en Google</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(showAllSourceOutside ? sourceOutside.rows : sourceOutside.rows.slice(0,20)).map((item) => (
+                          <tr key={item.numero_ot}>
+                            <td><b>{item.numero_ot}</b></td>
+                            <td>{item.area_codigo || "—"}</td>
+                            <td>{item.activo_codigo || "—"}</td>
+                            <td><span className="v2-plan">{item.plan_trabajo || "—"}</span></td>
+                            <td>
+                              {item.es_backlog ? (
+                                <Badge tone="backlog">BACKLOG</Badge>
+                              ) : item.periodo_origen ? (
+                                <Badge>OT del mes</Badge>
+                              ) : (
+                                <Badge tone="warn">Sin maestro</Badge>
+                              )}
+                              {item.periodo_origen && item.periodo_origen !== sourceOutside.periodo && (
+                                <small>Origen: {item.periodo_origen}</small>
+                              )}
+                            </td>
+                            <td><Badge tone="ok">FINALIZADA</Badge></td>
+                          </tr>
+                        ))}
+                        {!sourceOutside.rows.length && (
+                          <tr><td colSpan="6" className="v2-empty">No hay OT finalizadas fuera de la programación para esta especialidad y mes.</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  {sourceOutside.rows.length > 20 && (
+                    <button type="button" onClick={() => setShowAllSourceOutside(!showAllSourceOutside)}>
+                      {showAllSourceOutside ? "Mostrar solo primeras 20" : `Mostrar todas las ${number(sourceOutside.rows.length)} OT`}
+                    </button>
+                  )}
+                  {sourceOutside.recortado && (
+                    <p className="v2-warning">La lista está limitada a {number(sourceOutside.limite)} OT; el total corresponde a todas las órdenes detectadas.</p>
+                  )}
+                </>
+              ) : (
+                <p className="v2-empty">No se ha cargado el reporte de Google Sheets.</p>
+              )}
+            </section>
+          )}
 
           <section className="v2-panel weekly-tracking-area-progress">
             <div className="v2-section-head">
