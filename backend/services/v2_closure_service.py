@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from datetime import date, datetime, timezone
+from io import BytesIO
 from typing import Any
+
+from openpyxl import Workbook
 
 from sqlalchemy import text
 
@@ -151,6 +155,131 @@ def _effective_closure_state(
         "comment": saved_manual.get("comentario"),
         "discrepancy": bool(excel_category and excel_category != manual_state),
     }
+
+
+def _api_closure_calendar(programming_id: int) -> tuple[bytes, dict[str, Any]]:
+    """In-memory equivalent of Lista de Calendario sourced from synchronized data.
+
+    Only the exact current-month Google snapshot is authoritative; a prior
+    month is accepted exclusively when a historical-finalization evidence row
+    exists for the programmed item. No invented completion dates or states.
+    """
+    with get_engine().connect() as conn:
+        week = conn.execute(text("""
+            SELECT ps.id,ps.semana_inicio,ps.semana_fin,ps.especialidad,ps.estado
+            FROM programacion.programacion_semanal_v2 ps WHERE ps.id=:id
+        """), {"id":programming_id}).mappings().first()
+        if not week:
+            raise V2ClosureError("Programación semanal no encontrada.")
+        if week["estado"] == "CERRADA":
+            raise V2ClosureError("Esta semana ya está cerrada; se conserva su cierre original.")
+        if week["semana_fin"] > datetime.now(timezone.utc).date():
+            raise V2ClosureError("Esta semana aún no ha terminado; no se puede cerrar por API.")
+        period=week["semana_inicio"].replace(day=1)
+        last_run=conn.execute(text("""
+            SELECT id,terminado_en FROM programacion.google_sheet_sync_run_v2
+            WHERE periodo=:period AND estado='COMPLETADA'
+            ORDER BY terminado_en DESC NULLS LAST,id DESC LIMIT 1
+        """), {"period":period}).mappings().first()
+        if not last_run or last_run["terminado_en"] is None:
+            raise V2ClosureError("Antes de cerrar, sincroniza BASE DE DATOS de Google Sheets.")
+        rows=conn.execute(text("""
+            SELECT pi.id AS programacion_item_id,
+                   upper(btrim(COALESCE(o.numero_ot,''))) AS numero_ot,
+                   a.codigo AS activo_codigo,o.plan_clave_software,
+                   gs.estado AS fuente_estado,gs.activo_codigo AS fuente_activo,
+                   gs.plan_trabajo AS fuente_plan,gs.es_operacion AS fuente_operacion,
+                   (
+                     SELECT si.estado_calendario
+                     FROM programacion.seguimiento_semanal_item_v2 si
+                     JOIN programacion.seguimiento_semanal_v2 ss ON ss.id=si.seguimiento_id
+                     WHERE si.programacion_item_id=pi.id AND ss.programacion_id=:id
+                       AND si.coincidencia='GOOGLE_SHEETS_HISTORICO'
+                       AND upper(btrim(COALESCE(si.estado_calendario,'')))='FINALIZADA'
+                     ORDER BY ss.registrado_en DESC,ss.id DESC LIMIT 1
+                   ) AS historico_finalizada
+            FROM programacion.programacion_item_v2 pi
+            JOIN programacion.orden_mantenimiento o ON o.id=pi.orden_mantenimiento_id
+            JOIN programacion.activo a ON a.id=o.activo_id
+            LEFT JOIN programacion.google_sheet_ot_estado_v2 gs
+              ON gs.periodo=:period
+             AND gs.numero_ot=upper(btrim(o.numero_ot))
+            WHERE pi.programacion_id=:id
+            ORDER BY pi.id
+        """), {"id":programming_id,"period":period}).mappings().all()
+    if not rows:
+        raise V2ClosureError("La semana no contiene órdenes programadas.")
+    document=Workbook()
+    tab=document.active
+    tab.title="API Google Sheets"
+    tab.append(["Orden","Activo","PlanTrabajo","Estado"])
+    sources=0
+    histories=0
+    missing=0
+    excluded=[]
+    for row in rows:
+        if row["fuente_operacion"]:
+            excluded.append(row["numero_ot"])
+            continue
+        if row["fuente_estado"]:
+            tab.append([row["numero_ot"],row["fuente_activo"],
+                        row["fuente_plan"],row["fuente_estado"]])
+            sources+=1
+        elif row["historico_finalizada"]:
+            tab.append([row["numero_ot"],row["activo_codigo"],
+                        row["plan_clave_software"],"FINALIZADA"])
+            histories+=1
+        else:
+            missing+=1
+    if excluded:
+        raise V2ClosureError(
+            "Estas OT siguen clasificadas como OPERACIÓN en BASE DE DATOS: "
+            + ", ".join(excluded[:12]) +
+            ". Retíralas de la programación antes de confirmar el cierre."
+        )
+    buffer=BytesIO()
+    document.save(buffer)
+    return buffer.getvalue(),{
+        "source":"GOOGLE_SHEETS_API","sync_id":int(last_run["id"]),
+        "sync_at":last_run["terminado_en"].isoformat(),
+        "from_month":sources,"historic_finalized":histories,
+        "not_in_source":missing,"programmed":len(rows),
+    }
+
+
+def preview_week_closure_from_api(*, programming_id: int) -> dict[str, Any]:
+    content,source=_api_closure_calendar(programming_id)
+    result=preview_week_closure(programming_id=programming_id,content=content)
+    result["api_source"]=source
+    return result
+
+
+def close_week_from_api(*, programming_id: int, expected_sync_id: int,
+                        accept_missing: bool = False,
+                        manual_resolutions: list[dict[str, Any]] | None = None,
+                        closed_by: str | None = None) -> dict[str, Any]:
+    content,source=_api_closure_calendar(programming_id)
+    if source["sync_id"]!=expected_sync_id:
+        raise V2ClosureError(
+            "La fuente cambió después de la vista previa. Vuelve a comparar antes de confirmar."
+        )
+    preview=preview_week_closure(programming_id=programming_id,content=content)
+    summary=preview["summary"]
+    if summary["conflicts"] or summary["blank_states"]:
+        raise V2ClosureError("Existen discrepancias de OT, equipo, plan o estados vacíos. Revisa la vista previa antes de cerrar.")
+    no_ot=[r for r in preview["rows"] if r["coincidencia"]=="SIN_NUMERO_OT" and not r["estado_manual"]]
+    resolved={int(r.get("orden_mantenimiento_id")) for r in (manual_resolutions or []) if r.get("orden_mantenimiento_id")}
+    if any(int(row["orden_mantenimiento_id"]) not in resolved for row in no_ot):
+        raise V2ClosureError("Existen actividades sin número OT que requieren resolución manual.")
+    if summary["missing"] > 0 and not accept_missing:
+        raise V2ClosureError("Autoriza expresamente las OT sin coincidencia para conservarlas como backlog.")
+    result=close_week_from_calendar(
+        programming_id=programming_id,content=content,
+        filename="GOOGLE_SHEETS_API",closed_by=closed_by,
+        manual_resolutions=manual_resolutions,
+    )
+    result["api_source"]=source
+    return result
 
 
 def preview_week_closure(*, programming_id: int, content: bytes) -> dict[str, Any]:
