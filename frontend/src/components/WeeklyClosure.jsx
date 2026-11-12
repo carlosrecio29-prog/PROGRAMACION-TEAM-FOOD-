@@ -250,7 +250,7 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
       });
       const result = previewMode === "api"
         ? await closeV2WeekFromApi(
-            id, Number(preview.api_source?.sync_id), acceptMissing, resolutions
+            id, Number(preview.api_source?.sync_id), String(preview.api_source?.fingerprint || ""), acceptMissing, resolutions
           )
         : await uploadV2WeekClosure(id, file, "", resolutions);
       setClosure(result);
@@ -474,6 +474,8 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
                     {" · "}{number(preview.api_source?.historic_finalized)} finalizaciones históricas verificadas
                     {" · "}{number(preview.api_source?.not_in_source)} sin validación en la fuente.
                     No se han cambiado órdenes ni se ha cerrado la semana.
+                    Si acabas de modificar la programación, sincroniza Google Sheets antes de comparar;
+                    las OT sin evidencia histórica verificada se mostrarán como no encontradas.
                   </div>
                 )}
                 <p><b>{preview.summary?.programmed}</b> OT programadas · <b>{preview.summary?.finalized}</b> finalizadas ·
