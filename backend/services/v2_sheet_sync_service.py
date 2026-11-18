@@ -932,6 +932,144 @@ def sync_month(*, year: int, month: int, trigger: str,
         raise SheetSyncError("No se completó la sincronización; no se aplicaron cambios parciales.") from exc
 
 
+def weekly_finalized_outside_programming(*, year: int, month: int,
+                                         specialty: str, week_start: date,
+                                         week_end: date) -> dict[str, Any]:
+    """Read-only first-detected FINALIZADA changes outside the selected week.
+
+    These are timestamps of *Google Apps Script detection*, not physical
+    execution dates. Never rewrite older closures or assign an execution date.
+    Only source OT still FINALIZADA and not OPERACIÓN are considered.
+    """
+    if not (2026 <= year <= 2100 and 1 <= month <= 12):
+        raise SheetSyncError("Período inválido.")
+    spec = (specialty or "").strip().upper()
+    if spec not in SPECIALTIES:
+        raise SheetSyncError("Especialidad inválida.")
+    period = date(year, month, 1)
+    if (week_start.year != year or week_start.month != month
+            or week_end < week_start
+            or (week_end - week_start).days > 6):
+        raise SheetSyncError("El rango seleccionado no corresponde a una semana de ese mes.")
+    if period < date(2026, 11, 1):
+        return {"periodo":str(period), "especialidad":spec,
+                "semana_inicio":str(week_start), "semana_fin":str(week_end),
+                "total":0, "fuera_del_mes":0, "programadas_otra_semana":0,
+                "linea_base":0, "rows":[], "fuente":"SIN_HISTORIAL"}
+    sql = text("""
+      WITH primeras_finalizaciones AS (
+        -- One and only one detection date per OT in this month; later
+        -- repeated syncs must not inflate week totals.
+        SELECT DISTINCT ON (c.numero_ot)
+          c.numero_ot,
+          COALESCE(r.terminado_en,r.iniciado_en) AS detectado_en,
+          c.estado_anterior, r.id AS sincronizacion_id
+        FROM programacion.google_sheet_sync_cambio_v2 c
+        JOIN programacion.google_sheet_sync_run_v2 r
+          ON r.id=c.sincronizacion_id
+        WHERE c.periodo=:period AND r.periodo=:period
+          AND r.estado='COMPLETADA'
+          AND c.accion='OBSERVACION_ORIGEN'
+          AND c.estado_nuevo='FINALIZADA'
+        ORDER BY c.numero_ot,
+                 COALESCE(r.terminado_en,r.iniciado_en), c.id
+      ),
+      fuente AS (
+        SELECT pf.numero_ot,pf.detectado_en,pf.estado_anterior,
+               pf.sincronizacion_id,
+               gs.plan_trabajo,gs.activo_codigo,
+               o.periodo AS periodo_origen,a.area_codigo,
+               EXISTS (
+                 SELECT 1 FROM programacion.programacion_item_v2 pi
+                 JOIN programacion.programacion_semanal_v2 ps
+                   ON ps.id=pi.programacion_id
+                 JOIN programacion.orden_mantenimiento po
+                   ON po.id=pi.orden_mantenimiento_id
+                 WHERE ps.especialidad=:spec
+                   AND ps.semana_inicio=:week_start
+                   AND ps.semana_fin=:week_end
+                   AND upper(btrim(po.numero_ot))=pf.numero_ot
+               ) AS programada_esta_semana,
+               EXISTS (
+                 SELECT 1 FROM programacion.programacion_item_v2 pi
+                 JOIN programacion.programacion_semanal_v2 ps
+                   ON ps.id=pi.programacion_id
+                 JOIN programacion.orden_mantenimiento po
+                   ON po.id=pi.orden_mantenimiento_id
+                 WHERE ps.especialidad=:spec
+                   AND ps.semana_inicio>=:period
+                   AND ps.semana_inicio<(:period + INTERVAL '1 month')
+                   AND upper(btrim(po.numero_ot))=pf.numero_ot
+               ) AS programada_en_el_mes
+        FROM primeras_finalizaciones pf
+        JOIN programacion.google_sheet_ot_estado_v2 gs
+          ON gs.numero_ot=pf.numero_ot
+         AND gs.periodo=:period AND gs.especialidad=:spec
+        LEFT JOIN LATERAL (
+          SELECT o2.id,o2.periodo,o2.activo_id
+          FROM programacion.orden_mantenimiento o2
+          WHERE upper(btrim(o2.numero_ot))=pf.numero_ot
+          ORDER BY (o2.periodo=:period) DESC,o2.periodo DESC,o2.id DESC
+          LIMIT 1
+        ) o ON TRUE
+        LEFT JOIN programacion.activo a ON a.id=o.activo_id
+        WHERE gs.estado='FINALIZADA' AND gs.es_operacion=FALSE
+          AND (pf.detectado_en AT TIME ZONE 'America/Bogota')::date
+                BETWEEN :week_start AND :week_end
+      )
+      SELECT numero_ot,detectado_en,estado_anterior,sincronizacion_id,
+             plan_trabajo,activo_codigo,periodo_origen,area_codigo,
+             programada_en_el_mes,
+             count(*) OVER()::int AS total_fuera_semana
+      FROM fuente
+      WHERE NOT programada_esta_semana
+      ORDER BY detectado_en DESC,numero_ot
+      LIMIT 2000
+    """)
+    with get_engine().connect() as conn:
+        raw = [dict(row) for row in conn.execute(sql, {
+            "period":period,"spec":spec,
+            "week_start":week_start,"week_end":week_end,
+        }).mappings()]
+    total = int(raw[0]["total_fuera_semana"]) if raw else 0
+    rows=[]
+    month_outside=0
+    baseline=0
+    for item in raw:
+        elsewhere=bool(item["programada_en_el_mes"])
+        month_outside+=int(not elsewhere)
+        baseline+=int(item["estado_anterior"] is None)
+        detected=item["detectado_en"]
+        rows.append({
+            "numero_ot":item["numero_ot"],
+            "detectado_en":detected.isoformat() if detected else None,
+            "estado_anterior":item["estado_anterior"],
+            "sincronizacion_id":item["sincronizacion_id"],
+            "plan_trabajo":item["plan_trabajo"],
+            "activo_codigo":item["activo_codigo"],
+            "area_codigo":item["area_codigo"],
+            "periodo_origen":(
+                item["periodo_origen"].isoformat()
+                if item["periodo_origen"] else None
+            ),
+            "clasificacion":(
+                "PROGRAMADA_OTRA_SEMANA" if elsewhere
+                else "FUERA_PROGRAMACION_MES"
+            ),
+            "primera_observacion":item["estado_anterior"] is None,
+        })
+    return {
+        "periodo":str(period),"especialidad":spec,
+        "semana_inicio":str(week_start),"semana_fin":str(week_end),
+        "total":total,"fuera_del_mes":month_outside,
+        "programadas_otra_semana":len(raw)-month_outside,
+        "linea_base":baseline,
+        "recortado":total>len(rows),"limite":2000,"rows":rows,
+        "fuente":"CAMBIOS_GOOGLE_SHEETS",
+        "criterio":"Primera sincronización que detectó FINALIZADA durante la semana seleccionada; no indica fecha real de ejecución.",
+    }
+
+
 def finalized_outside_monthly_programming(*, year: int, month: int,
                                         specialty: str) -> dict[str, Any]:
     """Read-only list of Sheets-finalized OT absent from the month's scheduled OT.

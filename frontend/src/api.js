@@ -260,6 +260,13 @@ export async function bootstrapV2Backlog(file, year, month, movedBy = "") {
   }));
 }
 
+export async function getWeeklyOutsideFinalizations(year, month, specialty, weekStart, weekEnd) {
+  const qs = new URLSearchParams({
+    year, month, specialty, week_start: weekStart, week_end: weekEnd,
+  });
+  return check(await fetch(`/api/v2/sheet-sync/outside-programming-week?${qs}`, {cache: "no-store"}));
+}
+
 export async function getSheetFinalizedOutsideProgramming(year, month, specialty) {
   const qs = new URLSearchParams({year, month, specialty});
   return check(await fetch(`/api/v2/sheet-sync/outside-programming?${qs}`, {cache: "no-store"}));
