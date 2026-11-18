@@ -9,6 +9,7 @@ import {
   saveV2ManualTrackingStatus,
   getSheetSyncStatus,
   getSheetFinalizedOutsideProgramming,
+  getWeeklyOutsideFinalizations,
   checkSheetSyncConnection,
   syncGoogleSheetNow,
 } from "../api";
@@ -84,6 +85,10 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
   const [sourceOutsideLoading, setSourceOutsideLoading] = useState(false);
   const [sourceOutsideError, setSourceOutsideError] = useState("");
   const [showAllSourceOutside, setShowAllSourceOutside] = useState(false);
+  const [weeklyOutside, setWeeklyOutside] = useState(null);
+  const [weeklyOutsideLoading, setWeeklyOutsideLoading] = useState(false);
+  const [weeklyOutsideError, setWeeklyOutsideError] = useState("");
+  const [showAllWeeklyOutside, setShowAllWeeklyOutside] = useState(false);
 
   const week = weeks[Math.min(weekIndex, weeks.length - 1)] || weeks[0];
 
@@ -152,6 +157,30 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
       .finally(() => { if (!cancelled) setSourceOutsideLoading(false); });
     return () => { cancelled = true; };
   }, [year, month, specialty, accessRole, sheetSync?.ultima?.id]);
+
+  // A dated audit of source status changes for the selected operational week.
+  // Never confuse the detection date with the actual date a technician worked.
+  useEffect(() => {
+    let cancelled = false;
+    setWeeklyOutside(null);
+    setWeeklyOutsideError("");
+    setShowAllWeeklyOutside(false);
+    if (accessRole !== "admin" || !week?.from || !week?.to ||
+        year < 2026 || (year === 2026 && month < 11)) {
+      setWeeklyOutsideLoading(false);
+      return () => { cancelled = true; };
+    }
+    setWeeklyOutsideLoading(true);
+    getWeeklyOutsideFinalizations(year, month, specialty, week.from, week.to)
+      .then(result => { if (!cancelled) setWeeklyOutside(result); })
+      .catch(cause => {
+        if (!cancelled) setWeeklyOutsideError(
+          cause.message || "No se pudieron consultar las OT finalizadas detectadas en esta semana."
+        );
+      })
+      .finally(() => { if (!cancelled) setWeeklyOutsideLoading(false); });
+    return () => { cancelled = true; };
+  }, [year, month, specialty, week?.from, week?.to, accessRole, sheetSync?.ultima?.id]);
 
   async function checkSheetConnection() {
     try {
@@ -678,6 +707,110 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
               </div>
             )}
           </section>
+
+          {accessRole === "admin" && year >= 2026 && !(year === 2026 && month < 11) && (
+            <section className="v2-panel" aria-label="Finalizaciones fuera de programación detectadas en la semana seleccionada">
+              <div className="v2-section-head">
+                <div>
+                  <span className="v2-kicker">SEGUIMIENTO SEMANAL · OT NO PROGRAMADAS</span>
+                  <h3>Finalizadas fuera de programación · Semana {week?.weekNumber || "de transición"}</h3>
+                  <p>
+                    {week?.from} al {week?.to} · {SPEC_NAMES[specialty]}.
+                    Se contabiliza la primera sincronización que detectó el cambio a FINALIZADA,
+                    siempre que la OT no esté programada en esta semana. No se suma al cumplimiento
+                    de las OT programadas ni modifica cierres oficiales.
+                  </p>
+                </div>
+                {weeklyOutside && <Badge tone="ok">{number(weeklyOutside.total)} OT detectadas</Badge>}
+              </div>
+              {weeklyOutsideLoading ? (
+                <p className="v2-empty">Revisando las finalizaciones detectadas durante esta semana…</p>
+              ) : weeklyOutsideError ? (
+                <p className="v2-warning">{weeklyOutsideError}</p>
+              ) : weeklyOutside ? (
+                <>
+                  <div className="weekly-tracking-unplanned-kpis">
+                    <article className="ok">
+                      <span>Finalizadas fuera de esta semana</span>
+                      <b>{number(weeklyOutside.total)}</b>
+                      <small>Detectadas entre {week?.from} y {week?.to}</small>
+                    </article>
+                    <article>
+                      <span>Fuera de todo el mes</span>
+                      <b>{number(weeklyOutside.fuera_del_mes)}</b>
+                      <small>No programadas en ninguna semana del mes</small>
+                    </article>
+                    <article>
+                      <span>Programadas otra semana</span>
+                      <b>{number(weeklyOutside.programadas_otra_semana)}</b>
+                      <small>Son externas a esta semana, pero no al mes</small>
+                    </article>
+                  </div>
+                  <p>
+                    <strong>Criterio de fecha:</strong> semana en que Google Sheets comunicó por
+                    primera vez el estado FINALIZADA a la aplicación. No se dispone de la fecha
+                    efectiva de ejecución del trabajo. Las OT OPERACIÓN quedan excluidas.
+                    {number(weeklyOutside.linea_base) > 0 &&
+                      ` ${number(weeklyOutside.linea_base)} OT ya estaban finalizadas en la primera lectura de la fuente.`}
+                  </p>
+                  <div className="v2-table-wrap weekly-tracking-unplanned-table">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>OT</th>
+                          <th>Detección en sincronización</th>
+                          <th>Clasificación</th>
+                          <th>Área</th>
+                          <th>Equipo</th>
+                          <th>Plan de trabajo</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(showAllWeeklyOutside ? weeklyOutside.rows : weeklyOutside.rows.slice(0,20)).map(item => (
+                          <tr key={item.numero_ot}>
+                            <td><b>{item.numero_ot}</b></td>
+                            <td>
+                              {when(item.detectado_en)}
+                              {item.primera_observacion && <small>Ya finalizada en primera lectura</small>}
+                            </td>
+                            <td>
+                              <Badge tone={item.clasificacion === "PROGRAMADA_OTRA_SEMANA" ? "warn" : "ok"}>
+                                {item.clasificacion === "PROGRAMADA_OTRA_SEMANA"
+                                  ? "PROGRAMADA OTRA SEMANA"
+                                  : "FUERA DE TODO EL MES"}
+                              </Badge>
+                            </td>
+                            <td>{item.area_codigo || "—"}</td>
+                            <td>{item.activo_codigo || "—"}</td>
+                            <td><span className="v2-plan">{item.plan_trabajo || "—"}</span></td>
+                          </tr>
+                        ))}
+                        {!weeklyOutside.rows.length && (
+                          <tr><td colSpan="6" className="v2-empty">
+                            No se detectaron finalizaciones fuera de la programación de esta semana.
+                          </td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  {weeklyOutside.rows.length > 20 && (
+                    <button type="button" onClick={() => setShowAllWeeklyOutside(!showAllWeeklyOutside)}>
+                      {showAllWeeklyOutside ? "Mostrar primeras 20"
+                        : `Mostrar todas las ${number(weeklyOutside.rows.length)} OT`}
+                    </button>
+                  )}
+                  {weeklyOutside.recortado && (
+                    <p className="v2-warning">
+                      Se muestran hasta {number(weeklyOutside.limite)} OT.
+                      El total incluye todas las detectadas.
+                    </p>
+                  )}
+                </>
+              ) : (
+                <p className="v2-empty">No se ha consultado el historial de cambios de la semana.</p>
+              )}
+            </section>
+          )}
 
           {accessRole === "admin" && year >= 2026 && !(year === 2026 && month < 11) && (
             <section className="v2-panel" aria-label="OT finalizadas fuera de la programación desde Google Sheets">
