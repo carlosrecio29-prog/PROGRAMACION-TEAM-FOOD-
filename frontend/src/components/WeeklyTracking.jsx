@@ -721,7 +721,6 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
                     de las OT programadas ni modifica cierres oficiales.
                   </p>
                 </div>
-                {weeklyOutside && <Badge tone="ok">{number(weeklyOutside.total)} OT detectadas</Badge>}
               </div>
               {weeklyOutsideLoading ? (
                 <p className="v2-empty">Revisando las finalizaciones detectadas durante esta semana…</p>
@@ -731,25 +730,16 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
                 <>
                   <div className="weekly-tracking-unplanned-kpis">
                     <article className="ok">
-                      <span>Finalizadas fuera de esta semana</span>
+                      <span>OT finalizadas fuera de la programación de esta semana</span>
                       <b>{number(weeklyOutside.total)}</b>
                       <small>Detectadas entre {week?.from} y {week?.to}</small>
                     </article>
-                    <article>
-                      <span>Fuera de todo el mes</span>
-                      <b>{number(weeklyOutside.fuera_del_mes)}</b>
-                      <small>No programadas en ninguna semana del mes</small>
-                    </article>
-                    <article>
-                      <span>Programadas otra semana</span>
-                      <b>{number(weeklyOutside.programadas_otra_semana)}</b>
-                      <small>Son externas a esta semana, pero no al mes</small>
-                    </article>
                   </div>
                   <p>
-                    <strong>Criterio de fecha:</strong> semana en que Google Sheets comunicó por
-                    primera vez el estado FINALIZADA a la aplicación. No se dispone de la fecha
-                    efectiva de ejecución del trabajo. Las OT OPERACIÓN quedan excluidas.
+                    <strong>Criterio de fecha:</strong> se usa la semana en la que Google Sheets
+                    comunicó por primera vez el estado FINALIZADA, no necesariamente la fecha
+                    real de ejecución. La columna de programación consulta el historial completo
+                    registrado en CEK Global MTTO. Las OT OPERACIÓN quedan excluidas.
                     {number(weeklyOutside.linea_base) > 0 &&
                       ` ${number(weeklyOutside.linea_base)} OT ya estaban finalizadas en la primera lectura de la fuente.`}
                   </p>
@@ -759,7 +749,7 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
                         <tr>
                           <th>OT</th>
                           <th>Detección en sincronización</th>
-                          <th>Clasificación</th>
+                          <th>¿Fue programada alguna vez?</th>
                           <th>Área</th>
                           <th>Equipo</th>
                           <th>Plan de trabajo</th>
@@ -774,11 +764,14 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
                               {item.primera_observacion && <small>Ya finalizada en primera lectura</small>}
                             </td>
                             <td>
-                              <Badge tone={item.clasificacion === "PROGRAMADA_OTRA_SEMANA" ? "warn" : "ok"}>
-                                {item.clasificacion === "PROGRAMADA_OTRA_SEMANA"
-                                  ? "PROGRAMADA OTRA SEMANA"
-                                  : "FUERA DE TODO EL MES"}
-                              </Badge>
+                              {item.programada_alguna_vez ? (
+                                <>
+                                  <Badge tone="warn">SÍ · OTRA SEMANA</Badge>
+                                  <small>Primera programación: {item.primera_semana_programada || "—"}</small>
+                                </>
+                              ) : (
+                                <Badge tone="ok">NO · SIN PROGRAMACIÓN REGISTRADA</Badge>
+                              )}
                             </td>
                             <td>{item.area_codigo || "—"}</td>
                             <td>{item.activo_codigo || "—"}</td>

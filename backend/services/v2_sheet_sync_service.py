@@ -979,6 +979,7 @@ def weekly_finalized_outside_programming(*, year: int, month: int,
                pf.sincronizacion_id,
                gs.plan_trabajo,gs.activo_codigo,
                o.periodo AS periodo_origen,a.area_codigo,
+               first_schedule.primera_semana_programada,
                EXISTS (
                  SELECT 1 FROM programacion.programacion_item_v2 pi
                  JOIN programacion.programacion_semanal_v2 ps
@@ -1013,13 +1014,22 @@ def weekly_finalized_outside_programming(*, year: int, month: int,
           LIMIT 1
         ) o ON TRUE
         LEFT JOIN programacion.activo a ON a.id=o.activo_id
+        LEFT JOIN LATERAL (
+          SELECT MIN(ps.semana_inicio) AS primera_semana_programada
+          FROM programacion.programacion_item_v2 pi
+          JOIN programacion.programacion_semanal_v2 ps
+            ON ps.id=pi.programacion_id
+          JOIN programacion.orden_mantenimiento po
+            ON po.id=pi.orden_mantenimiento_id
+          WHERE upper(btrim(po.numero_ot))=pf.numero_ot
+        ) first_schedule ON TRUE
         WHERE gs.estado='FINALIZADA' AND gs.es_operacion=FALSE
           AND (pf.detectado_en AT TIME ZONE 'America/Bogota')::date
                 BETWEEN :week_start AND :week_end
       )
       SELECT numero_ot,detectado_en,estado_anterior,sincronizacion_id,
              plan_trabajo,activo_codigo,periodo_origen,area_codigo,
-             programada_en_el_mes,
+             programada_en_el_mes,primera_semana_programada,
              count(*) OVER()::int AS total_fuera_semana
       FROM fuente
       WHERE NOT programada_esta_semana
@@ -1048,6 +1058,11 @@ def weekly_finalized_outside_programming(*, year: int, month: int,
             "plan_trabajo":item["plan_trabajo"],
             "activo_codigo":item["activo_codigo"],
             "area_codigo":item["area_codigo"],
+            "programada_alguna_vez":item["primera_semana_programada"] is not None,
+            "primera_semana_programada":(
+                item["primera_semana_programada"].isoformat()
+                if item["primera_semana_programada"] else None
+            ),
             "periodo_origen":(
                 item["periodo_origen"].isoformat()
                 if item["periodo_origen"] else None
