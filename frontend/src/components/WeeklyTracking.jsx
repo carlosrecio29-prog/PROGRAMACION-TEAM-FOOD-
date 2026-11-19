@@ -132,8 +132,41 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
   useEffect(() => {
     setSheetProbe(null);
     loadMonthlyProgress();
-    loadSheetSyncStatus();
   }, [year, month, accessRole]);
+
+  // Mantener visible la comprobación más reciente incluso si la app permanece
+  // abierta y una sincronización automática no genera una nueva fotografía.
+  // No escribimos datos ni duplicamos el historial de avances.
+  useEffect(() => {
+    if (accessRole !== "admin") return;
+    let active = true;
+    let previousCompletedRunId = null;
+
+    async function refreshStatus() {
+      try {
+        const status = await getSheetSyncStatus(year, month);
+        if (!active) return;
+        const completed = (status?.historial || []).find(row => row.estado === "COMPLETADA");
+        const runId = completed?.id ?? null;
+        const newCompletedSync = previousCompletedRunId !== null &&
+          runId !== null && runId !== previousCompletedRunId;
+        previousCompletedRunId = runId;
+        setSheetSync(status);
+        if (newCompletedSync) {
+          await Promise.all([load(), loadMonthlyProgress()]);
+        }
+      } catch {
+        if (active) setSheetSync(previous => previous || {
+          configurado: false,
+          error: "No fue posible comprobar la última sincronización.",
+        });
+      }
+    }
+
+    refreshStatus();
+    const timer = setInterval(refreshStatus, 45000);
+    return () => {active = false; clearInterval(timer);};
+  }, [year, month, specialty, week?.from, week?.to, accessRole]);
 
   // A dated audit of source status changes for the selected operational week.
   // Never confuse the detection date with the actual date a technician worked.
@@ -266,6 +299,11 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
   const id = programming?.programming?.id;
   const closed = programming?.programming?.estado === "CERRADA";
   const latest = tracking?.latest;
+  const lastCompletedSync = (sheetSync?.historial || []).find(row => row.estado === "COMPLETADA");
+  const lastSourceCheckAt = lastCompletedSync?.terminado_en || lastCompletedSync?.iniciado_en;
+  const snapshotAt = latest?.registrado_en;
+  const checkedSinceLastChange = !closed && lastSourceCheckAt && snapshotAt &&
+    new Date(lastSourceCheckAt).getTime() > new Date(snapshotAt).getTime();
   const programmed = latest ? number(latest.total_items) : number(tracking?.rows?.length, programming?.selected_ids?.length || 0);
   const finalized = number(latest?.finalizados);
   const remaining = number(latest?.pendientes);
@@ -856,10 +894,30 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
                 <span className="v2-kicker">HISTORIAL DE CARGAS</span>
                 <h3>Evolución de la semana</h3>
                 <p>
-                  Cada fila representa una fotografía de avance semanal. Si una sincronización de Google Sheets
-                  no cambia ningún estado, se conserva la fotografía anterior para no duplicar H-H ni porcentajes.
-                  Todas las sincronizaciones, incluso sin novedades, se registran en la bitácora inferior.
+                  Cada fila representa una fotografía del avance de esta especialidad.
+                  Las sincronizaciones sin cambios no crean fotografías duplicadas.
+                  La bitácora inferior registra todas las sincronizaciones del mes.
                 </p>
+                {latest && (
+                  <p>
+                    <strong>Estado actual: {number(finalized)} de {number(programmed)} OT finalizadas
+                    {" · "}{fmt(otPct)}% de cumplimiento.</strong>
+                    {" "}Último cambio de avance: {when(snapshotAt)}.
+                    {closed ? (
+                      <> Semana cerrada: se conserva la información aprobada.</>
+                    ) : lastSourceCheckAt ? (
+                      <>
+                        {" "}Última comprobación de BASE DE DATOS: {when(lastSourceCheckAt)}.
+                        {checkedSinceLastChange && (
+                          <> Desde el último cambio del seguimiento no se registraron nuevas variaciones
+                          en las OT programadas de esta especialidad.</>
+                        )}
+                      </>
+                    ) : (
+                      <> Sin comprobación reciente de Google Sheets disponible.</>
+                    )}
+                  </p>
+                )}
               </div>
               <button type="button" className="weekly-tracking-close-link" onClick={onOpenClosure}>
                 Ir a Cierre semanal →
