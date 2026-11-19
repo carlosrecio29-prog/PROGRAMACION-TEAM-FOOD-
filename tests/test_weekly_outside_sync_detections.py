@@ -30,6 +30,7 @@ def test_weekly_outside_programming_counts_unique_first_detection(monkeypatch):
             assert "c.estado_nuevo='FINALIZADA'" in query
             assert "gs.es_operacion=FALSE" in query
             assert "WHERE NOT programada_esta_semana" in query
+            assert "MIN(ps.semana_inicio) AS primera_semana_programada" in query
             assert "COALESCE(r.terminado_en,r.iniciado_en)" in query
             assert "AT TIME ZONE 'America/Bogota'" in query
             assert "UPDATE " not in query and "INSERT " not in query
@@ -50,6 +51,7 @@ def test_weekly_outside_programming_counts_unique_first_detection(monkeypatch):
                     "periodo_origen": date(2026, 11, 1),
                     "area_codigo": "SI",
                     "programada_en_el_mes": False,
+                    "primera_semana_programada": None,
                     "total_fuera_semana": 2,
                 },
                 {
@@ -62,6 +64,7 @@ def test_weekly_outside_programming_counts_unique_first_detection(monkeypatch):
                     "periodo_origen": date(2026, 10, 1),
                     "area_codigo": "SI",
                     "programada_en_el_mes": True,
+                    "primera_semana_programada": date(2026,11,5),
                     "total_fuera_semana": 2,
                 },
             ])
@@ -89,6 +92,10 @@ def test_weekly_outside_programming_counts_unique_first_detection(monkeypatch):
     assert result["rows"][0]["clasificacion"] == "FUERA_PROGRAMACION_MES"
     assert result["rows"][1]["clasificacion"] == "PROGRAMADA_OTRA_SEMANA"
     assert result["rows"][0]["detectado_en"] == at.isoformat()
+    assert result["rows"][0]["programada_alguna_vez"] is False
+    assert result["rows"][0]["primera_semana_programada"] is None
+    assert result["rows"][1]["programada_alguna_vez"] is True
+    assert result["rows"][1]["primera_semana_programada"] == "2026-11-05"
     assert len(seen) == 1
 
 
