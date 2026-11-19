@@ -760,9 +760,10 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
                   </div>
                   <p>
                     <strong>Criterio de fecha:</strong> se toma la primera detección del estado
-                    FINALIZADA en Google Sheets y se atribuye a la semana pendiente de cierre.
-                    Una detección posterior al miércoles se incluye si ocurrió antes del cierre
-                    formal; no equivale necesariamente a la fecha real de ejecución.
+                    FINALIZADA en Google Sheets y se atribuye primero a su semana calendario.
+                    Si la detección ocurre después del miércoles, se asigna a la última semana
+                    elegible que siga pendiente de cierre formal. La detección no equivale
+                    necesariamente a la fecha real de ejecución.
                     La columna de programación consulta el historial completo registrado
                     en CEK Global MTTO. Las OT OPERACIÓN quedan excluidas.
                     {number(weeklyOutside.posteriores_al_corte) > 0 &&
