@@ -411,6 +411,53 @@ def get_progress(year: int, month: int) -> dict[str, Any]:
                   )
                 )
             ),
+            source_observed_completed AS (
+              -- La fuente de noviembre puede registrar una finalización de una
+              -- OT heredada sin backlog, o posterior a un cierre PENDIENTE.
+              -- Contar ese estado en el mes NO reescribe cierres anteriores.
+              SELECT
+                o.id AS orden_mantenimiento_id,
+                o.numero_ot,
+                o.especialidad,
+                CASE
+                  WHEN p.numero_personas_efectivo IS NOT NULL
+                   AND COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min) IS NOT NULL
+                  THEN round(
+                    COALESCE(o.tiempo_planeado_min,p.tiempo_ejecucion_min)/60.0
+                    * p.numero_personas_efectivo, 2
+                  )
+                  ELSE NULL
+                END AS hh
+              FROM programacion.google_sheet_ot_estado_v2 gs
+              JOIN LATERAL (
+                SELECT candidate.*
+                FROM programacion.orden_mantenimiento candidate
+                WHERE upper(btrim(candidate.numero_ot))=gs.numero_ot
+                  AND candidate.especialidad=gs.especialidad
+                  AND candidate.periodo<=:begin
+                ORDER BY (candidate.periodo=:begin) DESC,
+                         candidate.periodo DESC,candidate.id DESC
+                LIMIT 1
+              ) o ON TRUE
+              JOIN programacion.plan_trabajo p ON p.id=o.plan_trabajo_id
+              JOIN programacion.activo a ON a.id=o.activo_id
+              WHERE :begin >= DATE '2026-11-01'
+                AND gs.periodo=:begin
+                AND gs.estado='FINALIZADA'
+                AND gs.es_operacion=false
+                AND NOT COALESCE(p.es_operacion,false)
+                AND upper(btrim(COALESCE(o.estado,''))) NOT LIKE 'ANUL%'
+                AND upper(btrim(gs.activo_codigo))=upper(btrim(a.codigo))
+                AND upper(btrim(gs.plan_trabajo))=upper(btrim(o.plan_clave_software))
+                AND NOT EXISTS (
+                  SELECT 1 FROM programacion.programacion_item_v2 pi
+                  JOIN programacion.programacion_semanal_v2 ps
+                    ON ps.id=pi.programacion_id
+                  WHERE pi.orden_mantenimiento_id=o.id
+                    AND ps.estado='CERRADA'
+                    AND COALESCE(pi.anulado,false)=true
+                )
+            ),
             base_universe AS (
               SELECT
                 orden_mantenimiento_id,
@@ -421,6 +468,8 @@ def get_progress(year: int, month: int) -> dict[str, Any]:
                 SELECT * FROM month_pmp
                 UNION ALL
                 SELECT * FROM initial_backlog
+                UNION ALL
+                SELECT * FROM source_observed_completed
               ) u
               GROUP BY orden_mantenimiento_id,especialidad
             ),
@@ -523,6 +572,20 @@ def get_progress(year: int, month: int) -> dict[str, Any]:
                 AND :begin >= DATE '2026-11-01'
                 AND upper(btrim(COALESCE(o.estado,''))) LIKE 'FINALIZ%'
                 AND NOT COALESCE(p.es_operacion,false)
+
+              UNION ALL
+
+              -- Último estado conocido en BASE DE DATOS: finalización
+              -- observada dentro de noviembre. No altera el estado oficial
+              -- de una semana ya CERRADA; se cuenta solo en el mes.
+              SELECT
+                soc.especialidad,
+                soc.orden_mantenimiento_id,
+                soc.numero_ot,
+                soc.hh::numeric,
+                'ESTADO_ORIGEN'::text AS fuente,
+                6 AS prioridad
+              FROM source_observed_completed soc
             ),
             source_backlog_completed AS (
               SELECT o.especialidad,
