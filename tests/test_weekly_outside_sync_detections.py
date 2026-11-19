@@ -36,6 +36,9 @@ def test_weekly_outside_programming_counts_unique_first_detection(monkeypatch):
             assert "semana_responsable" in query
             assert "cierre_formal_en" in query
             assert "w.estado <> 'CERRADA'" in query
+            assert "BETWEEN w.semana_inicio AND w.semana_fin" in query
+            assert "THEN 0 ELSE 1 END" in query
+            assert "w.semana_inicio DESC,w.id DESC" in query
             assert "UPDATE " not in query and "INSERT " not in query
             assert params == {
                 "period": date(2026, 11, 1),
@@ -138,7 +141,9 @@ def test_weekly_outside_includes_next_day_before_formal_close(monkeypatch):
             assert "semana_responsable.semana_inicio=:week_start" in query
             assert "w.estado <> 'CERRADA'" in query
             assert "pf.detectado_en <= w.cierre_formal_en" in query
-            assert "ORDER BY w.semana_inicio,w.id" in query
+            assert "BETWEEN w.semana_inicio AND w.semana_fin" in query
+            assert "THEN 0 ELSE 1 END" in query
+            assert "w.semana_inicio DESC,w.id DESC" in query
             assert params["week_start"] == date(2026, 11, 12)
             assert params["week_end"] == date(2026, 11, 18)
             return Result([{
@@ -177,3 +182,48 @@ def test_weekly_outside_includes_next_day_before_formal_close(monkeypatch):
     assert result["fuera_del_mes"] == 1
     assert result["rows"][0]["numero_ot"] == "OT-15151-26"
     assert result["rows"][0]["programada_alguna_vez"] is False
+
+
+def test_weekly_outside_calendar_priority_prevents_nov12_misattribution(monkeypatch):
+    """Nov 12 belongs to week 2, not week 1 awaiting a same-day close."""
+    first_sync = datetime(2026, 11, 12, 19, 40, tzinfo=timezone.utc)
+
+    class Connection:
+        def execute(self, sql, params):
+            query = str(sql)
+            assert "w.semana_inicio DESC,w.id DESC" in query
+            assert "BETWEEN w.semana_inicio AND w.semana_fin" in query
+            assert "THEN 0 ELSE 1 END" in query
+            assert "pf.detectado_en <= w.cierre_formal_en" in query
+            assert params["spec"] == "MEC"
+            return Result([{
+                "numero_ot": "OT-TEST-MEC",
+                "detectado_en": first_sync,
+                "estado_anterior": "PENDIENTE",
+                "sincronizacion_id": 6,
+                "plan_trabajo": "RUTINA",
+                "activo_codigo": "BA-MEC",
+                "periodo_origen": date(2026, 11, 1),
+                "area_codigo": "BA",
+                "programada_en_el_mes": True,
+                "primera_semana_programada": date(2026, 11, 5),
+                "posterior_al_corte": False,
+                "total_fuera_semana": 1,
+            }])
+
+        def __enter__(self): return self
+        def __exit__(self, *_): return False
+
+    class Engine:
+        def connect(self): return Connection()
+
+    monkeypatch.setattr(service, "get_engine", lambda: Engine())
+    data = service.weekly_finalized_outside_programming(
+        year=2026, month=11, specialty="MEC",
+        week_start=date(2026, 11, 12),
+        week_end=date(2026, 11, 18),
+    )
+    assert data["total"] == 1
+    assert data["posteriores_al_corte"] == 0
+    assert data["programadas_otra_semana"] == 1
+    assert data["rows"][0]["clasificacion"] == "PROGRAMADA_OTRA_SEMANA"
