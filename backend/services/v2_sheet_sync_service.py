@@ -937,10 +937,11 @@ def weekly_finalized_outside_programming(*, year: int, month: int,
                                          week_end: date) -> dict[str, Any]:
     """Read-only first-detected FINALIZADA outside the selected programming.
 
-    The operational week remains eligible until its *formal* close, including
-    detections after the displayed Wednesday cutoff. A completed closure freezes
-    eligibility at its recorded close timestamp. The oldest still-open saved
-    week owns each late detection, preventing duplicate attribution.
+    Detections in a saved calendar week belong to that week, even when the
+    prior week was formally closed later on the same day. Outside the calendar
+    window, detections remain eligible for the most recent week awaiting its
+    formal close. A completed closure freezes eligibility at its timestamp.
+    Exactly one week owns each detection, preventing double attribution.
 
     These timestamps are of Google Apps Script detection, never physical
     execution dates. Never rewrite historical closures or assign work dates.
@@ -1037,9 +1038,10 @@ def weekly_finalized_outside_programming(*, year: int, month: int,
             ON po.id=pi.orden_mantenimiento_id
           WHERE upper(btrim(po.numero_ot))=pf.numero_ot
         ) first_schedule ON TRUE
-        -- Attribution goes to the earliest programming that was still
-        -- awaiting a formal close when the source change was detected.
-        -- This prevents double-counting when multiple weeks are saved.
+        -- Calendar precedence: e.g. a Nov 12 detection belongs to week 2
+        -- (Nov 12-18), even if week 1 closes later on Nov 12.
+        -- After the calendar cutoff, use the most recent unclosed week.
+        -- One OT detection belongs to exactly one selected week.
         LEFT JOIN LATERAL (
           SELECT w.id,w.semana_inicio,w.semana_fin
           FROM semanas w
@@ -1055,7 +1057,11 @@ def weekly_finalized_outside_programming(*, year: int, month: int,
                 OR (w.cierre_formal_en IS NOT NULL
                     AND pf.detectado_en <= w.cierre_formal_en)
             )
-          ORDER BY w.semana_inicio,w.id
+          ORDER BY
+            CASE WHEN (pf.detectado_en AT TIME ZONE 'America/Bogota')::date
+                      BETWEEN w.semana_inicio AND w.semana_fin
+                 THEN 0 ELSE 1 END,
+            w.semana_inicio DESC,w.id DESC
           LIMIT 1
         ) semana_responsable ON TRUE
         WHERE gs.estado='FINALIZADA' AND gs.es_operacion=FALSE
@@ -1127,7 +1133,7 @@ def weekly_finalized_outside_programming(*, year: int, month: int,
         "posteriores_al_corte":posteriores_al_corte,
         "recortado":total>len(rows),"limite":2000,"rows":rows,
         "fuente":"CAMBIOS_GOOGLE_SHEETS",
-        "criterio":"Primera sincronización que detectó FINALIZADA durante la semana o antes del cierre formal pendiente. Incluye detecciones posteriores al fin calendario mientras no se hubiera cerrado; no indica fecha real de ejecución.",
+        "criterio":"Primera detección de FINALIZADA atribuida a la semana calendario; después del corte se atribuye a la última semana elegible sin cierre formal. No indica fecha real de ejecución.",
     }
 
 
