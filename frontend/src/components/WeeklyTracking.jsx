@@ -721,7 +721,6 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
                     de las OT programadas ni modifica cierres oficiales.
                   </p>
                 </div>
-                {weeklyOutside && <Badge tone="ok">{number(weeklyOutside.total)} OT detectadas</Badge>}
               </div>
               {weeklyOutsideLoading ? (
                 <p className="v2-empty">Revisando las finalizaciones detectadas durante esta semana…</p>
