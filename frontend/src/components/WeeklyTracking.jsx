@@ -374,6 +374,12 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
           <div>
             <span className="v2-kicker">AVANCE MENSUAL POR ESPECIALIDAD</span>
             <h3>Estado acumulado del mes mientras haces seguimiento semanal</h3>
+            <p>
+              Universo del PMP y backlog del mes. Se contabilizan OT únicas finalizadas según
+              los cierres y BASE DE DATOS, incluidas las verificadas después de cerrar una
+              semana, sin cambiar ese cierre. Las H-H son horas planeadas asociadas a las OT,
+              no horas reales medidas de ejecución.
+            </p>
           </div>
         </div>
         <div className="weekly-tracking-month-progress-grid">
@@ -386,7 +392,7 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
                   <div className="weekly-tracking-month-ring" style={{ "--progress": progress + "%" }}>
                     <div>
                       <strong>{fmt(row.progress_ot_pct)}%</strong>
-                      <span>cumplimiento OT</span>
+                      <span>avance OT</span>
                     </div>
                   </div>
                   <div className="weekly-tracking-month-hh-ring" style={{ "--hh-progress": hhProgress + "%" }}>
