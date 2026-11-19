@@ -935,11 +935,15 @@ def sync_month(*, year: int, month: int, trigger: str,
 def weekly_finalized_outside_programming(*, year: int, month: int,
                                          specialty: str, week_start: date,
                                          week_end: date) -> dict[str, Any]:
-    """Read-only first-detected FINALIZADA changes outside the selected week.
+    """Read-only first-detected FINALIZADA outside the selected programming.
 
-    These are timestamps of *Google Apps Script detection*, not physical
-    execution dates. Never rewrite older closures or assign an execution date.
-    Only source OT still FINALIZADA and not OPERACIÓN are considered.
+    The operational week remains eligible until its *formal* close, including
+    detections after the displayed Wednesday cutoff. A completed closure freezes
+    eligibility at its recorded close timestamp. The oldest still-open saved
+    week owns each late detection, preventing duplicate attribution.
+
+    These timestamps are of Google Apps Script detection, never physical
+    execution dates. Never rewrite historical closures or assign work dates.
     """
     if not (2026 <= year <= 2100 and 1 <= month <= 12):
         raise SheetSyncError("Período inválido.")
@@ -957,7 +961,15 @@ def weekly_finalized_outside_programming(*, year: int, month: int,
                 "total":0, "fuera_del_mes":0, "programadas_otra_semana":0,
                 "linea_base":0, "rows":[], "fuente":"SIN_HISTORIAL"}
     sql = text("""
-      WITH primeras_finalizaciones AS (
+      WITH semanas AS (
+        SELECT ps.id,ps.semana_inicio,ps.semana_fin,ps.estado,
+               COALESCE(ps.cierre_en,ps.cerrado_en) AS cierre_formal_en
+        FROM programacion.programacion_semanal_v2 ps
+        WHERE ps.especialidad=:spec
+          AND ps.semana_inicio>=:period
+          AND ps.semana_inicio<(:period + INTERVAL '1 month')
+      ),
+      primeras_finalizaciones AS (
         -- One and only one detection date per OT in this month; later
         -- repeated syncs must not inflate week totals.
         SELECT DISTINCT ON (c.numero_ot)
@@ -980,6 +992,8 @@ def weekly_finalized_outside_programming(*, year: int, month: int,
                gs.plan_trabajo,gs.activo_codigo,
                o.periodo AS periodo_origen,a.area_codigo,
                first_schedule.primera_semana_programada,
+               (pf.detectado_en AT TIME ZONE 'America/Bogota')::date
+                   > :week_end AS posterior_al_corte,
                EXISTS (
                  SELECT 1 FROM programacion.programacion_item_v2 pi
                  JOIN programacion.programacion_semanal_v2 ps
@@ -1023,13 +1037,42 @@ def weekly_finalized_outside_programming(*, year: int, month: int,
             ON po.id=pi.orden_mantenimiento_id
           WHERE upper(btrim(po.numero_ot))=pf.numero_ot
         ) first_schedule ON TRUE
+        -- Attribution goes to the earliest programming that was still
+        -- awaiting a formal close when the source change was detected.
+        -- This prevents double-counting when multiple weeks are saved.
+        LEFT JOIN LATERAL (
+          SELECT w.id,w.semana_inicio,w.semana_fin
+          FROM semanas w
+          WHERE w.semana_inicio <=
+                (pf.detectado_en AT TIME ZONE 'America/Bogota')::date
+            AND (w.estado <> 'CERRADA'
+                 OR w.cierre_formal_en IS NULL
+                 OR pf.detectado_en <= w.cierre_formal_en)
+            AND (
+                (pf.detectado_en AT TIME ZONE 'America/Bogota')::date
+                    <= w.semana_fin
+                OR w.estado <> 'CERRADA'
+                OR (w.cierre_formal_en IS NOT NULL
+                    AND pf.detectado_en <= w.cierre_formal_en)
+            )
+          ORDER BY w.semana_inicio,w.id
+          LIMIT 1
+        ) semana_responsable ON TRUE
         WHERE gs.estado='FINALIZADA' AND gs.es_operacion=FALSE
-          AND (pf.detectado_en AT TIME ZONE 'America/Bogota')::date
-                BETWEEN :week_start AND :week_end
+          AND (
+            (semana_responsable.semana_inicio=:week_start
+             AND semana_responsable.semana_fin=:week_end)
+            OR (
+              semana_responsable.id IS NULL
+              AND (pf.detectado_en AT TIME ZONE 'America/Bogota')::date
+                  BETWEEN :week_start AND :week_end
+            )
+          )
       )
       SELECT numero_ot,detectado_en,estado_anterior,sincronizacion_id,
              plan_trabajo,activo_codigo,periodo_origen,area_codigo,
              programada_en_el_mes,primera_semana_programada,
+             posterior_al_corte,
              count(*) OVER()::int AS total_fuera_semana
       FROM fuente
       WHERE NOT programada_esta_semana
@@ -1045,10 +1088,12 @@ def weekly_finalized_outside_programming(*, year: int, month: int,
     rows=[]
     month_outside=0
     baseline=0
+    posteriores_al_corte=0
     for item in raw:
         elsewhere=bool(item["programada_en_el_mes"])
         month_outside+=int(not elsewhere)
         baseline+=int(item["estado_anterior"] is None)
+        posteriores_al_corte+=int(bool(item.get("posterior_al_corte",False)))
         detected=item["detectado_en"]
         rows.append({
             "numero_ot":item["numero_ot"],
@@ -1079,9 +1124,10 @@ def weekly_finalized_outside_programming(*, year: int, month: int,
         "total":total,"fuera_del_mes":month_outside,
         "programadas_otra_semana":len(raw)-month_outside,
         "linea_base":baseline,
+        "posteriores_al_corte":posteriores_al_corte,
         "recortado":total>len(rows),"limite":2000,"rows":rows,
         "fuente":"CAMBIOS_GOOGLE_SHEETS",
-        "criterio":"Primera sincronización que detectó FINALIZADA durante la semana seleccionada; no indica fecha real de ejecución.",
+        "criterio":"Primera sincronización que detectó FINALIZADA durante la semana o antes del cierre formal pendiente. Incluye detecciones posteriores al fin calendario mientras no se hubiera cerrado; no indica fecha real de ejecución.",
     }
 
 
