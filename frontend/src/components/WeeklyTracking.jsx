@@ -737,9 +737,11 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
                   <h3>Finalizadas fuera de programación · Semana {week?.weekNumber || "de transición"}</h3>
                   <p>
                     {week?.from} al {week?.to} · {SPEC_NAMES[specialty]}.
-                    Se contabiliza la primera sincronización que detectó el cambio a FINALIZADA,
-                    siempre que la OT no esté programada en esta semana. No se suma al cumplimiento
-                    de las OT programadas ni modifica cierres oficiales.
+                    Se contabiliza la primera sincronización que detectó FINALIZADA,
+                    siempre que la OT no estuviera programada en esta semana.
+                    Si aún no se ha realizado el cierre formal, también se incluyen
+                    detecciones posteriores al miércoles del corte. No se suman al
+                    cumplimiento programado ni se modifican cierres oficiales.
                   </p>
                 </div>
               </div>
@@ -753,14 +755,19 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
                     <article className="ok">
                       <span>OT finalizadas fuera de la programación de esta semana</span>
                       <b>{number(weeklyOutside.total)}</b>
-                      <small>Detectadas entre {week?.from} y {week?.to}</small>
+                      <small>Detectadas durante la semana y hasta su cierre formal</small>
                     </article>
                   </div>
                   <p>
-                    <strong>Criterio de fecha:</strong> se usa la semana en la que Google Sheets
-                    comunicó por primera vez el estado FINALIZADA, no necesariamente la fecha
-                    real de ejecución. La columna de programación consulta el historial completo
-                    registrado en CEK Global MTTO. Las OT OPERACIÓN quedan excluidas.
+                    <strong>Criterio de fecha:</strong> se toma la primera detección del estado
+                    FINALIZADA en Google Sheets y se atribuye a la semana pendiente de cierre.
+                    Una detección posterior al miércoles se incluye si ocurrió antes del cierre
+                    formal; no equivale necesariamente a la fecha real de ejecución.
+                    La columna de programación consulta el historial completo registrado
+                    en CEK Global MTTO. Las OT OPERACIÓN quedan excluidas.
+                    {number(weeklyOutside.posteriores_al_corte) > 0 &&
+                      ` ${number(weeklyOutside.posteriores_al_corte)} OT se detectaron después de
+                      ${week?.to}, con el cierre formal de esta semana aún pendiente.`}
                     {number(weeklyOutside.linea_base) > 0 &&
                       ` ${number(weeklyOutside.linea_base)} OT ya estaban finalizadas en la primera lectura de la fuente.`}
                   </p>
