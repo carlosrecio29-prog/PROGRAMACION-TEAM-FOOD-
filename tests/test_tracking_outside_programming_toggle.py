@@ -28,4 +28,7 @@ def test_tracking_toggle_uses_audited_source_for_november():
     assert "weeklyOutside.programadas_otra_semana" not in source
     assert "weeklyOutside.fuera_del_mes" not in source
     assert "weeklyOutside.rows.slice(0,20)" in source
-    assert "No se suman al" in source
+    assert "No se suman al" not in source
+    assert "Criterio de fecha:" not in source
+    assert "Se contabiliza la primera sincronización" not in source
+    assert '<b>{number(weeklyOutside.total)}</b>' in source
