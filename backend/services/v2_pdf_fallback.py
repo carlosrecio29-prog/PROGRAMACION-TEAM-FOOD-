@@ -544,13 +544,9 @@ def _weekly_outside_audit_table(pdf, audit: dict[str,Any]) -> None:
         "Detectadas por primera vez en Google Sheets y no incluidas en esta programacion semanal."
     )
     pdf.cards([
-        ("FUERA DE LA PROGRAMACION", _fmt(total),
-         "OT distintas detectadas", AMBER, ORANGE_PALE),
-        ("PROGRAMADAS OTRA SEMANA", _fmt(int(audit.get("programadas_otra_semana") or 0)),
-         "No se duplican en cumplimiento", BLUE, PALE),
-        ("SIN PROGRAMACION EN EL MES", _fmt(int(audit.get("fuera_del_mes") or 0)),
-         "No necesariamente nunca programadas", AMBER, CREAM),
-    ])
+        ("TOTAL OT FUERA DE PROGRAMACION", _fmt(total),
+         "OT finalizadas detectadas por Google Sheets", AMBER, ORANGE_PALE),
+    ], cols=1)
     pdf.paragraph(
         "Se usa la primera sincronizacion que detecto FINALIZADA. La fecha mostrada "
         "NO acredita la fecha fisica de ejecucion. Las OT de este apartado no aumentan "
