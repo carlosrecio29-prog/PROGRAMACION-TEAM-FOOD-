@@ -24,7 +24,8 @@ def test_tracking_toggle_uses_audited_source_for_november():
 
     # Count, classification and row detail read the same audit API as closure/PDF.
     assert "getWeeklyOutsideFinalizations(year, month, specialty, week.from, week.to)" in source
-    assert "weeklyOutside.programadas_otra_semana" in source
-    assert "weeklyOutside.fuera_del_mes" in source
+    assert '<b>{number(weeklyOutside.total)}</b>' in source
+    assert "weeklyOutside.programadas_otra_semana" not in source
+    assert "weeklyOutside.fuera_del_mes" not in source
     assert "weeklyOutside.rows.slice(0,20)" in source
     assert "No se suman al" in source

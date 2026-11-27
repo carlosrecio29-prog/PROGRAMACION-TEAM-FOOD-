@@ -15,7 +15,7 @@ class _PDFProbe:
     def section(self, *args):
         self.calls.append(("section", args))
 
-    def cards(self, cards):
+    def cards(self, cards, cols=4):
         self.calls.append(("cards", cards))
 
     def paragraph(self, text, **kwargs):
@@ -47,9 +47,9 @@ def test_pdf_weekly_outside_uses_detection_without_inventing_hh():
     _weekly_outside_audit_table(pdf, audit)
     assert sum(call[0] == "page" for call in pdf.calls) == 1
     cards = next(call[1] for call in pdf.calls if call[0] == "cards")
+    assert len(cards) == 1
     assert cards[0][1] == "2"
-    assert cards[1][1] == "1"
-    assert cards[2][1] == "1"
+    assert cards[0][0] == "TOTAL OT FUERA DE PROGRAMACION"
     table = next(call for call in pdf.calls if call[0] == "table")
     assert table[1] == ["OT", "AREA", "EQUIPO", "PLAN DE TRABAJO", "PROGRAMACION", "DETECTADA"]
     assert len(table[2]) == 2
@@ -66,6 +66,8 @@ def test_weekly_closure_screen_and_pdf_share_audit_api():
     renderer = (root / "backend/services/v2_pdf_fallback.py").read_text(encoding="utf-8")
     assert "getWeeklyOutsideFinalizations(" in closure
     assert "outsideFinalizations.total" in closure
+    assert "outsideFinalizations.programadas_otra_semana" not in closure
+    assert "outsideFinalizations.fuera_del_mes" not in closure
     assert "outsideFinalizations.rows" in closure
     assert "No se suman a las OT programadas" in closure
     assert "weekly_finalized_outside_programming(" in report
