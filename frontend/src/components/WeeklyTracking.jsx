@@ -593,16 +593,6 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
                       <b>{number(weeklyOutside.total)}</b>
                       <small>Detectadas durante la semana y hasta su cierre formal</small>
                     </article>
-                    <article>
-                      <span>Programadas en otra semana</span>
-                      <b>{number(weeklyOutside.programadas_otra_semana)}</b>
-                      <small>No incluidas en el plan de esta semana</small>
-                    </article>
-                    <article>
-                      <span>Sin programación en el mes</span>
-                      <b>{number(weeklyOutside.fuera_del_mes)}</b>
-                      <small>Pueden existir en el historial anterior</small>
-                    </article>
                   </div>
                   <p>
                     <strong>Criterio de fecha:</strong> se toma la primera detección del estado
