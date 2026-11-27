@@ -421,21 +421,6 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
                       <b>{number(outsideFinalizations.total)}</b>
                       <small>No estaban en la programación seleccionada</small>
                     </div>
-                    <div>
-                      <span>Programadas en otra semana</span>
-                      <b>{number(outsideFinalizations.programadas_otra_semana)}</b>
-                      <small>No se duplican en el cumplimiento</small>
-                    </div>
-                    <div>
-                      <span>Sin programación durante el mes</span>
-                      <b>{number(outsideFinalizations.fuera_del_mes)}</b>
-                      <small>Pueden tener programación histórica</small>
-                    </div>
-                    <div>
-                      <span>Detectadas después del corte</span>
-                      <b>{number(outsideFinalizations.posteriores_al_corte)}</b>
-                      <small>Únicamente si quedaron atribuidas a esta semana</small>
-                    </div>
                   </div>
                   <details className="v2-closure-result-details v2-closure-stored-result">
                     <summary>
