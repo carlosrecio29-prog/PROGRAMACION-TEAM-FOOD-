@@ -746,6 +746,7 @@ def export_progress_pdf(year: int, month: int, programming_id: int | None = None
         return render_monthly_executive_pdf(data, year, month)
     details = None
     unplanned_details = None
+    weekly_outside_audit = None
     if programming_id is not None:
         week = next((w for w in data["weeks"] if w["programming_id"] == programming_id), None)
         if week is None:
@@ -756,6 +757,18 @@ def export_progress_pdf(year: int, month: int, programming_id: int | None = None
         report = get_week_closure(programming_id)
         tracking = get_week_tracking(programming_id)
         unplanned_details = list((tracking.get("unplanned") or {}).get("rows") or [])
+        # Share exactly the same read-only first-detection source as
+        # Seguimiento and Cierre semanal. Tracking legacy rows are only a
+        # fallback for months without synchronized detection history.
+        if year > 2026 or (year == 2026 and month >= 11):
+            from backend.services.v2_sheet_sync_service import weekly_finalized_outside_programming
+            from datetime import date
+            weekly_outside_audit = weekly_finalized_outside_programming(
+                year=year, month=month,
+                specialty=week["especialidad"],
+                week_start=date.fromisoformat(str(week["week_from"])),
+                week_end=date.fromisoformat(str(week["week_to"])),
+            )
         details = []
         for row in report["rows"]:
             details.append({
@@ -777,4 +790,5 @@ def export_progress_pdf(year: int, month: int, programming_id: int | None = None
     return render_progress_fallback(
         data, year, month, programming_id, details,
         unplanned_rows=unplanned_details,
+        weekly_outside_audit=weekly_outside_audit,
     )
