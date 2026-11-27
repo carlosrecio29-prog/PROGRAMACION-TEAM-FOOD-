@@ -317,6 +317,17 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
   const unplannedSummary = unplanned.summary || {};
   const monthlyVerified = tracking?.monthly_verified || {};
   const unplannedRows = unplanned.rows || [];
+  // Desde noviembre 2026 el historial de primeras detecciones de FINALIZADA
+  // es la única fuente de verdad del contador visible al lado de la tabla.
+  // El contador legado sigue existiendo solo para meses sin auditoría.
+  const useAuditedOutside = accessRole === "admin" &&
+    (year > 2026 || (year === 2026 && month >= 11));
+  const outsideToggleCount = useAuditedOutside
+    ? weeklyOutsideLoading ? "Consultando..."
+      : weeklyOutsideError ? "Error"
+      : weeklyOutside ? number(weeklyOutside.total)
+      : "—"
+    : number(unplannedSummary.total);
   const areaProgressRows = tracking?.by_area || [];
   const selectedAreaProgress = (
     areaProgressRows.find((row) => String(row.area_codigo || "") === areaProgressFilter)
@@ -546,13 +557,129 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
                   aria-expanded={showUnplanned}
                   onClick={() => setShowUnplanned((value) => !value)}
                 >
-                  {showUnplanned ? "Ocultar OT fuera de programación" : "Ver OT fuera de programación"} · {number(unplannedSummary.total)}
+                  {showUnplanned ? "Ocultar OT fuera de programación" : "Ver OT fuera de programación"} · {outsideToggleCount}
                 </button>
                 <button type="button" onClick={downloadTracking} disabled={downloading}>
                   {downloading ? "Generando..." : "Descargar Excel"}
                 </button>
               </div>
             </div>
+
+            {showUnplanned && useAuditedOutside && (
+              <section className="v2-panel weekly-tracking-unplanned weekly-tracking-unplanned-inline" aria-label="Finalizaciones fuera de programación detectadas en la semana seleccionada">
+              <div className="v2-section-head">
+                <div>
+                  <span className="v2-kicker">SEGUIMIENTO SEMANAL · OT NO PROGRAMADAS</span>
+                  <h3>Finalizadas fuera de programación · Semana {week?.weekNumber || "de transición"}</h3>
+                  <p>
+                    {week?.from} al {week?.to} · {SPEC_NAMES[specialty]}.
+                    Se contabiliza la primera sincronización que detectó FINALIZADA,
+                    siempre que la OT no estuviera programada en esta semana.
+                    Si aún no se ha realizado el cierre formal, también se incluyen
+                    detecciones posteriores al miércoles del corte. No se suman al
+                    cumplimiento programado ni se modifican cierres oficiales.
+                  </p>
+                </div>
+              </div>
+              {weeklyOutsideLoading ? (
+                <p className="v2-empty">Revisando las finalizaciones detectadas durante esta semana…</p>
+              ) : weeklyOutsideError ? (
+                <p className="v2-warning">{weeklyOutsideError}</p>
+              ) : weeklyOutside ? (
+                <>
+                  <div className="weekly-tracking-unplanned-kpis">
+                    <article className="ok">
+                      <span>OT finalizadas fuera de la programación de esta semana</span>
+                      <b>{number(weeklyOutside.total)}</b>
+                      <small>Detectadas durante la semana y hasta su cierre formal</small>
+                    </article>
+                    <article>
+                      <span>Programadas en otra semana</span>
+                      <b>{number(weeklyOutside.programadas_otra_semana)}</b>
+                      <small>No incluidas en el plan de esta semana</small>
+                    </article>
+                    <article>
+                      <span>Sin programación en el mes</span>
+                      <b>{number(weeklyOutside.fuera_del_mes)}</b>
+                      <small>Pueden existir en el historial anterior</small>
+                    </article>
+                  </div>
+                  <p>
+                    <strong>Criterio de fecha:</strong> se toma la primera detección del estado
+                    FINALIZADA en Google Sheets y se atribuye primero a su semana calendario.
+                    Si la detección ocurre después del miércoles, se asigna a la última semana
+                    elegible que siga pendiente de cierre formal. La detección no equivale
+                    necesariamente a la fecha real de ejecución.
+                    La columna de programación consulta el historial completo registrado
+                    en CEK Global MTTO. Las OT OPERACIÓN quedan excluidas.
+                    {number(weeklyOutside.posteriores_al_corte) > 0 &&
+                      ` ${number(weeklyOutside.posteriores_al_corte)} OT se detectaron después de
+                      ${week?.to}, con el cierre formal de esta semana aún pendiente.`}
+                    {number(weeklyOutside.linea_base) > 0 &&
+                      ` ${number(weeklyOutside.linea_base)} OT ya estaban finalizadas en la primera lectura de la fuente.`}
+                  </p>
+                  <div className="v2-table-wrap weekly-tracking-unplanned-table">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>OT</th>
+                          <th>Detección en sincronización</th>
+                          <th>¿Fue programada alguna vez?</th>
+                          <th>Área</th>
+                          <th>Equipo</th>
+                          <th>Plan de trabajo</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(showAllWeeklyOutside ? weeklyOutside.rows : weeklyOutside.rows.slice(0,20)).map(item => (
+                          <tr key={item.numero_ot}>
+                            <td><b>{item.numero_ot}</b></td>
+                            <td>
+                              {when(item.detectado_en)}
+                              {item.primera_observacion && <small>Ya finalizada en primera lectura</small>}
+                            </td>
+                            <td>
+                              {item.programada_alguna_vez ? (
+                                <>
+                                  <Badge tone="warn">SÍ · OTRA SEMANA</Badge>
+                                  <small>Primera programación: {item.primera_semana_programada || "—"}</small>
+                                </>
+                              ) : (
+                                <Badge tone="ok">NO · SIN PROGRAMACIÓN REGISTRADA</Badge>
+                              )}
+                            </td>
+                            <td>{item.area_codigo || "—"}</td>
+                            <td>{item.activo_codigo || "—"}</td>
+                            <td><span className="v2-plan">{item.plan_trabajo || "—"}</span></td>
+                          </tr>
+                        ))}
+                        {!weeklyOutside.rows.length && (
+                          <tr><td colSpan="6" className="v2-empty">
+                            No se detectaron finalizaciones fuera de la programación de esta semana.
+                          </td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  {weeklyOutside.rows.length > 20 && (
+                    <button type="button" onClick={() => setShowAllWeeklyOutside(!showAllWeeklyOutside)}>
+                      {showAllWeeklyOutside ? "Mostrar primeras 20"
+                        : `Mostrar todas las ${number(weeklyOutside.rows.length)} OT`}
+                    </button>
+                  )}
+                  {weeklyOutside.recortado && (
+                    <p className="v2-warning">
+                      Se muestran hasta {number(weeklyOutside.limite)} OT.
+                      El total incluye todas las detectadas.
+                    </p>
+                  )}
+                </>
+              ) : (
+                <p className="v2-empty">No se ha consultado el historial de cambios de la semana.</p>
+              )}
+            </section>
+          )}
+
 
             <div className="weekly-tracking-filters">
               <label>
@@ -640,7 +767,7 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
                 </tbody>
               </table>
             </div>
-            {showUnplanned && (
+            {showUnplanned && !useAuditedOutside && (
               <div className="weekly-tracking-unplanned weekly-tracking-unplanned-inline">
             <div className="v2-section-head">
               <div>
@@ -728,111 +855,6 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
               </div>
             )}
           </section>
-
-          {accessRole === "admin" && year >= 2026 && !(year === 2026 && month < 11) && (
-            <section className="v2-panel" aria-label="Finalizaciones fuera de programación detectadas en la semana seleccionada">
-              <div className="v2-section-head">
-                <div>
-                  <span className="v2-kicker">SEGUIMIENTO SEMANAL · OT NO PROGRAMADAS</span>
-                  <h3>Finalizadas fuera de programación · Semana {week?.weekNumber || "de transición"}</h3>
-                  <p>
-                    {week?.from} al {week?.to} · {SPEC_NAMES[specialty]}.
-                    Se contabiliza la primera sincronización que detectó FINALIZADA,
-                    siempre que la OT no estuviera programada en esta semana.
-                    Si aún no se ha realizado el cierre formal, también se incluyen
-                    detecciones posteriores al miércoles del corte. No se suman al
-                    cumplimiento programado ni se modifican cierres oficiales.
-                  </p>
-                </div>
-              </div>
-              {weeklyOutsideLoading ? (
-                <p className="v2-empty">Revisando las finalizaciones detectadas durante esta semana…</p>
-              ) : weeklyOutsideError ? (
-                <p className="v2-warning">{weeklyOutsideError}</p>
-              ) : weeklyOutside ? (
-                <>
-                  <div className="weekly-tracking-unplanned-kpis">
-                    <article className="ok">
-                      <span>OT finalizadas fuera de la programación de esta semana</span>
-                      <b>{number(weeklyOutside.total)}</b>
-                      <small>Detectadas durante la semana y hasta su cierre formal</small>
-                    </article>
-                  </div>
-                  <p>
-                    <strong>Criterio de fecha:</strong> se toma la primera detección del estado
-                    FINALIZADA en Google Sheets y se atribuye primero a su semana calendario.
-                    Si la detección ocurre después del miércoles, se asigna a la última semana
-                    elegible que siga pendiente de cierre formal. La detección no equivale
-                    necesariamente a la fecha real de ejecución.
-                    La columna de programación consulta el historial completo registrado
-                    en CEK Global MTTO. Las OT OPERACIÓN quedan excluidas.
-                    {number(weeklyOutside.posteriores_al_corte) > 0 &&
-                      ` ${number(weeklyOutside.posteriores_al_corte)} OT se detectaron después de
-                      ${week?.to}, con el cierre formal de esta semana aún pendiente.`}
-                    {number(weeklyOutside.linea_base) > 0 &&
-                      ` ${number(weeklyOutside.linea_base)} OT ya estaban finalizadas en la primera lectura de la fuente.`}
-                  </p>
-                  <div className="v2-table-wrap weekly-tracking-unplanned-table">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>OT</th>
-                          <th>Detección en sincronización</th>
-                          <th>¿Fue programada alguna vez?</th>
-                          <th>Área</th>
-                          <th>Equipo</th>
-                          <th>Plan de trabajo</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(showAllWeeklyOutside ? weeklyOutside.rows : weeklyOutside.rows.slice(0,20)).map(item => (
-                          <tr key={item.numero_ot}>
-                            <td><b>{item.numero_ot}</b></td>
-                            <td>
-                              {when(item.detectado_en)}
-                              {item.primera_observacion && <small>Ya finalizada en primera lectura</small>}
-                            </td>
-                            <td>
-                              {item.programada_alguna_vez ? (
-                                <>
-                                  <Badge tone="warn">SÍ · OTRA SEMANA</Badge>
-                                  <small>Primera programación: {item.primera_semana_programada || "—"}</small>
-                                </>
-                              ) : (
-                                <Badge tone="ok">NO · SIN PROGRAMACIÓN REGISTRADA</Badge>
-                              )}
-                            </td>
-                            <td>{item.area_codigo || "—"}</td>
-                            <td>{item.activo_codigo || "—"}</td>
-                            <td><span className="v2-plan">{item.plan_trabajo || "—"}</span></td>
-                          </tr>
-                        ))}
-                        {!weeklyOutside.rows.length && (
-                          <tr><td colSpan="6" className="v2-empty">
-                            No se detectaron finalizaciones fuera de la programación de esta semana.
-                          </td></tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                  {weeklyOutside.rows.length > 20 && (
-                    <button type="button" onClick={() => setShowAllWeeklyOutside(!showAllWeeklyOutside)}>
-                      {showAllWeeklyOutside ? "Mostrar primeras 20"
-                        : `Mostrar todas las ${number(weeklyOutside.rows.length)} OT`}
-                    </button>
-                  )}
-                  {weeklyOutside.recortado && (
-                    <p className="v2-warning">
-                      Se muestran hasta {number(weeklyOutside.limite)} OT.
-                      El total incluye todas las detectadas.
-                    </p>
-                  )}
-                </>
-              ) : (
-                <p className="v2-empty">No se ha consultado el historial de cambios de la semana.</p>
-              )}
-            </section>
-          )}
 
           <section className="v2-panel weekly-tracking-area-progress">
             <div className="v2-section-head">
