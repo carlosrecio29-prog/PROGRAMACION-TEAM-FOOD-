@@ -9,6 +9,7 @@ import {
   closeV2WeekFromApi,
   downloadV2ProgressPdf,
   getV2ProgressPdfUrl,
+  getWeeklyOutsideFinalizations,
 } from "../api";
 import Badge from "../shared/Badge";
 
@@ -69,6 +70,8 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
   const [specialty, setSpecialty] = useState("MEC");
   const [programming, setProgramming] = useState(null);
   const [closure, setClosure] = useState(null);
+  const [outsideFinalizations, setOutsideFinalizations] = useState(null);
+  const [outsideError, setOutsideError] = useState("");
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [previewMode, setPreviewMode] = useState("excel");
@@ -107,6 +110,8 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
       setLoading(true);
       setError("");
       setMessage("");
+      setOutsideFinalizations(null);
+      setOutsideError("");
       const p = await getV2WeekProgramming(week.from, week.to, specialty);
       setProgramming(p);
       if (p.programming?.id) {
@@ -114,6 +119,19 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
         setClosure(closureResult);
       } else {
         setClosure(null);
+      }
+      // Read-only audit: a closed week must still show finalized OT that
+      // were not part of its saved programming. Never add these OT to
+      // compliance or the set of scheduled work.
+      if (year > 2026 || (year === 2026 && month >= 11)) {
+        try {
+          const data = await getWeeklyOutsideFinalizations(
+            year, month, specialty, week.from, week.to
+          );
+          setOutsideFinalizations(data);
+        } catch (cause) {
+          setOutsideError(cause.message || "No se pudo consultar las OT fuera de la programación.");
+        }
       }
     } catch (e) {
       setError(e.message);
@@ -365,6 +383,107 @@ export default function WeeklyClosure({ year, month, onOpenBacklog }) {
               </a>
             </section>
           )}
+          {(year > 2026 || (year === 2026 && month >= 11)) && (
+            <section className="v2-panel" aria-label="OT finalizadas fuera de la programación del cierre semanal">
+              <div className="v2-section-head">
+                <div>
+                  <span className="v2-kicker">CONCILIACIÓN DE CIERRE · TRABAJOS FUERA DE PROGRAMACIÓN</span>
+                  <h3>OT finalizadas fuera de la programación · Semana {week?.weekNumber || "de transición"}</h3>
+                  <p>
+                    {week?.from} al {week?.to} · {SPEC_NAMES[specialty]} ·
+                    {closure?.programming?.estado === "CERRADA"
+                      ? " semana cerrada."
+                      : " resultado provisional antes del cierre."}
+                    {" "}Se contabilizan OT cuya primera detección de FINALIZADA en Google Sheets
+                    corresponde a esta semana según el historial de sincronización y que
+                    no fueron programadas en ella. No se suman a las OT programadas,
+                    su cumplimiento ni sus H-H. La fecha de detección no es necesariamente
+                    la fecha real de ejecución.
+                  </p>
+                </div>
+              </div>
+              {loading ? (
+                <p className="v2-empty">Consultando OT fuera de programación…</p>
+              ) : outsideError ? (
+                <div className="v2-warning" role="status">
+                  No fue posible cargar las finalizaciones fuera de programación: {outsideError}
+                </div>
+              ) : outsideFinalizations?.fuente === "SIN_HISTORIAL" ? (
+                <div className="v2-warning" role="status">
+                  Sin historial de sincronización para calcular este indicador; no significa que
+                  no se hayan realizado trabajos fuera de programación.
+                </div>
+              ) : outsideFinalizations ? (
+                <>
+                  <div className="v2-capacity-cards">
+                    <div className="target">
+                      <span>OT FINALIZADAS FUERA DE LA SEMANA</span>
+                      <b>{number(outsideFinalizations.total)}</b>
+                      <small>No estaban en la programación seleccionada</small>
+                    </div>
+                    <div>
+                      <span>Programadas en otra semana</span>
+                      <b>{number(outsideFinalizations.programadas_otra_semana)}</b>
+                      <small>No se duplican en el cumplimiento</small>
+                    </div>
+                    <div>
+                      <span>Sin programación durante el mes</span>
+                      <b>{number(outsideFinalizations.fuera_del_mes)}</b>
+                      <small>Pueden tener programación histórica</small>
+                    </div>
+                    <div>
+                      <span>Detectadas después del corte</span>
+                      <b>{number(outsideFinalizations.posteriores_al_corte)}</b>
+                      <small>Únicamente si quedaron atribuidas a esta semana</small>
+                    </div>
+                  </div>
+                  <details className="v2-closure-result-details v2-closure-stored-result">
+                    <summary>
+                      Ver las {number(outsideFinalizations.total)} OT finalizadas fuera de la programación
+                    </summary>
+                    <div className="v2-table-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>OT</th><th>Primera detección</th><th>Programación previa</th>
+                            <th>Área</th><th>Equipo</th><th>Plan de trabajo</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(outsideFinalizations.rows || []).map((item) => (
+                            <tr key={item.numero_ot}>
+                              <td><b>{item.numero_ot}</b></td>
+                              <td>{when(item.detectado_en)}</td>
+                              <td>
+                                {item.programada_alguna_vez
+                                  ? `SÍ · primera semana ${item.primera_semana_programada || "—"}`
+                                  : "NO · nunca registrada"}
+                              </td>
+                              <td>{item.area_codigo || "—"}</td>
+                              <td>{item.activo_codigo || "—"}</td>
+                              <td>{item.plan_trabajo || "—"}</td>
+                            </tr>
+                          ))}
+                          {!number(outsideFinalizations.total) && (
+                            <tr><td colSpan="6" className="v2-empty">
+                              No hay OT finalizadas fuera de la programación detectadas en este corte.
+                            </td></tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                    {outsideFinalizations.recortado && (
+                      <p className="v2-warning">El listado se limitó a {number(outsideFinalizations.limite)} OT;
+                        el contador refleja el total de la fuente.</p>
+                    )}
+                  </details>
+                </>
+              ) : (
+                <p className="v2-empty">Sin resultado de conciliación disponible.</p>
+              )}
+            </section>
+          )}
+
           <section className="v2-capacity-panel">
             <div className="v2-capacity-cards">
               <div>
