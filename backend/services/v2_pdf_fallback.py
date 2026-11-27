@@ -529,10 +529,80 @@ def _unplanned_execution_table(pdf, rows):
     )
 
 
+
+def _weekly_outside_audit_table(pdf, audit: dict[str,Any]) -> None:
+    """Source-backed, read-only detected FINALIZADA not in the week's plan.
+
+    Google Sheets detection timestamp is NOT a confirmed execution date.
+    This separate list never adds its OT or HH to scheduled compliance.
+    """
+    total = int(audit.get("total") or 0)
+    rows = list(audit.get("rows") or [])
+    pdf.new_page()
+    pdf.section(
+        "OT finalizadas fuera de la programacion",
+        "Detectadas por primera vez en Google Sheets y no incluidas en esta programacion semanal."
+    )
+    pdf.cards([
+        ("FUERA DE LA PROGRAMACION", _fmt(total),
+         "OT distintas detectadas", AMBER, ORANGE_PALE),
+        ("PROGRAMADAS OTRA SEMANA", _fmt(int(audit.get("programadas_otra_semana") or 0)),
+         "No se duplican en cumplimiento", BLUE, PALE),
+        ("SIN PROGRAMACION EN EL MES", _fmt(int(audit.get("fuera_del_mes") or 0)),
+         "No necesariamente nunca programadas", AMBER, CREAM),
+    ])
+    pdf.paragraph(
+        "Se usa la primera sincronizacion que detecto FINALIZADA. La fecha mostrada "
+        "NO acredita la fecha fisica de ejecucion. Las OT de este apartado no aumentan "
+        "las OT programadas, H-H ni el porcentaje de cumplimiento.",
+        maxchars=121,
+    )
+    pdf.y -= 8
+    if not rows:
+        pdf.paragraph("No se registraron OT fuera de programacion bajo este criterio.")
+        return
+    table_rows = []
+    for item in rows:
+        first_seen = str(item.get("detectado_en") or "")
+        seen_label = first_seen[:16].replace("T", " ") if first_seen else "—"
+        scheduled_before = (
+            "OTRA SEMANA" if item.get("programada_alguna_vez")
+            else "SIN REGISTRO"
+        )
+        table_rows.append([
+            item.get("numero_ot") or "SIN ASIGNAR",
+            item.get("area_codigo") or "—",
+            item.get("activo_codigo") or "—",
+            item.get("plan_trabajo") or "—",
+            scheduled_before,
+            seen_label,
+        ])
+    pdf.table(
+        ["OT", "AREA", "EQUIPO", "PLAN DE TRABAJO", "PROGRAMACION", "DETECTADA"],
+        table_rows,
+        [105,55,150,245,120,104],
+        row_height=24,
+        repeat_title="OT fuera de programacion (continuacion)",
+        header_fill=ORANGE_SOFT,
+        header_fg=NAVY,
+        alternate_fill=ORANGE_PALE,
+        base_fill=WHITE,
+        line_color=ORANGE_SOFT,
+    )
+    if int(audit.get("posteriores_al_corte") or 0):
+        pdf.paragraph(
+            f"{int(audit['posteriores_al_corte'])} detecciones se registraron "
+            "despues del miercoles de corte, antes del cierre formal.",
+            maxchars=120,
+        )
+
+
+
 def render_progress_fallback(data: dict[str,Any],year:int,month:int,
                              programming_id:int|None=None,
                              detail_rows:list[dict[str,Any]]|None=None,
-                             unplanned_rows:list[dict[str,Any]]|None=None)->tuple[bytes,str]:
+                             unplanned_rows:list[dict[str,Any]]|None=None,
+                             weekly_outside_audit:dict[str,Any]|None=None)->tuple[bytes,str]:
     weeks=data["weeks"]
     if programming_id is not None:
         weeks=[w for w in weeks if w["programming_id"]==programming_id]
@@ -608,7 +678,12 @@ def render_progress_fallback(data: dict[str,Any],year:int,month:int,
                     _fmt(w["hh_finalized"],2)]],
                   [129,129,129,129,131,132])
         _detail_table(pdf,detail_rows or [],monthly=False)
-        _unplanned_execution_table(pdf,unplanned_rows or [])
+        # Only one unplanned-finalizations section in the weekly report.
+        # Do not mix source detection timestamps with physical finish dates.
+        if weekly_outside_audit and weekly_outside_audit.get("fuente") != "SIN_HISTORIAL":
+            _weekly_outside_audit_table(pdf,weekly_outside_audit)
+        else:
+            _unplanned_execution_table(pdf,unplanned_rows or [])
     if monthly:
         filename=f"informe_mensual_mtto_{year}_{month:02d}.pdf"
     else:
