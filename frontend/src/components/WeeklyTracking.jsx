@@ -571,14 +571,6 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
                 <div>
                   <span className="v2-kicker">SEGUIMIENTO SEMANAL · OT NO PROGRAMADAS</span>
                   <h3>Finalizadas fuera de programación · Semana {week?.weekNumber || "de transición"}</h3>
-                  <p>
-                    {week?.from} al {week?.to} · {SPEC_NAMES[specialty]}.
-                    Se contabiliza la primera sincronización que detectó FINALIZADA,
-                    siempre que la OT no estuviera programada en esta semana.
-                    Si aún no se ha realizado el cierre formal, también se incluyen
-                    detecciones posteriores al miércoles del corte. No se suman al
-                    cumplimiento programado ni se modifican cierres oficiales.
-                  </p>
                 </div>
               </div>
               {weeklyOutsideLoading ? (
@@ -594,20 +586,6 @@ export default function WeeklyTracking({ year, month, weekIndex = 0, accessRole 
                       <small>Detectadas durante la semana y hasta su cierre formal</small>
                     </article>
                   </div>
-                  <p>
-                    <strong>Criterio de fecha:</strong> se toma la primera detección del estado
-                    FINALIZADA en Google Sheets y se atribuye primero a su semana calendario.
-                    Si la detección ocurre después del miércoles, se asigna a la última semana
-                    elegible que siga pendiente de cierre formal. La detección no equivale
-                    necesariamente a la fecha real de ejecución.
-                    La columna de programación consulta el historial completo registrado
-                    en CEK Global MTTO. Las OT OPERACIÓN quedan excluidas.
-                    {number(weeklyOutside.posteriores_al_corte) > 0 &&
-                      ` ${number(weeklyOutside.posteriores_al_corte)} OT se detectaron después de
-                      ${week?.to}, con el cierre formal de esta semana aún pendiente.`}
-                    {number(weeklyOutside.linea_base) > 0 &&
-                      ` ${number(weeklyOutside.linea_base)} OT ya estaban finalizadas en la primera lectura de la fuente.`}
-                  </p>
                   <div className="v2-table-wrap weekly-tracking-unplanned-table">
                     <table>
                       <thead>
