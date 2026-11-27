@@ -15,7 +15,7 @@ class _PDFProbe:
     def section(self, *args):
         self.calls.append(("section", args))
 
-    def cards(self, cards):
+    def cards(self, cards, cols=4):
         self.calls.append(("cards", cards))
 
     def paragraph(self, text, **kwargs):
